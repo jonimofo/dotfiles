@@ -9,4 +9,7 @@ sudo apt-get install -y \
     fd-find \
     shellcheck \
     restic \
-    tmux
+    tmux \
+    silversearcher-ag
+
+    # TODO vim nvim

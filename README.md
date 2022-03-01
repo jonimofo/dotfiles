@@ -1,18 +1,12 @@
-#!/bin/bash
-
-<<'###BLOCK-COMMENT'
-
-
+```
+TODO
 
 # Softs basic / only terminal
-- tmux
 - fzf
 - fasd
 - batcat
 - exa
-- fd-find
 - vagrant
-
 - Vim / Neovim
     - dotfiles
     - plugins
@@ -26,17 +20,7 @@
 - Sublime Text
     - Install
     - Keyboard Shortcuts
-
 - keepasxc
 - gitk
-
-- Wallpapers
-
 - GNome dconf settings
-
-
-
-###BLOCK-COMMENT
-
-
-
+```

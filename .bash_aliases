@@ -79,6 +79,7 @@ alias vup="vagrant up && vagrant provision"
 # =============================================================================
 # Git
 # =============================================================================
+# TODO autocomplet on aliases
 alias gs="git status -s"
 alias gss="git status"
 alias ga="git add"

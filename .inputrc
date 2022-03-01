@@ -1,0 +1,15 @@
+$include /etc/inputrc
+
+# Ignore case while completing
+set completion-ignore-case On
+
+# Better navigation through history
+"\e[1;5C": forward-word
+"\e[1;5D": backward-word
+"\M-\C-[A": previous-history
+"\M-\C-[B": next-history
+
+# Allow Ctrl-up-arrow to cycle through last argument of each command in the history
+# Use Ctrl-up-down to cycle in the inverted direction
+"\e[1;5A": insert-last-argument
+"\e[1;5B": "\e-"

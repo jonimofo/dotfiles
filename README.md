@@ -7,9 +7,11 @@ TODO
 - batcat
 - exa
 - vagrant
+- tidy -viewer
 - Vim / Neovim
     - dotfiles
     - plugins
+- delta
 
 # Softs Desktop
 - Terminator
@@ -23,4 +25,8 @@ TODO
 - keepasxc
 - gitk
 - GNome dconf settings
+    keyboard shorcuts
+    default app
+    startup app ?
+
 ```

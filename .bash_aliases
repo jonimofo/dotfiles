@@ -31,6 +31,7 @@ alias fd="fdfind"
 alias vvenv='/usr/bin/python3 -m venv .venv && source .venv/bin/activate'
 alias o="xdg-open ."
 alias c="code ."
+alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
 
 
 # =============================================================================
@@ -111,6 +112,12 @@ alias v='f -e vim' # quick opening files with vim
 alias tfi='terraform init'
 alias tfa='terraform apply'
 alias tfd='terraform destroy'
+
+
+# =============================================================================
+# Tidy-viewer
+# =============================================================================
+alias tv="tidy-viewer"
 
 
 # =============================================================================

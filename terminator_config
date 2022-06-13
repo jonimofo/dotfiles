@@ -1,31 +1,44 @@
 [global_config]
-  borderless = True
-  enabled_plugins = LaunchpadCodeURLHandler, APTURLHandler, LaunchpadBugURLHandler
-  inactive_color_offset = 1.0
-  tab_position = hidden
-  title_font = Sans 11
-  title_use_system_font = False
   window_state = maximise
+  borderless = True
+  tab_position = hidden
+  inactive_color_offset = 1.0
+  enabled_plugins = LaunchpadCodeURLHandler, APTURLHandler, LaunchpadBugURLHandler
+  title_use_system_font = False
+  title_font = Sans 11
 [keybindings]
-  copy = <Alt>C
-  cycle_next = <Primary><Alt>o
-  cycle_prev = <Primary><Alt>p
-  go_down = <Alt>J
-  go_left = <Alt>H
-  go_right = <Alt>L
-  go_up = <Alt>K
-  new_tab = <Alt>n
-  next_tab = <Primary>Tab
-  paste = <Alt>V
-  prev_tab = <Primary><Shift>Tab
-  split_horiz = <Alt>U
-  split_vert = <Alt>I
   zoom_in = <Ctrl>plus
   zoom_out = <Ctrl>minus
   zoom_normal = <Ctrl>0
+  new_tab = <Alt>n
+  cycle_next = <Primary><Alt>o
+  cycle_prev = <Primary><Alt>p
+  go_up = <Alt>K
+  go_down = <Alt>J
+  go_left = <Alt>H
+  go_right = <Alt>L
+  split_horiz = <Alt>U
+  split_vert = <Alt>I
+  copy = <Alt>C
+  paste = <Alt>V
   toggle_zoom = <Alt>Z
-  layout_launcher = <Alt><Shitf>L
+  next_tab = <Primary>Tab
+  prev_tab = <Primary><Shift>Tab
   new_window = <Alt><Shift>N
+  layout_launcher = <Alt><Shitf>L
+[profiles]
+  [[default]]
+    background_color = "#090300"
+    cursor_color = "#fce94f"
+    cursor_color_fg = False
+    font = DejaVu Sans Mono 11
+    foreground_color = "#ffffff"
+    show_titlebar = False
+    scrollbar_position = disabled
+    scrollback_lines = 1000
+    palette = "#000000:#ff0000:#38de21:#ffe50a:#1460d2:#ff005d:#00bbbb:#bbbbbb:#555555:#f40e17:#3bd01d:#edc809:#5555ff:#ff55ff:#6ae3fa:#ffffff"
+    use_system_font = False
+    copy_on_selection = True
 [layouts]
   [[default]]
     [[[child1]]]
@@ -35,17 +48,3 @@
       parent = ""
       type = Window
 [plugins]
-[profiles]
-  [[default]]
-    background_color = "#090300"
-    copy_on_selection = True
-    cursor_color = "#fce94f"
-    cursor_color_fg = False
-    font = DejaVu Sans Mono 11
-    foreground_color = "#ffffff"
-    show_titlebar = False
-    use_system_font = False
-    scrollbar_position = disabled
-    scrollback_lines = 1000
-    # Cobalt 2
-    palette = "#000000:#ff0000:#38de21:#ffe50a:#1460d2:#ff005d:#00bbbb:#bbbbbb:#555555:#f40e17:#3bd01d:#edc809:#5555ff:#ff55ff:#6ae3fa:#ffffff"

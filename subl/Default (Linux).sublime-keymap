@@ -1,0 +1,89 @@
+[  
+  // ----------------------------------------------------------------------
+  // EDITION
+  // ----------------------------------------------------------------------
+  { "keys": ["ctrl+v"], "command": "paste_and_indent" },
+
+
+
+  // duplicate line
+  { "keys": ["ctrl+d"], "command": "duplicate_line" },
+
+  // increase/decrease font size
+  { "keys": ["ctrl+="], "command": "increase_font_size" },
+  { "keys": ["ctrl+-"], "command": "decrease_font_size" },
+
+  // lower/upper case
+  { "keys": ["ctrl+shift+u"], "command": "upper_case" },
+  { "keys": ["ctrl+shift+l"], "command": "lower_case" },
+
+  // paste and indent
+  { "keys": ["ctrl+v"], "command": "paste_and_indent" },
+
+  // join line
+  { "keys": ["ctrl+j"], "command": "join_lines" },
+
+  // delete whole line
+  { "keys": ["ctrl+u"], "command": "run_macro_file", "args": {"file": "res://Packages/Default/Delete Line.sublime-macro"} },
+
+  // move line up/down
+  { "keys": ["alt+up"], "command": "swap_line_up" },
+  { "keys": ["alt+down"], "command": "swap_line_down" },
+
+  // comment block
+  { "keys": ["ctrl+shift+:"], "command": "toggle_comment", "args": { "block": true } },
+
+  // select line
+  // Ctrl + L
+
+
+  // ----------------------------------------------------------------------
+  // WINDOWS AND TABS
+  // ----------------------------------------------------------------------
+
+  // cycle through tabs 
+  
+  { "keys": ["ctrl+tab"], "command": "next_view" },
+  { "keys": ["ctrl+shift+tab"], "command": "prev_view" },  
+  // { "keys": ["ctrl+tab"], "command": "prev_view_in_stack" },
+  // { "keys": ["ctrl+shift+tab"], "command": "next_view_in_stack" },
+
+  // menus
+  { "keys": ["ctrl+b"], "command": "toggle_side_bar" },
+  { "keys": ["ctrl+shift+d"], "command": "toggle_distraction_free" },
+  { "keys": ["ctrl+shift+m"], "command": "toggle_menu"},
+
+  // COLUMNS LAYOUT
+  {
+    "keys": ["alt+shift+&"],
+    "command": "set_layout",
+    "args":
+    {
+      "cols": [0.0, 1.0],
+      "rows": [0.0, 1.0],
+      "cells": [[0, 0, 1, 1]]
+    }
+  },
+  {
+    "keys": ["alt+shift+é"],
+    "command": "set_layout",
+    "args":
+    {
+      "cols": [0.0, 0.5, 1.0],
+      "rows": [0.0, 1.0],
+      "cells": [[0, 0, 1, 1], [1, 0, 2, 1]]
+    }
+  },
+
+
+  { "keys": ["alt+l"], "command": "focus_neighboring_group", "args": {"forward": false} },
+  { "keys": ["alt+k"], "command": "focus_neighboring_group" },
+
+
+  // ----------------------------------------------------------------------
+  // TO DO / TO FIX
+  // ----------------------------------------------------------------------
+
+      // Select line with cursor same position
+
+]

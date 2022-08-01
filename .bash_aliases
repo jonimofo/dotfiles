@@ -48,15 +48,15 @@ alias dcl='docker container ls'
 alias dvl="docker volume ls"
 
 # Docker-Compose
-alias dc='docker-compose'
-alias dcp='docker-compose ps'
-alias dcu='docker-compose up -d'
-alias dcd='docker-compose down'
-alias dcs='docker-compose stop'
-alias dci='docker-compose images'
-alias dcc="docker-compose config"
-alias dcr='docker-compose restart'
-alias dcf='docker-compose logs -f'
+alias dc='docker compose'
+alias dcp='docker compose ps'
+alias dcu='docker compose up -d'
+alias dcd='docker compose down'
+alias dcs='docker compose stop'
+alias dci='docker compose images'
+alias dcc="docker compose config"
+alias dcr='docker compose restart'
+alias dcf='docker compose logs -f'
 
 
 # =============================================================================

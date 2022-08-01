@@ -37,11 +37,11 @@
   },
   {
     "command": "toggleSideBar",
-    "accelerator": "Ctrl+Shift+B"
+    "accelerator": "Ctrl+J"
   },
   {
     "command": "toggleNoteList",
-    "accelerator": null
+    "accelerator": "Ctrl+Shift+J"
   },
   {
     "command": "zoomActualSize",

@@ -18,6 +18,9 @@ parse_git_branch() {
 # Custom prompt
 export PS1="[\[\e[1;33m\]\u\[\e[m\]\[\e[1;32m\] \[\e[m\]\[\e[1;32m\]\h\[\e[m\] \[\e[1;36m\]\W\[\e[m\]]\$(parse_git_branch) $ "
 
+# Path
+PATH=$PATH:~/.local/bin
+
 
 # =============================================================================
 # Apps
@@ -46,8 +49,7 @@ export TLDR_PARAM='blue'
 eval "$(fasd --init auto)"
 
 # Docker rootless
-#export PATH=/home/bgi/bin:$PATH
-#export DOCKER_HOST=unix:///run/user/1000/docker.sock
+export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock
 
 
 # =============================================================================

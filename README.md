@@ -8,10 +8,15 @@ TODO
 - exa
 - vagrant
 - tidy -viewer
+- delta
+- duf
+- jq
+- gdebi
+- htop
 - Vim / Neovim
     - dotfiles
     - plugins
-- delta
+
 
 # Softs Desktop
 - Terminator
@@ -28,5 +33,8 @@ TODO
     keyboard shorcuts
     default app
     startup app ?
+
+    sudo apt install gnome-shell-extension-desktop-icons-ng
+    sudo apt install gnome-shell-extension-prefs ????
 
 ```

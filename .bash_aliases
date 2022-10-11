@@ -32,6 +32,7 @@ alias vvenv='/usr/bin/python3 -m venv .venv && source .venv/bin/activate'
 alias o="xdg-open ."
 alias c="code ."
 alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
+alias diff="colordiff"
 
 
 # =============================================================================
@@ -86,9 +87,12 @@ alias gss="git status"
 alias ga="git add"
 alias gp="git push"
 alias gb='git branch'
+alias gba='git branch -a'
 alias gd="git diff"
-alias glog="git log --graph --pretty='%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --all --stat"
-alias glg="git log --oneline --decorate --graph --all"
+alias glog="git log --graph --pretty='%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --stat"
+alias glogg="git log --graph --pretty='%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --all --stat"
+alias glg="git log --oneline --decorate --graph"
+alias glgg="git log --oneline --decorate --graph --all"
 alias gcm="git commit -m"
 
 

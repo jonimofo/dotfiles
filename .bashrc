@@ -48,8 +48,13 @@ export TLDR_PARAM='blue'
 # fasd
 eval "$(fasd --init auto)"
 
+# Prevent paste from middle mouse Click (on Dell xps)
+# xinput set-button-map 10 1 0 3
+# Prevent paste from middle click
+xbindkeys -p
+
 # Docker rootless
-export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock
+# export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock
 
 
 # =============================================================================
@@ -67,5 +72,6 @@ export HISTCONTROL=ignoredups
 # =============================================================================
 [ -f ~/.bash_aliases ] && source ~/.bash_aliases
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
-# TODO git completion
+[ -f ~/.git-completion.bash ] && . ~/.git-completion.bash
+
 # TODO docker completion

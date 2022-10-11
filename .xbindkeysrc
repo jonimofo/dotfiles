@@ -1,0 +1,9 @@
+# Source : https://unix.stackexchange.com/questions/24330/how-can-i-turn-off-middle-mouse-button-paste-functionality-in-all-programs
+# To deactivate middle click on Ubuntu 22.04
+#
+# To make it work :
+# 	Install first xbindkeys xsel xdotool
+# 	Run xbindkeys on startup
+
+"echo -n | xsel -n -i; pkill xbindkeys; xdotool click 2; xbindkeys"
+b:2 + Release

@@ -33,6 +33,8 @@ alias o="xdg-open ."
 alias c="code ."
 alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
 alias diff="colordiff"
+alias xcopy="xclip -sel clip"
+alias xpaste="xclip -out -sel clip"
 
 
 # =============================================================================

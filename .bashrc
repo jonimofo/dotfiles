@@ -56,6 +56,9 @@ xbindkeys -p
 # Docker rootless
 # export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock
 
+# TODO
+export FZF_DEFAULT_COMMAND="find \! \( -path '*/.git' -prune \) -printf '%P\n'"
+
 
 # =============================================================================
 # History

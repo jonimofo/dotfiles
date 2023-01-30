@@ -13,6 +13,8 @@ Plug 'avakhov/vim-yaml'
 Plug 'Vimjas/vim-python-pep8-indent'
 Plug 'wesQ3/vim-windowswap' " Swap panes with <leader <<> <leader <<>
 Plug 'gorkunov/smartpairs'
+Plug 'EdenEast/nightfox.nvim'
+
 call plug#end()
 
 
@@ -115,7 +117,8 @@ let g:nnn#action = {
 " Change auto-complete color
 highlight Pmenu ctermbg=gray guibg=gray
 " Color scheme
-colorscheme monokai
+colorscheme nightfox
+
 " Status bas colorscheme
 let g:lightline = { 'colorscheme': 'wombat'}
 

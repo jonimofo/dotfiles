@@ -1,6 +1,4 @@
 ```
-TODO
-
 # Softs basic / only terminal
 - fzf
 - fasd
@@ -11,7 +9,9 @@ TODO
 - delta
 - duf
 - jq
+- xlip
 - gdebi
+- colordiff
 - htop
 - Vim / Neovim
     - dotfiles
@@ -20,21 +20,7 @@ TODO
 
 # Softs Desktop
 - Terminator
-- Vscode
-    - Install
-    - Keyboard Shortcuts
-    - install extensions
 - Sublime Text
-    - Install
-    - Keyboard Shortcuts
 - keepasxc
-- gitk
-- GNome dconf settings
-    keyboard shorcuts
-    default app
-    startup app ?
-
-    sudo apt install gnome-shell-extension-desktop-icons-ng
-    sudo apt install gnome-shell-extension-prefs ????
 
 ```

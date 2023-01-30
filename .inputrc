@@ -13,3 +13,5 @@ set completion-ignore-case On
 # Use Ctrl-up-down to cycle in the inverted direction
 "\e[1;5A": insert-last-argument
 "\e[1;5B": "\e-"
+
+# ALT + Backspace : allow to delete last word

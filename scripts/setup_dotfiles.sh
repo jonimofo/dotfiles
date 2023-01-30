@@ -6,6 +6,15 @@ DOTFILES_DIR="/home/bgi/Repos/dotfiles/"
 ln --symbolic --force "$DOTFILES_DIR"/.bashrc ~/.bashrc
 ln --symbolic --force "$DOTFILES_DIR"/.bash_aliases ~/.bash_aliases
 ln --symbolic --force "$DOTFILES_DIR"/.inputrc ~/.inputrc
+ln --symbolic --force "$DOTFILES_DIR"/.xbindkeysrc ~/.xbindkeysrc
+
+# Git
+ln --symbolic --force "$DOTFILES_DIR"/.git-completion.bash ~/.git-completion.bash
+
+# Vim / Nvim
+ln --symbolic --force "$DOTFILES_DIR"/.vimrc ~/.vimrc
+ln --symbolic --force "$DOTFILES_DIR"/init.vim ~/.config/nvim/init.vim
+ln --symbolic --force "$DOTFILES_DIR"/monokai.vim ~/.vim/colors/monokai
 
 # Tmux
 ln --symbolic --force "$DOTFILES_DIR"/.tmux.conf ~/.tmux.conf

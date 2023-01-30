@@ -132,6 +132,8 @@ alias tv="tidy-viewer"
 # SSH permissions
 alias perm='printf "700 ~/.ssh \n600 ~/.ssh/authorized_keys \n664 ~/.ssh/config \n600 ~/.ssh/id_rsa \n644 ~/.ssh/id_rsa.pub \n600 ~/.ssh/known_hosts\n"'
 
+alias dlvid='yt-dlp -f bestvideo*+bestaudio/best -P ~/Videos/Youtube/ -o "%(channel)s-%(title)s.%(ext)s"'
+
 # Show only IP addresses
 # TODO add interface name
 function ipinet(){

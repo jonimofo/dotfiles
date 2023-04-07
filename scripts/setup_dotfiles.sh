@@ -26,7 +26,8 @@ ln --symbolic --force "$DOTFILES_DIR"/terminator_config ~/.config/terminator/con
 ln --symbolic --force "$DOTFILES_DIR"/subl/Preferences.sublime-settings	 ~/.config/sublime-text-3/Packages/User
 ln --symbolic --force "$DOTFILES_DIR"/subl/Default\ \(Linux\).sublime-keymap	 ~/.config/sublime-text-3/Packages/User
 
-
+# Espanso
+ln --symbolic --force "$DOTFILES_DIR"/espanso/base.yml ~/.config/espanso/match/base.yml
 
 # command -v foo >/dev/null 2>&1 || { echo "I require foo but it's not installed.  Aborting." >&2; exit 1; }
 # TODO vim/nvim

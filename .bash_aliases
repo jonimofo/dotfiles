@@ -133,7 +133,7 @@ alias tv="tidy-viewer"
 alias perm='printf "700 ~/.ssh \n600 ~/.ssh/authorized_keys \n664 ~/.ssh/config \n600 ~/.ssh/id_rsa \n644 ~/.ssh/id_rsa.pub \n600 ~/.ssh/known_hosts\n"'
 
 # ydl
-alias dlvid='yt-dlp -f bestvideo*+bestaudio/best -R "infinite" --restrict-filenames -P ~/Videos/Youtube/ -o "%(channel)s-%(title)s.%(ext)s"'
+alias dlvid='yt-dlp -f bestvideo*+bestaudio/best -R "infinite" --ignore-errors --restrict-filenames -P ~/Videos/Youtube/ -o "%(channel)s-%(title)s.%(ext)s"'
 
 # Show only IP addresses
 # TODO add interface name

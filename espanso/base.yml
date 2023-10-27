@@ -1,26 +1,24 @@
+imports:
+  - "./sap_query_main_tables.yml"
+  - "./qdv.yml"
+  - "./coding.yml"
+
+
 # Matches are substitution rules: when you type the "trigger" string
 # it gets replaced by the "replace" string.
 matches:
-  # Simple text replacement
+  # Formel
   - trigger: ":cdt"
-    replace: "cordialement"
-    propagate_case: true
+    replace: "Cordialement"
+
   - trigger: ":mcdt"
     replace: "Merci d'avance,\nCordialement"
     propagate_case: true
 
-  - trigger: ":ajd"
-    replace: "aujourd'hui"
-    propagate_case: true
- 
-  - trigger: "coeur"
-    replace: "cœur"
-    word: true
- 
- 
-#TODO : adresses full, partial, multilines
+  # Adresses
   - trigger: ":addr"
     replace: "56 lotissement les peupliers"
+
   - trigger: ":addr"
     replace: "Saint Caprais de Bordeaux"
 
@@ -31,37 +29,18 @@ matches:
   - trigger: ":bbn"
     replace: "bencheuch@gmail.com"
 
+  # Misc
+  - trigger: "coeur"
+    replace: "cœur"
+    word: true
+
+  - trigger: ":ajd"
+    replace: "aujourd'hui"
+    propagate_case: true
+
   - trigger: "bien hoa"
     replace: "Biên Hòa"
 
   - trigger: "da lat"
     replace: "Đà Lạt"
 
-
-  # Snippets
-  - trigger: ":sproc"
-    replace : |
-      DROP TYPE STORED_PROCEDURE_NAME_type;
-      CREATE TYPE STORED_PROCEDURE_NAME_type AS TABLE (
-      "" NVARCHAR(3)
-      );
-
-      DROP PROCEDURE "STORED_PROCEDURE_NAME";
-      CREATE PROCEDURE "STORED_PROCEDURE_NAME"(
-      IN begin_date DATE,
-      IN end_date DATE,
-      OUT result STORED_PROCEDURE_NAME_type
-      )
-      LANGUAGE SQLSCRIPT
-      SQL SECURITY INVOKER
-
-      AS
-      BEGIN
-
-      result =
-
-
-      END;
-
-  - trigger: ":odbc"
-    replace: "Driver={HDBODBC};SERVERNODE=10.33.0.51:30013;DATABASENAME=NDB;CURRENTSCHEMA=SEB_SEB01_SBO_PROD;CHAR_AS_UTF8=1"

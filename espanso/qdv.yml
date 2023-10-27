@@ -1,0 +1,16 @@
+matches:
+  - trigger: ":frs"
+    replace: "fournisseur"
+    propagate_case: true
+
+  - trigger: ":cde"
+    replace: "commande"
+    propagate_case: true
+
+  - trigger: ":jpl"
+    replace: "M. Lechelle"
+    propagate_case: false
+
+  - trigger: ":gha"
+    replace: "Guillaume Hanotel"
+    propagate_case: false

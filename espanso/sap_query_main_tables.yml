@@ -1,0 +1,107 @@
+matches:
+  - trigger: ":cr"
+    replace: "Crystal Reports"
+
+  - trigger: ":sbo"
+    replace: "SAP Business One"
+
+  - trigger: ":sproc"
+    replace : |
+      DROP TYPE STORED_PROCEDURE_NAME_type;
+      CREATE TYPE STORED_PROCEDURE_NAME_type AS TABLE (
+      "" NVARCHAR(3)
+      );
+
+      DROP PROCEDURE "STORED_PROCEDURE_NAME";
+      CREATE PROCEDURE "STORED_PROCEDURE_NAME"(
+        IN begin_date DATE,
+        IN end_date DATE,
+        OUT result STORED_PROCEDURE_NAME_type
+      )
+      LANGUAGE SQLSCRIPT
+      SQL SECURITY INVOKER
+
+      AS
+      BEGIN
+
+      result =
+
+
+      END;
+
+  - trigger: ":odbc"
+    replace: "Driver={HDBODBC};SERVERNODE=10.33.0.51:30013;DATABASENAME=NDB;CURRENTSCHEMA=SEB_SEB01_SBO_PROD;CHAR_AS_UTF8=1"
+
+  - trigger: ":ocrd"
+    replace: |
+      SELECT OCRD."CardCode" AS "CODE_CLIENT"
+        , OCRD."CardName" AS "NOM_USAGE"
+        , OCRD."CardFName" AS "ENSEIGNE"
+        , OCRG."GroupName" AS "GROUPE_CLIENT"
+        , OPLN."ListName" AS "LISTE_PRIX"
+        , OSLP."SlpName" AS "REPRESENTANT"
+        , OHEM."middleName" AS "TELEVENDEUR"
+        , OCRD."CreateDate" AS "DATE_CREATION"
+        , (CASE OCRD."frozenFor" WHEN 'Y' THEN 'INACTIF' WHEN 'N' THEN 'ACTIF' END) AS "INACTIF"
+
+      FROM OCRD
+          LEFT JOIN OCRG ON OCRG."GroupCode" = OCRD."GroupCode"
+          LEFT JOIN OPLN ON OPLN."ListNum" = OCRD."ListNum"
+          LEFT JOIN OSLP ON OSLP."SlpCode" = OCRD."SlpCode"
+          LEFT JOIN OHEM ON OHEM."empID" = OCRD."DfTcnician"
+
+      WHERE OCRD."CardType" = 'C'
+
+      ORDER BY OCRD."CardCode";
+
+
+  - trigger: ":oinv"
+    replace: |
+      SELECT
+          OINV."CardCode" AS "CODE_CLIENT"
+          , OITM."ItemCode" AS "CODE_ARTICLE"
+          , INV1."UomCode" AS "UNITE_VENTE"
+          , TO_NUMBER(INV1."Quantity") AS "QUANTITE"
+          , OINV."DocNum" AS "NUMERO_DOCUMENT"
+          , OINV."DocDate" AS "DATE_DOCUMENT"
+          , TO_NUMBER(INV1."Quantity") * INV1."INMPrice" AS "MONTANT_LIGNE_APRES_REMISE"
+          , OHEM."middleName" AS "TELEVENDEUR_DOCUMENT"
+
+      FROM OINV
+          INNER JOIN INV1 ON INV1."DocEntry" = OINV."DocEntry"
+          INNER JOIN OITM ON OITM."ItemCode" = INV1."ItemCode"
+          INNER JOIN OCRD ON OCRD."CardCode" = OINV."CardCode"
+          LEFT JOIN OHEM ON OHEM."empID" = OINV."OwnerCode"
+
+      WHERE OINV."CANCELED" = 'N'
+          AND OCRD."CardType" = 'C'
+          -- AND OINV."DocDate" BETWEEN :begin_date AND :end_date
+      
+      ORDER BY OINV."DocDate" DESC;
+
+
+
+  - trigger: ":oqut"
+    replace: |
+      SELECT
+          OQUT."CardCode" AS "CODE_CLIENT"
+          , OITM."ItemCode" AS "CODE_ARTICLE"
+          , QUT1."UomCode" AS "UNITE_VENTE"
+          , TO_NUMBER(QUT1."Quantity") AS "QUANTITE"
+          , OQUT."DocNum" AS "NUMERO_DOCUMENT"
+          , OQUT."DocDate" AS "DATE_DOCUMENT"
+          , TO_NUMBER(QUT1."Quantity") * QUT1."INMPrice" AS "CA"
+          , OHEM."middleName" AS "TELEVENDEUR_DOCUMENT"
+
+      FROM OQUT
+          INNER JOIN QUT1 ON QUT1."DocEntry" = OQUT."DocEntry"
+          INNER JOIN OITM ON OITM."ItemCode" = QUT1."ItemCode"
+          INNER JOIN OCRD ON OCRD."CardCode" = OQUT."CardCode"
+          LEFT JOIN OHEM ON OHEM."empID" = OQUT."OwnerCode"
+
+      WHERE OQUT."CANCELED" = 'N'
+          AND OCRD."CardType" = 'C'
+          -- AND OINV."DocDate" BETWEEN :begin_date AND :end_date
+
+      ORDER BY OQUT."DocDate" DESC;
+

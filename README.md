@@ -17,6 +17,9 @@
     - dotfiles
     - plugins
 
+pipx inject --include-apps ansible argcomplete
+https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html
+
 
 # Softs Desktop
 - Terminator

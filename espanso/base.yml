@@ -2,6 +2,7 @@ imports:
   - "./sap_query_main_tables.yml"
   - "./qdv.yml"
   - "./coding.yml"
+  - "./hugo.yml"
 
 
 # Matches are substitution rules: when you type the "trigger" string
@@ -16,10 +17,7 @@ matches:
     propagate_case: true
 
   # Adresses
-  - trigger: ":addr"
-    replace: "56 lotissement les peupliers"
-
-  - trigger: ":addr"
+  - trigger: ":scb"
     replace: "Saint Caprais de Bordeaux"
 
   # Emails

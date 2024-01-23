@@ -19,7 +19,7 @@ parse_git_branch() {
 export PS1="[\[\e[1;33m\]\u\[\e[m\]\[\e[1;32m\] \[\e[m\]\[\e[1;32m\]\h\[\e[m\] \[\e[1;36m\]\W\[\e[m\]]\$(parse_git_branch) $ "
 
 # Path
-PATH=$PATH:~/.local/bin
+PATH=$PATH:~/.local/bin:/opt/
 
 
 # =============================================================================
@@ -63,18 +63,33 @@ export FZF_DEFAULT_COMMAND="find \! \( -path '*/.git' -prune \) -printf '%P\n'"
 # =============================================================================
 # History
 # =============================================================================
-unset export HISTIGNORE
-export HISTIGNORE=$HISTIGNORE:'l:ls:ll:lt *:history:pwd:man *:fg:bg:jobs *'
+# Ignore specific commands in History
+# unset export HISTIGNORE
+# export HISTIGNORE=$HISTIGNORE:'l:ls:ll:lt *:history:pwd:man *:fg:bg:jobs *'
+
 # Ignore duplicate commands
 export HISTCONTROL=ignoredups
 
+# By default, when a Bash session is closed, it writes its current session history to the HISTFILE.
+# This can overwrite the entire history file with just the session's history. 
+# To append instead of overwriting, you can set the shopt option histappend
+shopt -s histappend
+
+
+#https://github.com/junegunn/fzf/wiki/Configuring-shell-key-bindings
+export FZF_CTRL_T_OPTS="--preview '(highlight -O ansi -l {} 2> /dev/null || cat {} || tree -C {}) 2> /dev/null | head -200'"
 
 
 # =============================================================================
 # Sourcing
 # =============================================================================
 [ -f ~/.bash_aliases ] && source ~/.bash_aliases
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
 [ -f ~/.git-completion.bash ] && . ~/.git-completion.bash
+[ -f ~/.fzf.bash ] && source ~/.fzf.bash
 
 # TODO docker completion
+
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion

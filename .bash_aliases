@@ -61,6 +61,8 @@ alias dcc="docker compose config"
 alias dcr='docker compose restart'
 alias dcf='docker compose logs -f'
 
+# Docker Compose & Lazy Docker
+alias dld='docker compose up -d && lazydocker'
 
 # =============================================================================
 # Vagrant
@@ -115,9 +117,9 @@ alias v='f -e vim' # quick opening files with vim
 # =============================================================================
 # Terraform
 # =============================================================================
-alias tfi='terraform init'
-alias tfa='terraform apply'
-alias tfd='terraform destroy'
+# alias tfi='terraform init'
+# alias tfa='terraform apply'
+# alias tfd='terraform destroy'
 
 
 # =============================================================================

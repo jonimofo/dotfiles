@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Kdrive
+Exec=/opt/kdrive/kDrive-3.5.3.20231023-amd64.AppImage
+Icon=/home/bgi/Repos/dotfiles/misc/kdrive_icon.png
+Terminal=false
+Type=Application
+Categories=Utilities
+

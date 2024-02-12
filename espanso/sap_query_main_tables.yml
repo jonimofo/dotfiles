@@ -105,3 +105,17 @@ matches:
 
       ORDER BY OQUT."DocDate" DESC;
 
+
+
+  - trigger: ":desc"
+    replace: |
+      SELECT
+          "COLUMN_NAME",
+          "DATA_TYPE_NAME",
+          "LENGTH",
+          "SCALE",
+          "IS_NULLABLE"
+      FROM "SYS"."COLUMNS"
+      WHERE "TABLE_NAME" = 'OUPT';
+
+

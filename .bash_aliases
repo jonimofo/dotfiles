@@ -33,9 +33,16 @@ alias o="xdg-open ."
 alias c="code ."
 alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
 alias diff="colordiff"
+
+#TODO
 alias xcopy="xclip -sel clip"
 alias xpaste="xclip -out -sel clip"
 
+# -x: show box
+# -c: Center the clock in the terminal window
+# -C 6: Set the clock color to cyan (color code 6)
+# -f "%d/%m/%Y": Set the date format
+alias fclock='TZ='Europe/Paris' tty-clock -x -c -C 6 -f "%d/%m/%Y"'
 
 # =============================================================================
 # Docker & Docker-Compose

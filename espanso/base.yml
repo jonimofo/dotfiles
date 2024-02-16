@@ -27,6 +27,9 @@ matches:
   - trigger: ":bbn"
     replace: "bencheuch@gmail.com"
 
+  - trigger: ":gg"
+    replace: "giangtran14@gmail.com"
+
   # Misc
   - trigger: "coeur"
     replace: "cœur"

@@ -34,9 +34,13 @@ alias c="code ."
 alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
 alias diff="colordiff"
 
+alias myip="watch ~/Repos/dotfiles/scripts/mypublicip.sh"
+
+
 #TODO
 alias xcopy="xclip -sel clip"
 alias xpaste="xclip -out -sel clip"
+alias cb='snap run clipboard'
 
 # -x: show box
 # -c: Center the clock in the terminal window

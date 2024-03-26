@@ -35,7 +35,7 @@ alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
 alias diff="colordiff"
 
 # Network
-alias resmon="sudo systemctl restart NetworkManager && sudo systemctl status NetworkManager"
+alias resnet="sudo systemctl restart NetworkManager && sudo systemctl status NetworkManager"
 alias myip="watch ~/Repos/dotfiles/scripts/mypublicip.sh"
 
 

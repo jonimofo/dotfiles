@@ -116,6 +116,11 @@ matches:
           "SCALE",
           "IS_NULLABLE"
       FROM "SYS"."COLUMNS"
-      WHERE "TABLE_NAME" = 'OUPT';
+      WHERE "TABLE_NAME" = 'O$|$';
 
+  - trigger: ":alias"
+    replace: |
+      SELECT "FieldID", "AliasID", "Descr", "TableID"
+      FROM "CUFD"
+      WHERE "TableID" = 'O$|$'
 

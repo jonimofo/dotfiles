@@ -1,9 +1,19 @@
 matches:
-  - trigger: ":gmap"
+  - trigger: ":himg"
     replace: |
-      <iframe
-        src=""
-        width="100%" height="450"
-        frameborder="0" style="border:0">
-      </iframe>
+      {{< 
+        image src="images/post/asie/asie-sud-est/01-vietnam/02-light-project/light_project_31.png" 
+        caption="IMAGE A GAUCHE"
+        alt="alter-text" 
+        resize="80x"
+        position="center"
+        zoomable="true"
+        command="fill" option="q100" class="img-fluid" title=""
+        webp="true">}}
 
+  - trigger: ":hgal"
+    replace: |
+      {{< 
+        gallery 
+        dir="images/post/asie/asie-sud-est/01-vietnam/02-light-project/01" 
+        zoomable="true" >}}

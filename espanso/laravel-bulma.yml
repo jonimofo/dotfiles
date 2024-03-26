@@ -1,0 +1,27 @@
+matches:
+  - trigger: ":det"
+    replace: |
+      <details class="details-procedure mb-5" style="text-align: center">
+        <summary style="text-align: left">Application Logistique Mobile : Synchronisation des données</summary>
+        <iframe class="mb-5" src="{{ url(\App\Enums\WikiResources::MOPSynchronisationDesDonnees) }}#zoom=150" width="80%" height="800px"></iframe>
+      </details>
+
+  - trigger: ":art"
+    replace: |
+      <article class="message is-info mt-2 mb-4">
+          <div class="message-body">
+              <p>$|$</p>
+          </div>
+      </article>
+
+  - trigger: ":img"
+    replace: |
+      <img class="img-zoom mt-2 mb-2" src="{{ getImage('cli/cli_tlv_client_blocage_tempo.png') }}" alt="">
+
+  - trigger: ":link"
+    replace: |
+      <a class="has-text-link" target="_blank" style="cursor: pointer" href="{{ route('toolbox.alerts.index') }}">Lien vers le menu des Alertes</a>
+
+  - trigger: ":tit"
+    replace: |
+      <p class="wiki-h3 wiki-item-list ">Jours Fériés</p>

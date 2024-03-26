@@ -3,6 +3,7 @@ imports:
   - "./qdv.yml"
   - "./coding.yml"
   - "./hugo.yml"
+  - "./laravel-bulma.yml"
 
 
 # Matches are substitution rules: when you type the "trigger" string
@@ -45,3 +46,8 @@ matches:
   - trigger: "da lat"
     replace: "Đà Lạt"
 
+  - trigger: ":::"
+    replace: ":site https://dictionary.cambridge.org/"
+
+  - trigger: "::o"
+    replace: ":site https://www.oxfordlearnersdictionaries.com/"

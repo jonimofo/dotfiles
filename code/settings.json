@@ -1,0 +1,7 @@
+{
+    "editor.minimap.enabled": false,
+    "workbench.colorTheme": "One Dark Darker",
+    "[html]": {
+        "editor.defaultFormatter": "vscode.html-language-features"
+    }
+}

@@ -1,8 +1,9 @@
 {
 	"color_scheme": "Packages/Color Scheme - Default/Monokai.sublime-color-scheme",
-	"font_size": 14,
+	"font_size": 22,
 	"ignored_packages":
 	[
+		"Package Control",
 		"Vintage",
 	],
 }

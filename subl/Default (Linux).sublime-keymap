@@ -2,10 +2,6 @@
   // ----------------------------------------------------------------------
   // EDITION
   // ----------------------------------------------------------------------
-  { "keys": ["ctrl+v"], "command": "paste_and_indent" },
-
-
-
   // duplicate line
   { "keys": ["ctrl+d"], "command": "duplicate_line" },
 
@@ -35,6 +31,12 @@
 
   // select line
   // Ctrl + L
+
+  // toggle word wrap
+  { "keys": ["alt+z"], "command": "toggle_setting", "args": {"setting": "word_wrap"} },
+
+
+
 
 
   // ----------------------------------------------------------------------
@@ -75,7 +77,6 @@
     }
   },
 
-
   { "keys": ["alt+l"], "command": "focus_neighboring_group", "args": {"forward": false} },
   { "keys": ["alt+k"], "command": "focus_neighboring_group" },
 
@@ -84,6 +85,7 @@
   // TO DO / TO FIX
   // ----------------------------------------------------------------------
 
-      // Select line with cursor same position
+  // Select line with cursor same position
+  { "keys": ["ctrl+l"], "command": "expand_selection", "args": {"to": "line"} },
 
 ]

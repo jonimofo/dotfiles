@@ -25,7 +25,7 @@
   next_tab = <Primary>Tab
   prev_tab = <Primary><Shift>Tab
   new_window = <Alt><Shift>N
-  layout_launcher = <Alt><Shitf>L
+  layout_launcher = <Alt><Shift>L
 [profiles]
   [[default]]
     background_color = "#090300"

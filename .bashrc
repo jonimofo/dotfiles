@@ -80,6 +80,17 @@ shopt -s histappend
 export FZF_CTRL_T_OPTS="--preview '(highlight -O ansi -l {} 2> /dev/null || cat {} || tree -C {}) 2> /dev/null | head -200'"
 
 
+# yt-dlp
+download_best_video_mp4() {
+    url=$1
+    yt-dlp -f "bestvideo+bestaudio[ext=m4a]/best" -o "%(title)s.%(ext)s" "$url"
+}
+download_best_audio_mp3() {
+    url=$1
+    yt-dlp -f "bestaudio" --extract-audio --audio-format mp3 --audio-quality 0 -o "%(title)s.%(ext)s" "$url"
+}
+
+
 # =============================================================================
 # Sourcing
 # =============================================================================

@@ -15,6 +15,7 @@ alias des="cd ~/Desktop"
 # =============================================================================
 alias bedit="vim ~/.bashrc"
 alias balias="vim ~/.bash_aliases"
+alias sb="source ~/.bashrc"
 
 
 # =============================================================================
@@ -38,6 +39,9 @@ alias diff="colordiff"
 alias resnet="sudo systemctl restart NetworkManager && sudo systemctl status NetworkManager"
 alias myip="watch ~/Repos/dotfiles/scripts/mypublicip.sh"
 
+#TODO dynamic IP ? if starting with 192 ?
+# HUGO
+alias h='hugo server --bind="192.168.1.18" --baseURL="http://192.168.1.18:1313/mon-periple/" --appendPort=false --disableFastRender'
 
 #TODO
 alias xcopy="xclip -sel clip"
@@ -149,6 +153,8 @@ alias perm='printf "700 ~/.ssh \n600 ~/.ssh/authorized_keys \n664 ~/.ssh/config 
 
 # ydl
 alias dlvid='yt-dlp -f bestvideo*+bestaudio/best -R "infinite" --ignore-errors --restrict-filenames -P ~/Videos/Youtube/ -o "%(channel)s-%(title)s.%(ext)s"'
+alias dlgg='yt-dlp -f "bestvideo+bestaudio"'
+
 
 # Show only IP addresses
 # TODO add interface name

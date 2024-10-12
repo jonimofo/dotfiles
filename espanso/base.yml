@@ -5,7 +5,6 @@ imports:
   - "./hugo.yml"
   - "./laravel-bulma.yml"
 
-
 # Matches are substitution rules: when you type the "trigger" string
 # it gets replaced by the "replace" string.
 matches:
@@ -28,26 +27,8 @@ matches:
   - trigger: ":bbn"
     replace: "bencheuch@gmail.com"
 
-  - trigger: ":gg"
-    replace: "giangtran14@gmail.com"
-
   # Misc
-  - trigger: "coeur"
-    replace: "cœur"
-    word: true
-
   - trigger: ":ajd"
     replace: "aujourd'hui"
     propagate_case: true
 
-  - trigger: "bien hoa"
-    replace: "Biên Hòa"
-
-  - trigger: "da lat"
-    replace: "Đà Lạt"
-
-  - trigger: ":::"
-    replace: ":site https://dictionary.cambridge.org/"
-
-  - trigger: "::o"
-    replace: ":site https://www.oxfordlearnersdictionaries.com/"

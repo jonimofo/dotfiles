@@ -55,6 +55,30 @@ matches:
       ORDER BY OCRD."CardCode";
 
 
+  - trigger: ":ordr"
+    replace: |
+      SELECT
+          ORDR."CardCode" AS "CODE_CLIENT"
+          , OITM."ItemCode" AS "CODE_ARTICLE"
+          , RDR1."UomCode" AS "UNITE_VENTE"
+          , TO_NUMBER(RDR1."Quantity") AS "QUANTITE"
+          , ORDR."DocNum" AS "NUMERO_DOCUMENT"
+          , ORDR."DocDate" AS "DATE_DOCUMENT"
+          , TO_NUMBER(RDR1."Quantity") * RDR1."INMPrice" AS "MONTANT_LIGNE_APRES_REMISE"
+          , OHEM."middleName" AS "TELEVENDEUR_DOCUMENT"
+
+      FROM ORDR
+          INNER JOIN RDR1 ON RDR1."DocEntry" = ORDR."DocEntry"
+          INNER JOIN OITM ON OITM."ItemCode" = RDR1."ItemCode"
+          INNER JOIN OCRD ON OCRD."CardCode" = ORDR."CardCode"
+          LEFT JOIN OHEM ON OHEM."empID" = ORDR."OwnerCode"
+
+      WHERE ORDR."CANCELED" = 'N'
+          AND OCRD."CardType" = 'C'
+          -- AND ORDR."DocDate" BETWEEN :begin_date AND :end_date
+
+      ORDER BY ORDR."DocDate" DESC;
+
   - trigger: ":oinv"
     replace: |
       SELECT
@@ -79,15 +103,13 @@ matches:
       
       ORDER BY OINV."DocDate" DESC;
 
-
-
   - trigger: ":oqut"
     replace: |
       SELECT
           OQUT."CardCode" AS "CODE_CLIENT"
           , OITM."ItemCode" AS "CODE_ARTICLE"
           , QUT1."UomCode" AS "UNITE_VENTE"
-          , TO_NUMBER(QUT1."Quantity") AS "QUANTITE"
+          , TO_NUMBER(QUT1."Quant  ity") AS "QUANTITE"
           , OQUT."DocNum" AS "NUMERO_DOCUMENT"
           , OQUT."DocDate" AS "DATE_DOCUMENT"
           , TO_NUMBER(QUT1."Quantity") * QUT1."INMPrice" AS "CA"
@@ -105,8 +127,6 @@ matches:
 
       ORDER BY OQUT."DocDate" DESC;
 
-
-
   - trigger: ":desc"
     replace: |
       SELECT
@@ -118,9 +138,122 @@ matches:
       FROM "SYS"."COLUMNS"
       WHERE "TABLE_NAME" = 'O$|$';
 
+  - trigger: ":unit"
+    replace: |
+      SELECT
+          OITM."ItemCode"
+          , OITM."ItemName"
+          , UGP1."UomEntry"
+          , OUOM."UomCode"
+          , UGP1."AltQty"
+          , UGP1."BaseQty"
+          , "OUOM_UACHAT"."UomCode" AS "U_ACHAT"
+          , "OUOM_USTOCK"."UomCode" AS "U_STOCK"
+          , "OUOM_UVENTE"."UomCode" AS "U_VENTE"
+
+      FROM UGP1
+          INNER JOIN OUGP ON OUGP."UgpEntry" = UGP1."UgpEntry"
+          INNER JOIN OITM ON OITM."UgpEntry" = OUGP."UgpEntry"
+          INNER JOIN OUOM ON OUOM."UomEntry" = UGP1."UomEntry"
+          LEFT JOIN "OUOM" OUOM_UACHAT ON OUOM_UACHAT."UomName" = OITM."BuyUnitMsr"
+          LEFT JOIN "OUOM" OUOM_USTOCK ON OUOM_USTOCK."UomEntry" = OITM."IUoMEntry"
+          LEFT JOIN "OUOM" OUOM_UVENTE ON OUOM_UVENTE."UomName" = OITM."SalUnitMsr"
+
+      WHERE OITM."ItemCode" = '$|$'
+      ORDER BY UGP1."BaseQty";
+
+
   - trigger: ":alias"
     replace: |
       SELECT "FieldID", "AliasID", "Descr", "TableID"
       FROM "CUFD"
       WHERE "TableID" = 'O$|$'
 
+
+  - trigger: ":todate"
+    replace: TO_VARCHAR(TO_DATE("OCLG"."DocDate"), 'DD/MM/YYYY')
+
+
+  - trigger: ":sumfacavrep"
+    replace: |
+      -- FACTURES
+      SELECT
+          "OSLP"."SlpName"
+          , ROUND(SUM((TO_NUMBER(INV1."Quantity") * INV1."INMPrice")), 2) AS "CA"
+          , COUNT(DISTINCT "OINV"."CardCode") AS "NB_CLIENTS"
+          , COUNT(DISTINCT "INV1"."ItemCode") AS "NB_REF"
+          , TO_NUMBER(SUM("INV1"."Quantity")) AS "NB_UV"
+      FROM OINV
+          INNER JOIN INV1 ON INV1."DocEntry" = OINV."DocEntry"
+          INNER JOIN OITM ON OITM."ItemCode" = INV1."ItemCode"
+          INNER JOIN OCRD ON OCRD."CardCode" = OINV."CardCode"
+          LEFT JOIN OMRC ON "OMRC"."FirmCode" = "OITM"."FirmCode"
+          LEFT JOIN OSLP ON "OSLP"."SlpCode" = "OCRD"."SlpCode"
+      WHERE OINV."CANCELED" = 'N'
+          AND OCRD."CardType" = 'C'
+          AND "OITM"."QryGroup4" = 'N'  -- ART EXCLURE STATS VALEUR
+          AND "OCRD"."QryGroup3" = 'N'  -- PART HORS STATS
+          AND OINV."DocDate" BETWEEN '2024-07-01' AND '2024-07-31'
+      GROUP BY "OSLP"."SlpName"
+      --        , "OITM"."U_CRL_AFAMILLESTAT"
+      --        , "OMRC"."FirmName"
+      UNION ALL
+      -- AVOIRS
+      SELECT
+          "OSLP"."SlpName"
+          , ROUND(SUM((TO_NUMBER(RIN1."Quantity") * RIN1."INMPrice")) * -1, 2) AS "CA"
+          , COUNT(DISTINCT "ORIN"."CardCode") AS "NB_CLIENTS"
+          , COUNT(DISTINCT "RIN1"."ItemCode") * -1 AS "NB_REF"
+          , TO_NUMBER(SUM("RIN1"."Quantity")) * -1 AS "NB_UV"
+      FROM ORIN
+          INNER JOIN RIN1 ON RIN1."DocEntry" = ORIN."DocEntry"
+          INNER JOIN OITM ON OITM."ItemCode" = RIN1."ItemCode"
+          INNER JOIN OCRD ON OCRD."CardCode" = ORIN."CardCode"
+          LEFT JOIN OMRC ON "OMRC"."FirmCode" = "OITM"."FirmCode"
+          LEFT JOIN OSLP ON "OSLP"."SlpCode" = "OCRD"."SlpCode"
+      WHERE ORIN."CANCELED" = 'N'
+          AND OCRD."CardType" = 'C'
+          AND "OITM"."QryGroup4" = 'N'  -- ART EXCLURE STATS VALEUR
+          AND "OCRD"."QryGroup3" = 'N'  -- PART HORS STATS
+          AND ORIN."DocDate" BETWEEN '2024-07-01' AND '2024-07-31'
+      GROUP BY "OSLP"."SlpName"
+      --        , "OITM"."U_CRL_AFAMILLESTAT"
+      --        , "OMRC"."FirmName"
+
+      ORDER BY "OSLP"."SlpName"
+
+
+  - trigger: ":sumcdecli"
+    replace: |
+      SELECT
+          YEAR(ORDR."DocDate") AS "ANNEE"
+          , (CASE MONTH(ORDR."DocDate")
+                  WHEN '1' THEN 'janv.' WHEN '2' THEN 'févr.' WHEN '3' THEN 'mars' WHEN '4' THEN 'avr.'
+                  WHEN '5' THEN 'mai' WHEN '6' THEN 'juin' WHEN '7' THEN 'juil.' WHEN '8' THEN 'août'
+                  WHEN '9' THEN 'sept.' WHEN '10' THEN 'oct.' WHEN '11' THEN 'nov.' WHEN '12' THEN 'déc.'
+          END) AS "MOIS"
+          , TLV_DOC."middleName" AS "TLV_DOC"
+          , REPLACE(REPLACE(TO_VARCHAR(SUM(TO_NUMBER(RDR1."Quantity")), '999,999,999,990'), ',', ' '), '.', ',') AS "NB_UV"
+      --     , SUM(TO_NUMBER(RDR1."Quantity")) AS "NB_UV"
+          , REPLACE(REPLACE(TO_VARCHAR(SUM(TO_NUMBER(RDR1."Quantity") * RDR1."INMPrice"), '999,999,999,990.00'), ',', ' '), '.', ',') AS "CA"
+      --     , SUM(TO_NUMBER(RDR1."Quantity") * RDR1."INMPrice") AS "CA"
+          , REPLACE(REPLACE(TO_VARCHAR(SUM(RDR1."LineTotal"), '999,999,999,990.00'), ',', ' '), '.', ',') AS "CA"
+      --     , SUM(RDR1."LineTotal") AS "CA_LineTotal"
+
+      FROM ORDR
+          INNER JOIN RDR1 ON RDR1."DocEntry" = ORDR."DocEntry"
+          INNER JOIN OITM ON OITM."ItemCode" = RDR1."ItemCode"
+          INNER JOIN OCRD ON OCRD."CardCode" = ORDR."CardCode"
+          LEFT JOIN OHEM TLV_DOC ON TLV_DOC."empID" = ORDR."OwnerCode"
+
+      WHERE ORDR."CANCELED" = 'N'
+          AND OCRD."CardType" = 'C'
+          AND ORDR."DocDate" BETWEEN '2024-06-01' AND '2024-06-30'
+          AND LEFT(TLV_DOC."middleName" , 3) = 'TLV'
+      --     AND OITM."QryGroup4" != 'Y'  -- P04-A-ARTICLES A EXCLURE STATS VALEUR
+      --     AND OITM."QryGroup5" != 'Y'  -- P05-A-ARTICLES A EXCLURE STATS QTE
+      --     AND OCRD."QryGroup3" != 'Y'  -- P03-C-PART HORS STATS
+
+      GROUP BY TLV_DOC."middleName", YEAR(ORDR."DocDate"), MONTH(ORDR."DocDate")
+
+      ORDER BY YEAR(ORDR."DocDate"), MONTH(ORDR."DocDate"), TLV_DOC."middleName"

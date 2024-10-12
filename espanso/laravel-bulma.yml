@@ -9,6 +9,7 @@ matches:
   - trigger: ":art"
     replace: |
       <article class="message is-info mt-2 mb-4">
+          <div class="message-header"></div>
           <div class="message-body">
               <p>$|$</p>
           </div>
@@ -25,3 +26,9 @@ matches:
   - trigger: ":tit"
     replace: |
       <p class="wiki-h3 wiki-item-list ">Jours Fériés</p>
+
+  - trigger: ":cache"
+    replace: |
+      $cacheKey = 'customers';
+      //if (Cache::has($cacheKey)) {Cache::forget($cacheKey); }
+      $customers = Cache::rememberForever($cacheKey, function () {return $this->customerRepository->customersQueryCheck(); });

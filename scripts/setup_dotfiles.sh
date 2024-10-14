@@ -20,7 +20,7 @@ ln --symbolic --force "$DOTFILES_DIR"/monokai.vim ~/.vim/colors/monokai
 ln --symbolic --force "$DOTFILES_DIR"/.tmux.conf ~/.tmux.conf
 
 # Terminator
-ln --symbolic --force "$DOTFILES_DIR"/terminator_config ~/.config/terminator/config
+ln --symbolic --force "$DOTFILES_DIR"/terminator_config.ini ~/.config/terminator/config
 
 # Sublime Text
 ln --symbolic --force "$DOTFILES_DIR"/subl/Preferences.sublime-settings	 ~/.config/sublime-text-3/Packages/User

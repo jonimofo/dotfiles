@@ -22,6 +22,7 @@ alias sb="source ~/.bashrc"
 # Terminal Commands
 # =============================================================================
 alias rm="rm -i"
+alias nvim="~/.local/bin/nvim"
 alias vim="nvim"
 alias ls="exa"
 alias ll="exa -l"

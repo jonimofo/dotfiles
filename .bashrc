@@ -95,6 +95,7 @@ download_best_audio_mp3() {
 # Sourcing
 # =============================================================================
 [ -f ~/.bash_aliases ] && source ~/.bash_aliases
+[ -f ~/.secrets/xfreerdp.sh ] && source ~/.secrets/xfreerdp.sh
 [ -f ~/.git-completion.bash ] && . ~/.git-completion.bash
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
 

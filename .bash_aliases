@@ -12,17 +12,18 @@ alias des="cd ~/Desktop"
 # =============================================================================
 # File & Terminal Management
 # =============================================================================
-alias rm="rm -i"                       # Interactive delete
-alias ls="exa"                          # Modern ls alternative
-alias ll="exa -l"                       # List with details
-alias l="exa -la"                       # List all including hidden
-alias lt="exa -lT"                      # List in tree format
-alias cat="batcat -p"                   # Syntax-highlighted cat
-alias fd="fdfind"                       # Find alternative
+alias rm="rm -i"
+alias ls="exa"
+alias ll="exa -l"
+alias l="exa -la"
+alias lt="exa -lT"
+alias cat="batcat -p"
+alias fd="fdfind"
 alias vvenv='/usr/bin/python3 -m venv .venv && source .venv/bin/activate'
-alias o="xdg-open ."                    # Open current directory
-alias c="code ."                        # Open current directory in VS Code
-alias diff="colordiff"                  # Colored diff output
+alias o="xdg-open ."
+alias c="code ."
+alias diff="colordiff"
+alias vim="nvim"
 
 # =============================================================================
 # Configuration & Dotfiles Editing

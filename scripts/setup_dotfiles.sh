@@ -43,8 +43,8 @@ declare -a FILES_TO_LINK=(
     "$DOTFILES_DIR/.git-completion.bash $HOME/.git-completion.bash"
 
     # Vim / Nvim
-    "$DOTFILES_DIR/.vimrc $HOME/.vimrc"
-    "$DOTFILES_DIR/init.vim $HOME/.config/nvim/init.vim"
+    # "$DOTFILES_DIR/.vimrc $HOME/.vimrc"
+    # "$DOTFILES_DIR/init.vim $HOME/.config/nvim/init.vim"
     "$DOTFILES_DIR/monokai.vim $HOME/.vim/colors/monokai"
 
     # Tmux

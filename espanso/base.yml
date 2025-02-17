@@ -32,3 +32,19 @@ matches:
     replace: "aujourd'hui"
     propagate_case: true
 
+  # Dates
+  - trigger: ":sda"
+    replace: "{{shortdate}}"
+    vars:
+      - name: shortdate
+        type: date
+        params:
+          format: "%y%m%d"
+  - trigger: ":fda"
+    replace: "{{fulldate}}"
+    vars:
+      - name: fulldate
+        type: date
+        params:
+          format: "%d/%m/%Y"
+

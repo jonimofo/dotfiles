@@ -4,8 +4,7 @@
   tab_position = hidden
   inactive_color_offset = 1.0
   enabled_plugins = LaunchpadCodeURLHandler, APTURLHandler, LaunchpadBugURLHandler
-  title_use_system_font = False
-  title_font = Sans 11
+  suppress_multiple_term_dialog = True
 [keybindings]
   zoom_in = <Ctrl>plus
   zoom_out = <Ctrl>minus
@@ -29,10 +28,7 @@
 [profiles]
   [[default]]
     background_color = "#090300"
-    cursor_color = "#fce94f"
-    cursor_color_fg = False
-    # font = Hack 11
-    font = UbuntuMonoNerdFont 11
+    font = Hack 14
     foreground_color = "#ffffff"
     show_titlebar = False
     scrollbar_position = hidden
@@ -40,4 +36,13 @@
     palette = "#000000:#ff0000:#38de21:#ffe50a:#1460d2:#ff005d:#00bbbb:#bbbbbb:#555555:#f40e17:#3bd01d:#edc809:#5555ff:#ff55ff:#6ae3fa:#ffffff"
     use_system_font = False
     copy_on_selection = True
-
+    cursor_color = "#FFFF00"
+[layouts]
+  [[default]]
+    [[[window0]]]
+      type = Window
+      parent = ""
+    [[[child1]]]
+      type = Terminal
+      parent = window0
+[plugins]

@@ -49,11 +49,14 @@ alias xcopy="xclip -sel clip"
 alias xpaste="xclip -out -sel clip"
 alias cb='snap run clipboard'
 
+alias blue="sudo modprobe -r btusb && sudo modprobe btusb"
+
 # -x: show box
 # -c: Center the clock in the terminal window
 # -C 6: Set the clock color to cyan (color code 6)
 # -f "%d/%m/%Y": Set the date format
 alias fclock='TZ='Europe/Paris' tty-clock -x -c -C 6 -f "%d/%m/%Y"'
+alias vclock='TZ=Asia/Ho_Chi_Minh tty-clock -x -c -C 6 -f "%d/%m/%Y"'
 
 # =============================================================================
 # Docker & Docker-Compose
@@ -133,33 +136,54 @@ alias v='f -e vim' # quick opening files with vim
 
 
 # =============================================================================
-# Terraform
-# =============================================================================
-# alias tfi='terraform init'
-# alias tfa='terraform apply'
-# alias tfd='terraform destroy'
-
-
-# =============================================================================
-# Tidy-viewer
-# =============================================================================
-alias tv="tidy-viewer"
-
-
-# =============================================================================
 # Utils
 # =============================================================================
 # SSH permissions
 alias perm='printf "700 ~/.ssh \n600 ~/.ssh/authorized_keys \n664 ~/.ssh/config \n600 ~/.ssh/id_rsa \n644 ~/.ssh/id_rsa.pub \n600 ~/.ssh/known_hosts\n"'
 
 # ydl
+# TODO set default locations
 alias dlvid='yt-dlp -f bestvideo*+bestaudio/best -R "infinite" --ignore-errors --restrict-filenames -P ~/Videos/Youtube/ -o "%(channel)s-%(title)s.%(ext)s"'
 alias dlgg='yt-dlp -f "bestvideo+bestaudio"'
 
+alias npf="nordvpn connect France"
+alias npt="nordvpn connect Thailand"
+alias npd="nordvpn disconnect"
 
-# Show only IP addresses
-# TODO add interface name
-function ipinet(){
-ip -4 a | grep inet | awk '{print $2}'
+
+ipinet() {
+    ip -4 addr show | awk '/inet / {print $2 "\t" $NF}'
 }
-alias ipinet=ipinet
+
+function retry_xconnection() {
+    if [[ $# -lt 1 ]]; then
+        printf "Usage: retry_xconnection <command> [max_retries]\n"
+        printf "Example: retry_xconnection \"xinteg\" 10\n"
+        return 1
+    fi
+
+    local command="$1"             # Command to attempt connection
+    local max_retries=${2:-150}    # Default max retries = 150
+    local seconds_before_retry=5
+    local count=0
+
+    # Validate that max_retries is a positive integer
+    if ! [[ "$max_retries" =~ ^[0-9]+$ ]]; then
+        printf "Error: max_retries must be a positive integer.\n"
+        return 1
+    fi
+
+    while (( count < max_retries )); do
+        if command $command; then  # Safely run the command without eval
+            return 0
+        fi
+        printf "Command '%s' failed, retrying in %d seconds... (Attempt %d/%d)\n" \
+            "$command" "$seconds_before_retry" "$((count + 1))" "$max_retries"
+        sleep "$seconds_before_retry"
+        ((count++))
+    done
+
+    printf "Command '%s' failed after %d attempts. Exiting.\n" "$command" "$max_retries"
+    return 1  # Indicate failure
+}
+

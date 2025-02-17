@@ -29,3 +29,7 @@
     email = bgi@qdv.fr
 [init]
 	defaultBranch = master
+[fetch]
+	prune = true
+[core]
+	editor = subl -n -w

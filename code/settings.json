@@ -3,5 +3,9 @@
     "workbench.colorTheme": "One Dark Darker",
     "[html]": {
         "editor.defaultFormatter": "vscode.html-language-features"
-    }
+    },
+    "files.associations": {
+        "*.gs": "javascript"
+    },
+    "postman.telemetry.enabled": false
 }

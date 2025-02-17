@@ -5,7 +5,10 @@
         "editor.defaultFormatter": "vscode.html-language-features"
     },
     "files.associations": {
-        "*.gs": "javascript"
+        "*.gs": "javascript",
+        "*.yml": "ansible",
+        "*.yaml": "ansible"
     },
-    "postman.telemetry.enabled": false
+    "postman.telemetry.enabled": false,
 }
+

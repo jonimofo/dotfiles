@@ -51,7 +51,7 @@ declare -a FILES_TO_LINK=(
     "$DOTFILES_DIR/.tmux.conf $HOME/.tmux.conf"
 
     # Terminator
-    "$DOTFILES_DIR/terminator_config.ini $HOME/.config/terminator/config"
+    "$DOTFILES_DIR/terminator_config $HOME/.config/terminator/config"
 
     # Sublime Text
     "$DOTFILES_DIR/subl/Preferences.sublime-settings $HOME/.config/sublime-text-3/Packages/User/Preferences.sublime-settings"

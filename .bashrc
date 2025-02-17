@@ -44,7 +44,11 @@ shopt -s checkwinsize
 # =============================================================================
 # Other Customizations
 # =============================================================================
-eval "$(fasd --init auto)"
+if command -v fasd >/dev/null 2>&1; then
+    eval "$(fasd --init auto)"
+fi
+
 
 # Prevent Middle Mouse Button Paste (Common on Dell XPS & ThinkPads)
-xbindkeys -p
+# xbindkeys -p
+

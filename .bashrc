@@ -1,112 +1,50 @@
-#!/bin/bash
-
+# Ensure this file is only loaded in interactive shells
+[[ $- != *i* ]] && return
 
 # =============================================================================
 # Prompt
 # =============================================================================
-# Add git branch to prompt
-parse_git_branch() {
-    BRANCH=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ (\1)/')
-
-    if [[ -z ${BRANCH} ]]; then
-        echo ""
-    else
-        echo "${BRANCH}"
-    fi
-}
-
-# Custom prompt
-export PS1="[\[\e[1;33m\]\u\[\e[m\]\[\e[1;32m\] \[\e[m\]\[\e[1;32m\]\h\[\e[m\] \[\e[1;36m\]\W\[\e[m\]]\$(parse_git_branch) $ "
-
-# Path
-PATH=$PATH:~/.local/bin:/opt/
-
+[ -f ~/.bash_prompt ] && source ~/.bash_prompt || echo "Warning: ~/.bash_prompt does not exist"
 
 # =============================================================================
-# Apps
+# Environment Variables
 # =============================================================================
-# Global editor
+export PATH="$HOME/.local/bin:/opt:$PATH"
 export EDITOR="nvim"
 
-# less / man
-export LESS_TERMCAP_mb=$'\E[1;31m'     # begin bold
-export LESS_TERMCAP_md=$'\E[1;36m'     # begin blink
-export LESS_TERMCAP_me=$'\E[0m'        # reset bold/blink
-export LESS_TERMCAP_so=$'\E[01;44;33m' # begin reverse video
-export LESS_TERMCAP_se=$'\E[0m'        # reset reverse video
-export LESS_TERMCAP_us=$'\E[1;32m'     # begin underline
-export LESS_TERMCAP_ue=$'\E[0m'        # reset underline
-export GROFF_NO_SGR=1                  # for konsole and gnome-terminal
-
-# tldr
-export TLDR_HEADER='magenta bold underline'
-export TLDR_QUOTE='italic'
-export TLDR_DESCRIPTION='green'
-export TLDR_CODE='red'
-export TLDR_PARAM='blue'
-
-# fasd
-eval "$(fasd --init auto)"
-
-# Prevent paste from middle mouse Click (on Dell xps)
-# xinput set-button-map 10 1 0 3
-# Prevent paste from middle click
-xbindkeys -p
-
-# Docker rootless
-# export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock
-
-# TODO
-export FZF_DEFAULT_COMMAND="find \! \( -path '*/.git' -prune \) -printf '%P\n'"
-
-
 # =============================================================================
-# History
+# History Settings
 # =============================================================================
-# Ignore specific commands in History
-# unset export HISTIGNORE
-# export HISTIGNORE=$HISTIGNORE:'l:ls:ll:lt *:history:pwd:man *:fg:bg:jobs *'
-
-# Ignore duplicate commands
+# Ignore duplicate commands in history
 export HISTCONTROL=ignoredups
 
-# By default, when a Bash session is closed, it writes its current session history to the HISTFILE.
-# This can overwrite the entire history file with just the session's history. 
-# To append instead of overwriting, you can set the shopt option histappend
+# Ignore specific commands in history
+# - `&` prevents duplicate consecutive commands
+# - Commands starting with `_` or whitespace are ignored
+export HISTIGNORE="&:ls:ll:lt *:history:pwd:man *:fg:bg:jobs *"
+
+# Ignore commands that start with a space (or `_` for custom scripts)
+export HISTCONTROL=ignoreboth
+
+# Ensure history is appended instead of overwritten when a session exits
 shopt -s histappend
 
-
-#https://github.com/junegunn/fzf/wiki/Configuring-shell-key-bindings
-export FZF_CTRL_T_OPTS="--preview '(highlight -O ansi -l {} 2> /dev/null || cat {} || tree -C {}) 2> /dev/null | head -200'"
-
-
-# yt-dlp
-download_best_video_mp4() {
-    url=$1
-    yt-dlp -f "bestvideo+bestaudio[ext=m4a]/best" -o "%(title)s.%(ext)s" "$url"
-}
-download_best_audio_mp3() {
-    url=$1
-    yt-dlp -f "bestaudio" --extract-audio --audio-format mp3 --audio-quality 0 -o "%(title)s.%(ext)s" "$url"
-}
+# Adjust terminal window size after each command to prevent display issues
+shopt -s checkwinsize
 
 
 # =============================================================================
-# Sourcing
+# Sourcing External Files
 # =============================================================================
-[ -f ~/.bash_aliases ] && source ~/.bash_aliases
-[ -f ~/.secrets/xfreerdp.sh ] && source ~/.secrets/xfreerdp.sh
-[ -f ~/.git-completion.bash ] && . ~/.git-completion.bash
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
+[ -f ~/.bash_aliases ] && source ~/.bash_aliases || echo "Warning: ~/.bash_aliases does not exist"
+[ -f ~/.bash_functions ] && source ~/.bash_functions || echo "Warning: ~/.bash_functions does not exist"
+[ -f ~/.git-completion.bash ] && source ~/.git-completion.bash || echo "Warning: ~/.git-completion.bash does not exist"
+[ -f ~/.fzf.bash ] && source ~/.fzf.bash || echo "Warning: ~/.fzf.bash does not exist"
 
-# TODO docker completion
+# =============================================================================
+# Other Customizations
+# =============================================================================
+eval "$(fasd --init auto)"
 
-# Source : https://liquidprompt.readthedocs.io/en/stable/install.html
-# Only load Liquidprompt in interactive shells, not from a script or from scp
-# [[ $- = *i* ]] && source ~/.liquidprompt/liquidprompt
-
-
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-. "$HOME/.cargo/env"
+# Prevent Middle Mouse Button Paste (Common on Dell XPS & ThinkPads)
+xbindkeys -p

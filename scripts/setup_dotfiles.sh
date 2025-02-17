@@ -1,94 +1,129 @@
 #!/bin/bash
 
-# Exit if any command fails
-set -e
+# Exit on error, unset variables, and pipe failures
+set -euo pipefail
 
-# Define the dotfiles directory
-DOTFILES_DIR="/home/bgi/Repos/dotfiles/"
+# Get the directory of the script, then move one level up to get the dotfiles directory
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+DOTFILES_DIR="$(realpath "$SCRIPT_DIR/..")"
 
-# Dry run flag (default is false)
+# Default to dry run mode
 DRY_RUN=true
+
+# Usage function
+usage() {
+    echo "Usage: $(basename "$0") [--dry-run | --no-dry-run] [--help]"
+    echo "  --dry-run     Simulate actions without making changes (default)"
+    echo "  --no-dry-run  Actually create symbolic links"
+    echo "  --help        Show this help message"
+    exit 0
+}
 
 # Parse command line arguments
 for arg in "$@"; do
-  case $arg in
-    --dry-run)
-      DRY_RUN=true
-      shift # Remove --dry-run from processing
-      ;;
-  esac
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --no-dry-run) DRY_RUN=false ;;
+        --help) usage ;;
+        *) echo "Invalid option: $arg"; usage ;;
+    esac
 done
 
-# Array of file mappings (source, destination)
+# Declare an array of dotfiles to be symlinked (absolute paths)
 declare -a FILES_TO_LINK=(
-    # Bash
-    ".bashrc ~/.bashrc"
-    ".bash_aliases ~/.bash_aliases"
-    ".inputrc ~/.inputrc"
-    ".xbindkeysrc ~/.xbindkeysrc"
-    
+    # Bash session
+    "$DOTFILES_DIR/.bashrc $HOME/.bashrc"
+    "$DOTFILES_DIR/.bash_aliases $HOME/.bash_aliases"
+    "$DOTFILES_DIR/.bash_functions $HOME/.bash_functions"
+    "$DOTFILES_DIR/.bash_prompt $HOME/.bash_prompt"
+    "$DOTFILES_DIR/.inputrc $HOME/.inputrc"
+    "$DOTFILES_DIR/.xbindkeysrc $HOME/.xbindkeysrc"
+
     # Git
-    ".git-completion.bash ~/.git-completion.bash"
-    #TODO git config
-    
+    "$DOTFILES_DIR/.git-completion.bash $HOME/.git-completion.bash"
+
     # Vim / Nvim
-    ".vimrc ~/.vimrc"
-    "init.vim ~/.config/nvim/init.vim"
-    "monokai.vim ~/.vim/colors/monokai"
-    
+    "$DOTFILES_DIR/.vimrc $HOME/.vimrc"
+    "$DOTFILES_DIR/init.vim $HOME/.config/nvim/init.vim"
+    "$DOTFILES_DIR/monokai.vim $HOME/.vim/colors/monokai"
+
     # Tmux
-    ".tmux.conf ~/.tmux.conf"
-    
+    "$DOTFILES_DIR/.tmux.conf $HOME/.tmux.conf"
+
     # Terminator
-    "terminator_config.ini ~/.config/terminator/config"
-    
+    "$DOTFILES_DIR/terminator_config.ini $HOME/.config/terminator/config"
+
     # Sublime Text
-    "subl/Preferences.sublime-settings ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings"
-    "subl/Default\\ \\(Linux\\).sublime-keymap ~/.config/sublime-text-3/Packages/User/Default\\ \\(Linux\\).sublime-keymap"
-    
+    "$DOTFILES_DIR/subl/Preferences.sublime-settings $HOME/.config/sublime-text-3/Packages/User/Preferences.sublime-settings"
+    "$DOTFILES_DIR/subl/Default (Linux).sublime-keymap $HOME/.config/sublime-text-3/Packages/User/Default (Linux).sublime-keymap"
+
     # Espanso
-    "espanso/base.yml ~/.config/espanso/match/base.yml"
+    "$DOTFILES_DIR/espanso/base.yml $HOME/.config/espanso/match/base.yml"
 )
 
-# Create directories if they don't exist
+# Function to create necessary directories
 create_dirs() {
-    echo "Creating necessary directories..."
-    mkdir -p ~/.config/nvim ~/.vim/colors ~/.config/terminator ~/.config/sublime-text-3/Packages/User ~/.config/espanso/match
-}
+    local directories=(
+        "$HOME/.config/nvim"
+        "$HOME/.vim/colors"
+        "$HOME/.config/terminator"
+        "$HOME/.config/sublime-text-3/Packages/User"
+        "$HOME/.config/espanso/match"
+    )
 
-# Function to create symbolic links or simulate the operation if in dry run mode
-create_symlinks() {
-    for file in "${FILES_TO_LINK[@]}"; do
-        # Split the source and destination
-        src="${file%% *}"
-        dest="${file##* }"
-
-        if [ "$DRY_RUN" = true ]; then
-            # Dry run: just print the action without executing it
-            echo "[Dry Run] Linking $DOTFILES_DIR/$src -> $dest"
-        else
-            # Actual run: create the symlink
-            echo "Linking $DOTFILES_DIR/$src -> $dest"
-            ln --symbolic --force "$DOTFILES_DIR/$src" "$dest"
+    echo "Ensuring necessary directories exist..."
+    for dir in "${directories[@]}"; do
+        if [ ! -d "$dir" ]; then
+            if [ "$DRY_RUN" = true ]; then
+                echo "[Dry Run] Would create directory: $dir"
+            else
+                echo "Creating directory: $dir"
+                mkdir -p "$dir"
+            fi
         fi
     done
 }
 
-# Main
-create_dirs
+# Function to create symbolic links
+create_symlinks() {
+    for file in "${FILES_TO_LINK[@]}"; do
+        src="${file%% *}"  # Get the first part (source file, absolute path)
+        dest="${file##* }" # Get the last part (destination file, absolute path)
 
-if [ "$DRY_RUN" = true ]; then
-    echo "Running in dry run mode. No changes will be made."
-else
-    echo "Creating symbolic links..."
-fi
+        if [ "$DRY_RUN" = true ]; then
+            echo "[Dry Run] Would link: $src -> $dest"
+        else
+            # Check if the destination file already exists
+            if [ -e "$dest" ] || [ -L "$dest" ]; then
+                echo "File already exists: $dest (Removing old link)"
+                rm -f "$dest"  # Remove existing file/symlink
+            fi
 
-create_symlinks
+            # Create symbolic link
+            echo "Linking: $src -> $dest"
+            ln -s "$src" "$dest"
+        fi
+    done
+}
 
-if [ "$DRY_RUN" = true ]; then
-    echo "Dry run completed. No files were modified."
-else
-    echo "All dotfiles linked successfully!"
-fi
+# Main function
+main() {
+    create_dirs
 
+    if [ "$DRY_RUN" = true ]; then
+        echo "Running in dry run mode. No changes will be made."
+    else
+        echo "Creating symbolic links..."
+    fi
 
+    create_symlinks
+
+    if [ "$DRY_RUN" = true ]; then
+        echo "Dry run completed. No files were modified."
+    else
+        echo "All dotfiles linked successfully."
+    fi
+}
+
+# Run main function
+main

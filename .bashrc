@@ -12,6 +12,9 @@
 export PATH="$HOME/.local/bin:/opt:$PATH"
 export EDITOR="nvim"
 
+# Ensure aliases are expanded in scripts
+shopt -s expand_aliases
+
 # =============================================================================
 # History Settings
 # =============================================================================

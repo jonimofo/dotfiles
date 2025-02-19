@@ -43,38 +43,53 @@ get_public_ip_info() {
 
 
 # =============================================================================
-# xfreerdp
+# Function to retry a given command until it succeeds or max retries are reached
 # =============================================================================
-function retry_xconnection() {
-    if [[ $# -lt 1 ]]; then
-        printf "Usage: retry_xconnection <command> [max_retries]\n"
-        printf "Example: retry_xconnection \"xinteg\" 10\n"
-        return 1
-    fi
-
-    local command="$1"             # Command to attempt connection
-    local max_retries=${2:-150}    # Default max retries = 150
-    local seconds_before_retry=5
+retry_command() {
+    local command=""
+    local max_retries=0  # Default: infinite retries
+    local delay=5        # Delay between retries (seconds)
     local count=0
 
-    # Validate that max_retries is a positive integer
-    if ! [[ "$max_retries" =~ ^[0-9]+$ ]]; then
-        printf "Error: max_retries must be a positive integer.\n"
+    # Usage message
+    usage() {
+        echo "Usage: retry_command -c <command> [-r <max_retries>]"
+        echo "  -c <command>     Command to execute (required)"
+        echo "  -r <max_retries> Maximum number of retries (default: infinite)"
+        echo "Example: retry_command -c 'xfreerdp /v:server /u:user' -r 5"
+    }
+
+    # Parse options
+    while getopts ":c:r:" opt; do
+        case "$opt" in
+            c) command="$OPTARG" ;;
+            r) max_retries="$OPTARG" ;;
+            :) echo "Error: Option -$OPTARG requires an argument." >&2; usage; return 1 ;;
+            \?) echo "Error: Invalid option -$OPTARG" >&2; usage; return 1 ;;
+        esac
+    done
+
+    # Validate command argument
+    if [[ -z "$command" ]]; then
+        echo "Error: Command (-c) is required." >&2
+        usage
         return 1
     fi
 
-    while (( count < max_retries )); do
-        if command $command; then  # Safely run the command without eval
-            return 0
-        fi
-        printf "Command '%s' failed, retrying in %d seconds... (Attempt %d/%d)\n" \
-            "$command" "$seconds_before_retry" "$((count + 1))" "$max_retries"
-        sleep "$seconds_before_retry"
-        ((count++))
-    done
+    # Retry loop
+    while true; do
+        eval "$command" && return 0  # Exit if command succeeds
 
-    printf "Command '%s' failed after %d attempts. Exiting.\n" "$command" "$max_retries"
-    return 1  # Indicate failure
+        ((count++))
+        echo "Command '$command' failed, retrying in $delay seconds... (Attempt $count/${max_retries:-∞})"
+
+        if [[ "$max_retries" -gt 0 && "$count" -ge "$max_retries" ]]; then
+            echo "Max retries ($max_retries) reached. Exiting."
+            return 1
+        fi
+
+        sleep "$delay"
+    done
 }
 
 

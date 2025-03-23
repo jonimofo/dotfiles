@@ -3,3 +3,6 @@ matches:
     replace: "// TODO REMOVE ME LATER"
     propagate_case: true
 
+  # // TODO snippet vscode instead
+  # - trigger: ":cl"
+  #   replace: console.log($|$)

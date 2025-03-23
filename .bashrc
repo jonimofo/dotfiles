@@ -40,7 +40,7 @@ shopt -s checkwinsize
 # Sourcing External Files
 # =============================================================================
 [ -f ~/.bash_aliases ] && source ~/.bash_aliases || echo "Warning: ~/.bash_aliases does not exist"
-[ -f ~/.bash_functions ] && source ~/.bash_functions || echo "Warning: ~/.bash_functions does not exist"
+[ -f $HOME/.bash_functions ] && source ~/.bash_functions || echo "Warning: $HOME/.bash_functions does not exist"
 [ -f ~/.git-completion.bash ] && source ~/.git-completion.bash || echo "Warning: ~/.git-completion.bash does not exist"
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash || echo "Warning: ~/.fzf.bash does not exist"
 

@@ -41,7 +41,7 @@ alias resnet="sudo systemctl restart NetworkManager && sudo systemctl status Net
 # SSH & Permissions
 # =============================================================================
 alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
-alias perm='printf "700 ~/.ssh \n600 ~/.ssh/authorized_keys \n664 ~/.ssh/config \n600 ~/.ssh/id_rsa \n644 ~/.ssh/id_rsa.pub \n600 ~/.ssh/known_hosts\n"'
+
 
 # =============================================================================
 # Docker & Docker-Compose
@@ -86,6 +86,11 @@ alias glogg="git log --graph --pretty='%Cred%h%Creset -%C(auto)%d%Creset %s %Cgr
 alias glg="git log --oneline --decorate --graph"
 alias glgg="git log --oneline --decorate --graph --all"
 alias gcm="git commit -m"
+
+# TODO
+# source : https://stackoverflow.com/questions/15661853/list-all-local-branches-without-a-remote
+# list branches with remote but not local
+# git for-each-ref  --format='%(refname:short) %(upstream)'  refs/heads \ | awk '$2 !~/^refs\/remotes/'
 
 # =============================================================================
 # Fasd (Quick Navigation)
@@ -136,6 +141,14 @@ alias vclock='TZ="Asia/Ho_Chi_Minh" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
 alias xcopy="xclip -sel clip"
 alias xpaste="xclip -out -sel clip"
 alias cb="snap run clipboard"
+
+alias gpi="gping 10.33.0.42"
+alias gpp="gping 10.33.0.47"
+
+alias glow='glow -p'
+
+
+
 
 # =============================================================================
 # Bluetooth USB Driver Restart

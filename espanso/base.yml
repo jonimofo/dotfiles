@@ -31,6 +31,18 @@ matches:
   - trigger: ":ajd"
     replace: "aujourd'hui"
     propagate_case: true
+  # Misc
+  - trigger: ":sse"
+    replace: "student@example.com"
+    propagate_case: true
+  # Misc
+  - trigger: ":tte"
+    replace: "teacher@example.com"
+    propagate_case: true
+  # Misc
+  - trigger: ":aae"
+    replace: "admin@example.com"
+    propagate_case: true
 
   # Dates
   - trigger: ":sda"
@@ -40,6 +52,13 @@ matches:
         type: date
         params:
           format: "%y%m%d"
+  - trigger: ":sdda"
+    replace: "{{shortdate}}"
+    vars:
+      - name: shortdate
+        type: date
+        params:
+          format: "%Y%m%d"
   - trigger: ":fda"
     replace: "{{fulldate}}"
     vars:

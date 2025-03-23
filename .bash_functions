@@ -1,4 +1,70 @@
 # =============================================================================
+# Help / Utils
+# =============================================================================
+th() {
+    cat <<EOF
+    ┌──────────────────────────────┬───────────────────────────────────────┐
+    │ ======================== SESSIONS ================================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Start tmux                   │ tmux                                  │
+    │ Start named session          │ tmux new -s <name>                    │
+    │ List sessions                │ tmux ls                               │
+    │ Attach to session            │ tmux attach -t <name>                 │
+    │ Reattach last session        │ tmux attach-session                   │
+    │ Detach from session          │ prefix + d                            │
+    │ Save session (resurrect)     │ prefix + Ctrl + s                     │
+    │ Restore session (resurrect)  │ prefix + Ctrl + r                     │
+    │ Kill a session               │ tmux kill-session -t <name>           │
+    │ Kill all sessions            │ tmux kill-server                      │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ========================== WINDOWS ================================= │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Create new window            │ prefix + c                            │
+    │ Rename window                │ prefix + ,                            │
+    │ Switch to next window        │ prefix + p / Ctrl + p                 │
+    │ Switch to previous window    │ prefix + o / Ctrl + o                 │
+    │ Close current window         │ exit or Ctrl + d                      │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ======================= COPY & PASTE =============================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Enter copy mode              │ prefix + m                            │
+    │ Start selection              │ v                                     │
+    │ Copy selection               │ y or Enter                            │
+    │ Paste from tmux buffer       │ prefix + ]                            │
+    │ Paste from system clipboard  │ Alt + V                               │
+    │ Mouse selection              │ Shift + drag OR native drag           │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ========================== PANES =================================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Split pane (horizontal)      │ prefix + i                            │
+    │ Split pane (vertical)        │ prefix + u                            │
+    │ Move between panes           │ prefix + h / j / k / l                │
+    │ Resize pane                  │ prefix + H / J / K / L                │
+    │ Close pane                   │ exit or Ctrl + d                      │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ========================== OTHER =================================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Reload tmux config           │ prefix + r                            │
+    └──────────────────────────────┴───────────────────────────────────────┘
+EOF
+}
+
+perm() {
+    cat <<EOF
+┌────────┬──────────────────────────────┐
+│ Mode   │ File                         │
+├────────┼──────────────────────────────┤
+│ 700    │ ~/.ssh                       │
+│ 600    │ ~/.ssh/authorized_keys       │
+│ 664    │ ~/.ssh/config                │
+│ 600    │ ~/.ssh/id_rsa                │
+│ 644    │ ~/.ssh/id_rsa.pub            │
+│ 600    │ ~/.ssh/known_hosts           │
+└────────┴──────────────────────────────┘
+EOF
+}
+
+# =============================================================================
 # Prompt
 # =============================================================================
 # Add git branch to prompt
@@ -78,7 +144,7 @@ retry_command() {
 
     # Retry loop
     while true; do
-        eval "$command" && return 0  # Exit if command succeeds
+        bash -i -c "$command" && return 0  # Run in an interactive shell to expand aliases
 
         ((count++))
         echo "Command '$command' failed, retrying in $delay seconds... (Attempt $count/${max_retries:-∞})"

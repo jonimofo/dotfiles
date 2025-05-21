@@ -45,7 +45,8 @@
   "files.associations": {
     "*.gs": "javascript",
     "*.yml": "yaml",
-    "*.yaml": "ansible"
+    "*.yaml": "yaml",
+    "*.env": "env",
   },
 
   "highlight-matching-tag.enabled": false,
@@ -56,10 +57,18 @@
       }
     }
   },
+  // Display yellow line under active tab
+  "workbench.colorCustomizations": {
+      "tab.activeBorder": "#fff707",
+      "tab.unfocusedActiveBorder": "#000000"
+  }
+
+
 
   /* ----------------------------------------------------------------
     MISC
   ---------------------------------------------------------------- */
   "postman.telemetry.enabled": false,
-  "prettier.enable": false
+  "prettier.enable": false,
+  "codachi.position": "explorer"
 }

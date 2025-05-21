@@ -1,6 +1,7 @@
 # =============================================================================
 # Help / Utils
 # =============================================================================
+# tmux cheatsheet
 th() {
     cat <<EOF
     ┌──────────────────────────────┬───────────────────────────────────────┐
@@ -49,6 +50,7 @@ th() {
 EOF
 }
 
+# ssh permissions
 perm() {
     cat <<EOF
 ┌────────┬──────────────────────────────┐
@@ -63,6 +65,53 @@ perm() {
 └────────┴──────────────────────────────┘
 EOF
 }
+
+# chmod cheatsheet
+chmod_show() {
+  # helper: turn one octal digit (0–7) into rwx
+  _bit_to_rwx() {
+    local d=$1
+    (( d & 4 )) && printf 'r' || printf '-'
+    (( d & 2 )) && printf 'w' || printf '-'
+    (( d & 1 )) && printf 'x' || printf '-'
+  }
+
+  # convert full 3-digit mode to symbolics
+  _mode_to_sym() {
+    local m=$1
+    _bit_to_rwx "${m:0:1}"
+    _bit_to_rwx "${m:1:1}"
+    _bit_to_rwx "${m:2:1}"
+  }
+
+  if [ $# -eq 0 ]; then
+    printf "%-5s %-10s %s\n" "Mode" "Symbolic" "Description"
+    for mode in 600 644 666 700 755 775 777; do
+      sym=$(_mode_to_sym "$mode")
+      case "$mode" in
+        600) desc="rw------- (owner rw only)";;
+        644) desc="rw-r--r-- (owner rw, group/other r)";;
+        666) desc="rw-rw-rw- (all read/write)";;
+        700) desc="rwx------ (owner rwx only)";;
+        755) desc="rwxr-xr-x (owner rwx, grp/oth r+x)";;
+        775) desc="rwxrwxr-x (owner/grp rwx, oth r+x)";;
+        777) desc="rwxrwxrwx (everyone rwx)";;
+        *)   desc="";;
+      esac
+      printf "%-5s %-10s %s\n" "$mode" "$sym" "$desc"
+    done
+  else
+    for mode in "$@"; do
+      if [[ ! $mode =~ ^[0-7]{3}$ ]]; then
+        printf "Invalid mode: %s (must be three octal digits)\n" "$mode" >&2
+      else
+        sym=$(_mode_to_sym "$mode")
+        printf "%s → %s\n" "$mode" "$sym"
+      fi
+    done
+  fi
+}
+
 
 # =============================================================================
 # Prompt

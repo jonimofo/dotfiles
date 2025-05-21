@@ -25,8 +25,8 @@
     hunk-header-style = file line-number syntax
 
 [user]
-    name = bgi
-    email = bgi@qdv.fr
+	name = bgi
+	email = bgi@qdv.fr
 [init]
 	defaultBranch = master
 [fetch]

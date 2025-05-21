@@ -143,5 +143,16 @@
   {
     "key": "alt+2",
     "command": "editor.unfold"
-  }
+  },
+
+
+  {
+  "key": "ctrl+numadd",
+  "command": "editor.action.fontZoomIn"
+},
+{
+  "key": "ctrl+numsub",
+  "command": "editor.action.fontZoomOut"
+}
+
 ]

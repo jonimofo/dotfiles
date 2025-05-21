@@ -43,6 +43,8 @@ shopt -s checkwinsize
 [ -f $HOME/.bash_functions ] && source ~/.bash_functions || echo "Warning: $HOME/.bash_functions does not exist"
 [ -f ~/.git-completion.bash ] && source ~/.git-completion.bash || echo "Warning: ~/.git-completion.bash does not exist"
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash || echo "Warning: ~/.fzf.bash does not exist"
+[ -f ~/.secrets/xfreerdp.sh ] && source ~/.secrets/xfreerdp.sh || echo "Warning: ~/.secrets/xfreerdp.sh does not exist"
+
 
 # =============================================================================
 # Other Customizations

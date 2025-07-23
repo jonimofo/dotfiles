@@ -1,9 +1,6 @@
 imports:
-  - "./sap_query_main_tables.yml"
-  - "./qdv.yml"
-  - "./coding.yml"
-  - "./hugo.yml"
-  - "./laravel-bulma.yml"
+  - "./sap.yml"
+  - "./laravel.yml"
 
 # Matches are substitution rules: when you type the "trigger" string
 # it gets replaced by the "replace" string.
@@ -16,9 +13,11 @@ matches:
     replace: "Merci d'avance,\nCordialement"
     propagate_case: true
 
+
   # Adresses
   - trigger: ":scb"
     replace: "Saint Caprais de Bordeaux"
+
 
   # Emails
   - trigger: ":bb,"
@@ -27,22 +26,18 @@ matches:
   - trigger: ":bbn"
     replace: "bencheuch@gmail.com"
 
+
   # Misc
   - trigger: ":ajd"
     replace: "aujourd'hui"
     propagate_case: true
-  # Misc
-  - trigger: ":sse"
-    replace: "student@example.com"
-    propagate_case: true
-  # Misc
-  - trigger: ":tte"
-    replace: "teacher@example.com"
-    propagate_case: true
-  # Misc
-  - trigger: ":aae"
-    replace: "admin@example.com"
-    propagate_case: true
+
+
+  # QDV
+  - trigger: ":jpl"
+    replace: "M. Lechelle"
+    propagate_case: false
+
 
   # Dates
   - trigger: ":sda"
@@ -52,6 +47,7 @@ matches:
         type: date
         params:
           format: "%y%m%d"
+
   - trigger: ":sdda"
     replace: "{{shortdate}}"
     vars:
@@ -59,6 +55,7 @@ matches:
         type: date
         params:
           format: "%Y%m%d"
+
   - trigger: ":fda"
     replace: "{{fulldate}}"
     vars:

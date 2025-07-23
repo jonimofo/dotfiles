@@ -23,10 +23,6 @@ matches:
     replace: |
       <a class="has-text-link" target="_blank" style="cursor: pointer" href="{{ route('toolbox.alerts.index') }}">Lien vers le menu des Alertes</a>
 
-  - trigger: ":tit"
-    replace: |
-      <p class="wiki-h3 wiki-item-list ">Jours Fériés</p>
-
   - trigger: ":cache"
     replace: |
       $cacheKey = 'customers';

@@ -21,6 +21,12 @@
   "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
+  "[shellscript]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format"
+  },
+  "[env]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format"
+  },
 
   "editor.formatOnPaste": true,
   "editor.formatOnSave": true,
@@ -61,14 +67,20 @@
   "workbench.colorCustomizations": {
       "tab.activeBorder": "#fff707",
       "tab.unfocusedActiveBorder": "#000000"
-  }
+  },
 
 
 
   /* ----------------------------------------------------------------
     MISC
   ---------------------------------------------------------------- */
-  "postman.telemetry.enabled": false,
   "prettier.enable": false,
-  "codachi.position": "explorer"
+  "chat.instructionsFilesLocations": {
+    ".github/instructions": true,
+    "/tmp/postman-http-request-post-response.instructions.md": true,
+    "/tmp/postman-http-request-pre-request.instructions.md": true
+  },
+  "[dotenv]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format"
+  },
 }

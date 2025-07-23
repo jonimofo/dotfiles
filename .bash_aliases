@@ -59,6 +59,7 @@ alias dvl="docker volume ls"
 
 # Docker-Compose Commands
 alias dc="docker compose"
+alias dpp='docker ps --format "table {{.Names}}\t{{.ID}}\t{{.Status}}\t{{.Ports}}"'
 alias dcp="docker compose ps"
 alias dcu="docker compose up -d"
 alias dcd="docker compose down"

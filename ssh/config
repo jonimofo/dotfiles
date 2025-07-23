@@ -1,0 +1,23 @@
+# Specific host settings
+  Host 192.168.1.28
+    HostName 192.168.1.28
+    User bgi
+
+Host baf-production
+    HostName 10.33.0.205
+    User bgi
+    IdentityFile ~/.ssh/baf/baf_id_ed25519
+    ForwardAgent yes
+
+# Specific host settings
+Host baf-staging
+    HostName 10.33.0.204
+    User bgi
+    IdentityFile ~/.ssh/baf/baf_id_ed25519
+    ForwardAgent yes
+
+Host pi
+    HostName 192.168.1.200
+    User bgi
+    IdentityFile ~/.ssh/astrolab/id_astrolab_pis
+    ForwardAgent yes

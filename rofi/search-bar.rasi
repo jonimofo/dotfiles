@@ -1,0 +1,41 @@
+* {
+  font: "Sans 11";
+  text-color: #e6e6e6;
+  border-radius: 10px;
+  background-color: #0f1115;   /* solid, not rgba() */
+  background-image: none;      /* no gradients anywhere */
+  border-color: #2b2f37;
+}
+
+window {
+  location: center;
+  anchor: center;
+  width: 640px;
+  padding: 8px;
+  border: 0px;
+  background-color: #0f1115;
+  background-image: none;
+}
+
+mainbox { children: [ inputbar, listview ]; padding: 0 8px; }
+
+listview {
+  enabled: false;
+  background-color: #0f1115;
+  background-image: none;
+}
+
+inputbar {
+  padding: 10px 14px;
+  border: 1px;
+  border-radius: 10px;
+  border-color: #2b2f37;
+  background-color: #0f1115;
+  background-image: none;
+}
+
+entry {
+  expand: true;
+  placeholder: "";
+}
+prompt { text: ""; }

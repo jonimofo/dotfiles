@@ -1,0 +1,34 @@
+# Exclude common cache and temporary files/folders
+
+# Caches
+.cache/
+*.cache
+*Cache*
+
+# Temp files
+*.tmp
+*~
+
+# Log files
+*.log
+
+# Common development folders
+node_modules/
+__pycache__/
+venv/
+.git/
+
+# macOS specific
+.DS_Store
+
+# System folders (use with caution if syncing system dirs)
+/proc/*
+/sys/*
+/tmp/*
+/run/*
+/mnt/*
+/media/*
+/lost+found
+
+# Trash
+.Trash-*/

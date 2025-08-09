@@ -1,0 +1,44 @@
+[custom0]
+binding='<Control><Alt>p'
+command='/usr/bin/flameshot gui'
+name='Flameshot gui'
+
+[custom1]
+binding=''
+command='tdrop -ma -w 80% -h 60%'
+name='Dropdown Nemo'
+
+[custom2]
+binding='<Super>f'
+command='/usr/bin/fsearch'
+name='FSearch'
+
+[custom3]
+binding='Print'
+command='/usr/bin/flameshot gui'
+name='Flameshot gui 2'
+
+[custom4]
+binding='<Shift><Control><Alt>p'
+command='gnome-control-center display'
+name='Open Display Menu'
+
+[custom5]
+binding='<Shift><Alt>d'
+command='gnome-control-center display'
+name='NightLight-Display Menu'
+
+[custom6]
+binding='<Control><Alt>Escape'
+command='xkill'
+name='xkill'
+
+[custom7]
+binding='<Super>e'
+command='/home/bgi/Repos/dotfiles/scripts/tdrop_toggle_nemo.sh'
+name='Tdrop'
+
+[custom8]
+binding='<Control>space'
+command='/home/bgi/Repos/dotfiles/rofi/rofi_url_search.sh'
+name='rofi-search'

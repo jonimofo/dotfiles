@@ -133,9 +133,19 @@ alias vup="vagrant up && vagrant provision"
 # =============================================================================
 # Utils
 # =============================================================================
+# >/dev/null 2>&1 → hides all stdout and stderr output from docker run and xdg-open
+# nohup → prevents the xdg-open process from being tied to your shell session.
+# & disown → sends it to the background and removes it from your job list so it won’t print anything when it finishes.
+alias maza='docker run -d --rm --name mazanoke -p 3474:80 ghcr.io/civilblur/mazanoke:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3474 >/dev/null 2>&1 & disown'
+alias omni='docker run -d --rm --name omni-tools -p 8080:80 iib0011/omni-tools:latest'
+
+
 # System Clock in Terminal
 alias fclock='TZ="Europe/Paris" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
 alias vclock='TZ="Asia/Ho_Chi_Minh" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
+
+# Virtualenv
+alias sy="source ~/Virtualenv/python-env/bin/activate"
 
 # Clipboard Shortcuts
 # TODO use xclipboard ?

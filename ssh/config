@@ -1,4 +1,7 @@
 # Specific host settings
+  Host 192.168.1.33
+    HostName 192.168.1.33
+
   Host 192.168.1.28
     HostName 192.168.1.28
     User bgi

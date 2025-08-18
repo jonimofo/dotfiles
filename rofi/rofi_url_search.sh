@@ -16,7 +16,7 @@ USER=$USER
 
 # -- CONFIGURATION --
 # Define the shortcut for the default search engine.
-DEFAULT_ENGINE="g"
+DEFAULT_ENGINE="d"
 
 # Add or remove search engines here.
 # The format is: urls["shortcut"]="Search URL"

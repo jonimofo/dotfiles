@@ -12,7 +12,8 @@ alias des="cd ~/Desktop"
 # =============================================================================
 # File & Terminal Management
 # =============================================================================
-alias rm="rm -i"
+alias rm="trash-put -i"
+# alias rm="rm -i"
 alias ls="exa"
 alias ll="exa -l"
 alias l="exa -la"
@@ -50,6 +51,7 @@ alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
 alias di="docker images"
 alias ds="docker stop"
 alias dr="docker run"
+alias drf="docker rm -f"
 alias dp="docker ps"
 alias dv="docker volume"
 alias dpa="docker ps -a"
@@ -137,15 +139,15 @@ alias vup="vagrant up && vagrant provision"
 # nohup → prevents the xdg-open process from being tied to your shell session.
 # & disown → sends it to the background and removes it from your job list so it won’t print anything when it finishes.
 alias maza='docker run -d --rm --name mazanoke -p 3474:80 ghcr.io/civilblur/mazanoke:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3474 >/dev/null 2>&1 & disown'
-alias omni='docker run -d --rm --name omni-tools -p 8080:80 iib0011/omni-tools:latest'
-
+alias omni='docker run -d --rm --name omni-tools -p 3475:80 iib0011/omni-tools:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3475 >/dev/null 2>&1 & disown'
+alias it='docker run -d --rm --name it-tools -p 3476:80 corentinth/it-tools:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3476 >/dev/null 2>&1 & disown'
 
 # System Clock in Terminal
 alias fclock='TZ="Europe/Paris" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
 alias vclock='TZ="Asia/Ho_Chi_Minh" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
 
 # Virtualenv
-alias sy="source ~/Virtualenv/python-env/bin/activate"
+alias sy="source ~/.virtualenv/bin/activate"
 
 # Clipboard Shortcuts
 # TODO use xclipboard ?

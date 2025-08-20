@@ -109,11 +109,14 @@ alias zz="fasd_cd -d -i" # cd with interactive selection
 alias v="f -e vim"       # Open files with vim
 
 # =============================================================================
-# NordVPN Commands
+# SEB VPN & NordVPN
 # =============================================================================
+alias vpn='sudo /usr/sbin/openvpn --cd /home/bgi/.secrets/vpn-seb --config /home/bgi/.secrets/vpn-seb/openvpn_client.ovpn'
+
 alias npf="nordvpn connect France"
 alias npt="nordvpn connect Thailand"
 alias npd="nordvpn disconnect"
+
 
 # =============================================================================
 # Vagrant
@@ -159,7 +162,6 @@ alias gpi="gping 10.33.0.42"
 alias gpp="gping 10.33.0.47"
 
 alias glow='glow -p'
-
 
 
 

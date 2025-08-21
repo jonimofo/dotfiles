@@ -5,5 +5,12 @@
 # 	Install first xbindkeys xsel xdotool
 # 	Run xbindkeys on startup
 
+
+# When middle mouse button (b:2) is released:
+# 1. Clear PRIMARY selection (so paste buffer is empty)
+# 2. Kill xbindkeys to avoid recursion
+# 3. Simulate a middle click (so apps still get the event)
+# 4. Restart xbindkeys for the next trigger
+
 "echo -n | xsel -n -i; pkill xbindkeys; xdotool click 2; xbindkeys"
 b:2 + Release

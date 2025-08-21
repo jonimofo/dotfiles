@@ -83,4 +83,5 @@
   "[dotenv]": {
     "editor.defaultFormatter": "foxundermoon.shell-format"
   },
+  "redhat.telemetry.enabled": false,
 }

@@ -90,6 +90,7 @@ if ! shopt -oq posix; then
     fi
 fi
 
+
 # =============================================================================
 # Sourcing External Files
 # =============================================================================
@@ -98,3 +99,4 @@ fi
 [ -f ~/.git-completion.bash ] && source ~/.git-completion.bash || echo "Warning: ~/.git-completion.bash does not exist"
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash || echo "Warning: ~/.fzf.bash does not exist"
 [ -f ~/.secrets/xfreerdp.sh ] && source ~/.secrets/xfreerdp.sh || echo "Warning: ~/.secrets/xfreerdp.sh does not exist"
+

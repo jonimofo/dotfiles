@@ -26,6 +26,7 @@ urls[g]="https://www.google.com/search?q="
 urls[d]="https://dictionary.cambridge.org/dictionary/english/"
 urls[y]="https://www.youtube.com/results?search_query="
 urls[m]="https://www.google.com/maps/search/?api=1&query="
+urls[i]="https://www.google.com/search?tbm=isch&q="
 
 # -- SCRIPT LOGIC --
 # 1. Ask the user for their search query using a single Rofi prompt.

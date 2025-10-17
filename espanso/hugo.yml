@@ -1,16 +1,16 @@
 matches:
-  - trigger: ":himg"
+  - trigger: ":imm"
     replace: |
-      {{< 
-        image src="images/post/asie/asie-sud-est/01-vietnam/01-dalat/dalat_maison_papa.webp"
-        caption=""
-        alt="" 
-        resize=""
-        position="center"
-        zoomable="false"
-        command="fill" option="q100" class="img-fluid" title=""
-        webp="true">}}
+      {{< image src="" >}}
 
+  - trigger: ":str"
+    replace: |
+      <strong>$|$</strong>
+
+  - trigger: ":sli"
+    replace: |
+      {{< slink href="post/asie/asie-sud-est/vietnam/01-dalat/index.md" >}}Aventure{{< /slink >}}
+  
 
   - trigger: ":hgal"
     replace: |

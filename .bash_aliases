@@ -73,6 +73,7 @@ alias dcf="docker compose logs -f"
 
 # Docker + LazyDocker
 alias dld="docker compose up -d && lazydocker"
+alias dbaf="docker compose -f docker-compose.dev.yml up -d && lazydocker"
 
 # =============================================================================
 # Git Shortcuts

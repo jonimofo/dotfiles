@@ -256,8 +256,3 @@ download_video() {
 
 alias dlgg='yt-dlp -f "bestvideo+bestaudio"'
 
-# =============================================================================
-# Hugo Development Server
-# =============================================================================
-alias h='hugo server --bind="192.168.1.18" --baseURL="http://192.168.1.18:1313/mon-periple/" --appendPort=false --disableFastRender'
-

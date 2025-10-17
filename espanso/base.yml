@@ -1,6 +1,7 @@
 imports:
   - "./sap.yml"
   - "./laravel.yml"
+  - "./hugo.yml"
 
 # Matches are substitution rules: when you type the "trigger" string
 # it gets replaced by the "replace" string.

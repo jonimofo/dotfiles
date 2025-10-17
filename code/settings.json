@@ -9,12 +9,12 @@
   /* ----------------------------------------------------------------
     FORMATTER
   ---------------------------------------------------------------- */
-  "[html]": {
-    "editor.defaultFormatter": "vscode.html-language-features"
-  },
-  "[css]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
+  // "[html]": {
+  //   "editor.defaultFormatter": "vscode.html-language-features"
+  // },
+  // "[css]": {
+  //   "editor.defaultFormatter": "esbenp.prettier-vscode"
+  // },
   "[jsonc]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
@@ -29,7 +29,6 @@
   },
 
   "editor.formatOnPaste": true,
-  "editor.formatOnSave": true,
 
   // PRETTIER CONF
   "prettier.semi": false,
@@ -84,4 +83,7 @@
     "editor.defaultFormatter": "foxundermoon.shell-format"
   },
   "redhat.telemetry.enabled": false,
+  "[html]": {
+    "editor.defaultFormatter": "vscode.html-language-features"
+  },
 }

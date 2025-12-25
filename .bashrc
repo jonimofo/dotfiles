@@ -13,15 +13,15 @@ esac
 case "$(hostname -s)" in
     staging)
         # Bright Green prompt for staging
-        PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ '
+        PS1="\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
         ;;
     production)
         # Orange prompt for production
-        PS1='\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ '
+        PS1="\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
         ;;
     pi)
         # Orange prompt for production
-        PS1='\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ '
+        PS1="\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
         ;;
     *)
         # Your custom default prompt for any other host
@@ -102,5 +102,4 @@ fi
 [ -f ~/.bash_functions ] && source ~/.bash_functions || echo "Warning: ~/.bash_functions does not exist"
 [ -f ~/.git-completion.bash ] && source ~/.git-completion.bash || echo "Warning: ~/.git-completion.bash does not exist"
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash || echo "Warning: ~/.fzf.bash does not exist"
-[ -f ~/.secrets/xfreerdp.sh ] && source ~/.secrets/xfreerdp.sh || echo "Warning: ~/.secrets/xfreerdp.sh does not exist"
 

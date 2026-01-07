@@ -22,5 +22,5 @@ Host baf-staging
 Host pi
     HostName 192.168.1.200
     User bgi
-    IdentityFile ~/.ssh/astrolab/id_astrolab_pis
+    IdentityFile ~/.ssh/astrolab/id_astrolab_pi
     ForwardAgent yes

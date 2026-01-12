@@ -27,7 +27,8 @@
 [profiles]
   [[default]]
     background_color = "#090300"
-    font = Hack 14
+    font = Hack Nerd Font Mono 14
+    # font = Hack 14
     foreground_color = "#ffffff"
     show_titlebar = False
     scrollbar_position = hidden

@@ -112,8 +112,15 @@ fi
 # Right (left to right): lan_ip (purple), hostname (dark teal), pwd (cyan)
 if [ -z "$TMUX_POWERLINE_RIGHT_STATUS_SEGMENTS" ]; then
 	TMUX_POWERLINE_RIGHT_STATUS_SEGMENTS=(
-		"lan_ip 129 255"
-		"hostname 30 255"
-		"pwd 44 0"
+	  "lan_ip 232 255"       # orange (darker than 214)
+	  "hostname 208 0"   # near-black background, white text
+	  "pwd 220 0"         # muted cyan/blue (readable, not neon)
 	)
 fi
+
+
+# Print all colors
+# for i in {0..255}; do
+#   printf '\e[48;5;%sm %3d \e[0m' "$i" "$i"
+#   (( (i + 1) % 16 == 0 )) && printf '\n' || printf ' '
+# done

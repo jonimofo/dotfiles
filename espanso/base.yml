@@ -6,6 +6,10 @@ imports:
 # Matches are substitution rules: when you type the "trigger" string
 # it gets replaced by the "replace" string.
 matches:
+  # Typography
+  - trigger: ":oeu"
+    replace: "œ"
+
   # Formel
   - trigger: ":cdt"
     replace: "Cordialement"

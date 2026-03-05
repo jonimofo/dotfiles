@@ -23,6 +23,10 @@ case "$(hostname -s)" in
         # Orange prompt for production
         PS1="\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
         ;;
+    astrohub-server)
+        # Orange prompt for production
+        PS1="\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
+        ;;
     *)
         # Your custom default prompt for any other host
         PS1="[\[\e[1;33m\]\u\[\e[m\] \[\e[1;32m\]\h\[\e[m\] \[\e[1;36m\]\W\[\e[m\]]\$(parse_git_branch) $ "
@@ -75,15 +79,6 @@ export GROFF_NO_SGR=1                  # Fix formatting in Konsole/Gnome-Termina
 
 
 # =============================================================================
-# fasd
-# =============================================================================
-# Enable `fasd` for quick file access if installed
-if command -v fasd >/dev/null 2>&1; then
-    eval "$(fasd --init auto)"
-fi
-
-
-# =============================================================================
 # Enable Bash Completion
 # =============================================================================
 if ! shopt -oq posix; then
@@ -95,6 +90,25 @@ if ! shopt -oq posix; then
 fi
 
 
+
+# =============================================================================
+# fasd
+# =============================================================================
+# Enable `fasd` for quick file access if installed
+if command -v fasd >/dev/null 2>&1; then
+    eval "$(fasd --init auto)"
+fi
+
+
+# =============================================================================
+# Bun
+# =============================================================================
+if [ -d "$HOME/.bun" ]; then
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+fi
+
+
 # =============================================================================
 # Sourcing External Files
 # =============================================================================
@@ -102,4 +116,3 @@ fi
 [ -f ~/.bash_functions ] && source ~/.bash_functions || echo "Warning: ~/.bash_functions does not exist"
 [ -f ~/.git-completion.bash ] && source ~/.git-completion.bash || echo "Warning: ~/.git-completion.bash does not exist"
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash || echo "Warning: ~/.fzf.bash does not exist"
-

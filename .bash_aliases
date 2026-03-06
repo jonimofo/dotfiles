@@ -25,6 +25,7 @@ alias o="xdg-open ."
 alias c="code ."
 alias diff="colordiff"
 alias vim="nvim"
+alias ta="tmux attach"
 
 # =============================================================================
 # Configuration & Dotfiles Editing

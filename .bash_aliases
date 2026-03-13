@@ -43,6 +43,7 @@ alias resnet="sudo systemctl restart NetworkManager && sudo systemctl status Net
 # SSH & Permissions
 # =============================================================================
 alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
+alias saa="ssh-add -t 8h ~/.ssh/astrolab/id_astrohub_server"
 
 
 # =============================================================================
@@ -91,6 +92,7 @@ alias glogg="git log --graph --pretty='%Cred%h%Creset -%C(auto)%d%Creset %s %Cgr
 alias glg="git log --oneline --decorate --graph"
 alias glgg="git log --oneline --decorate --graph --all"
 alias gcm="git commit -m"
+alias gpuu="git push -u origin main && git push -u gitlab main"
 
 # TODO
 # source : https://stackoverflow.com/questions/15661853/list-all-local-branches-without-a-remote

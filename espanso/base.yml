@@ -69,3 +69,12 @@ matches:
         params:
           format: "%d/%m/%Y"
 
+  # Code
+  - trigger: ":str"
+    replace: |
+      <strong>$|$</strong>
+
+  - trigger: ":div"
+    replace: |
+      <div>$|$</div>
+

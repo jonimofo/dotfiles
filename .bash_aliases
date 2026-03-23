@@ -12,8 +12,11 @@ alias des="cd ~/Desktop"
 # =============================================================================
 # File & Terminal Management
 # =============================================================================
-alias rm="trash-put -i"
-# alias rm="rm -i"
+if command -v trash-put &>/dev/null; then
+    alias rm="trash-put -i"
+else
+    alias rm="rm -i"
+fi
 alias ls="eza"
 alias ll="eza -l"
 alias l="eza -la"

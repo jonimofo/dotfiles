@@ -199,3 +199,5 @@ alias h='hugo server --bind="192.168.1.46" --baseURL="http://192.168.1.46:1313/m
 #   Run 'blue' in the terminal to restart the Bluetooth driver.
 # =============================================================================
 alias blue="sudo modprobe -r btusb && sudo modprobe btusb"
+
+alias bkp="rsync -avh --progress bgi@astrohub-server:/opt/astrohub-backups/ /home/bgi/kDrive/backups/astrohub-backups"

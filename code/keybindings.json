@@ -147,12 +147,26 @@
 
 
   {
-  "key": "ctrl+numadd",
+  "key": "ctrl+shift+=",
   "command": "editor.action.fontZoomIn"
 },
 {
-  "key": "ctrl+numsub",
+  "key": "ctrl+shift+6",
   "command": "editor.action.fontZoomOut"
+},
+{
+  "key": "ctrl+shift+=",
+  "command": "-workbench.action.zoomIn"
+},
+{
+  "key": "ctrl+shift+6",
+  "command": "-workbench.action.navigateForward",
+  "when": "canNavigateForward"
+},
+{
+  "key": "ctrl+shift+6",
+  "command": "-workbench.action.terminal.sendSequence",
+  "when": "terminalFocus"
 }
 
 ]

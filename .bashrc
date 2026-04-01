@@ -11,11 +11,11 @@ esac
 # =============================================================================
 # Set the prompt based on the hostname
 case "$(hostname -s)" in
-    staging)
+    baf-staging)
         # Bright Green prompt for staging
         PS1="\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
         ;;
-    production)
+    baf-production)
         # Orange prompt for production
         PS1="\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
         ;;

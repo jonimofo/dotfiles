@@ -18,7 +18,7 @@ else
     alias rm="rm -i"
 fi
 alias ls="eza"
-alias ll="eza -l"
+alias ll="eza -lA"
 alias l="eza -la"
 alias lt="eza -lT"
 alias cat="batcat -p"

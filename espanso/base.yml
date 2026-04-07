@@ -78,3 +78,9 @@ matches:
     replace: |
       <div>$|$</div>
 
+  - trigger: ":rdoc"
+    replace: "ultrathink Read the project documentation in documentation-claude then read audit files in prompts/ dir then run them on the latest changes (everything that has not been audited yet). All tests must run without errors, including lints and syntax tests (if any). Make sure to write the results of report in appropriate file"
+
+  - trigger: ":ask"
+    replace: "Ask me questions to confirm your understanding"
+

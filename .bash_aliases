@@ -45,8 +45,8 @@ alias resnet="sudo systemctl restart NetworkManager && sudo systemctl status Net
 # =============================================================================
 # SSH & Permissions
 # =============================================================================
-alias sa="ssh-add -t 8h ~/.ssh/id_rsa"
-alias saa="ssh-add -t 8h ~/.ssh/astrolab/id_astrohub_server"
+alias sa="ssh-add ~/.ssh/id_rsa"
+alias saa="ssh-add ~/.ssh/astrolab/id_astrohub_server"
 
 
 # =============================================================================
@@ -161,14 +161,20 @@ alias sy="source ~/.virtualenv/bin/activate"
 
 # Clipboard Shortcuts
 # TODO use xclipboard ?
-alias xcopy="xclip -sel clip"
-alias xpaste="xclip -out -sel clip"
-alias cb="snap run clipboard"
-
-alias gpi="gping 10.33.0.42"
-alias gpp="gping 10.33.0.47"
+# alias xcopy="xclip -sel clip"
+# alias xpaste="xclip -out -sel clip"
+# alias cb="snap run clipboard"
 
 alias glow='glow -p'
+
+
+# =============================================================================
+# AstroHub-Backup
+# =============================================================================
+alias astrobkp-local-restart='systemctl --user restart astrohub-pull-backup.service'
+alias astrobkp-local-status='systemctl --user status astrohub-pull-backup.service'
+alias astrobkp-local-logs='journalctl --user -u astrohub-pull-backup.service --since "1 week ago" -e'
+
 
 
 # =============================================================================

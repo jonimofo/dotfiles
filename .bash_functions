@@ -208,54 +208,6 @@ retry_command() {
 }
 
 
-# =============================================================================
-# yt-dlp
-# =============================================================================
-download_video() {
-    # Default destination directory
-    local dest_dir="$HOME/Videos/Youtube"
-
-    # Check if yt-dlp is installed
-    if ! command -v yt-dlp &>/dev/null; then
-        echo "Error: yt-dlp is not installed. Please install it first." >&2
-        return 1
-    fi
-
-    # Validate input arguments
-    if [[ $# -lt 1 ]]; then
-        echo "Usage: download_video <url> [destination_directory]"
-        echo "Example: download_video 'https://www.youtube.com/watch?v=example' '~/Downloads'"
-        return 1
-    fi
-
-    # Extract parameters
-    local url="$1"
-    if [[ $# -ge 2 ]]; then
-        dest_dir="$2"
-    fi
-
-    # Ensure the destination directory exists
-    mkdir -p "$dest_dir"
-
-    # Run yt-dlp with the specified options:
-    yt-dlp \
-        -f bestvideo*+bestaudio/best \        # Selects the best available video + best audio combination, or the best overall format
-        -R "infinite" \                       # Retries infinitely on network failures
-        --ignore-errors \                     # Continues downloading other videos even if an error occurs
-        --restrict-filenames \                # Ensures filenames use only ASCII characters (avoids special characters)
-        -P "$dest_dir" \                      # Sets the download directory to the specified destination
-        -o "%(channel)s-%(title)s.%(ext)s" \  # Formats filenames as "<channel>-<video_title>.<extension>"
-        "$url"                                # The URL of the video to download
-
-}
-
-# Example usage:
-# download_video "https://www.youtube.com/watch?v=example"
-# download_video "https://www.youtube.com/watch?v=example" "~/Downloads"
-
-
-alias dlgg='yt-dlp -f "bestvideo+bestaudio"'
-
 
 # =============================================================================
 # Tailscale

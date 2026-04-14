@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # =============================================================================
 # Ensure this file is only loaded in interactive shells
 # =============================================================================
@@ -50,7 +52,6 @@ unset color_prompt force_color_prompt
 # History Settings
 # =============================================================================
 export HISTCONTROL=ignoredups   # Ignore duplicate consecutive commands
-export HISTIGNORE="&:ls:ll:lt *:history:pwd:man *:fg:bg:jobs *"  # Ignore certain commands
 export HISTSIZE=1000            # Max commands to keep in history
 export HISTFILESIZE=2000        # Max commands in history file
 shopt -s histappend             # Append history instead of overwriting
@@ -62,10 +63,6 @@ shopt -s checkwinsize           # Adjust terminal size dynamically
 # =============================================================================
 # colored ls output
 export LS_OPTIONS="--color=auto"
-alias ls='ls $LS_OPTIONS'
-alias ll='ls -lah --color=auto'
-alias la='ls -A --color=auto'
-alias l='ls -CF --color=auto'
 
 # Improve `less` behavior for colored output in `man`
 export LESS_TERMCAP_mb=$'\E[1;31m'     # begin bold
@@ -112,7 +109,26 @@ fi
 # =============================================================================
 # Sourcing External Files
 # =============================================================================
-[ -f ~/.bash_aliases ] && source ~/.bash_aliases || echo "Warning: ~/.bash_aliases does not exist"
-[ -f ~/.bash_functions ] && source ~/.bash_functions || echo "Warning: ~/.bash_functions does not exist"
-[ -f ~/.git-completion.bash ] && source ~/.git-completion.bash || echo "Warning: ~/.git-completion.bash does not exist"
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash || echo "Warning: ~/.fzf.bash does not exist"
+if [ -f ~/.bash_aliases ]; then
+    source ~/.bash_aliases
+else
+    echo "Warning: ~/.bash_aliases does not exist"
+fi
+
+if [ -f ~/.bash_functions ]; then
+    source ~/.bash_functions
+else
+    echo "Warning: ~/.bash_functions does not exist"
+fi
+
+if [ -f ~/.git-completion.bash ]; then
+    source ~/.git-completion.bash
+else
+    echo "Warning: ~/.git-completion.bash does not exist"
+fi
+
+if [ -f ~/.fzf.bash ]; then
+    source ~/.fzf.bash
+else
+    echo "Warning: ~/.fzf.bash does not exist"
+fi

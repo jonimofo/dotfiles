@@ -28,7 +28,7 @@
 	name = bgi
 	email = bgi@qdv.fr
 [init]
-	defaultBranch = master
+	defaultBranch = main
 [fetch]
 	prune = true
 [core]

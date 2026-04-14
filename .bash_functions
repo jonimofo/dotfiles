@@ -256,3 +256,109 @@ download_video() {
 
 alias dlgg='yt-dlp -f "bestvideo+bestaudio"'
 
+
+# =============================================================================
+# Tailscale
+# =============================================================================
+# ts-up       — bring tailscale up    (adds MagicDNS via resolvconf)
+# ts-down     — bring tailscale down  (reverts /etc/resolv.conf to WiFi DNS)
+# ts-status   — tailscale status + current /etc/resolv.conf
+# ts-cmd      — passthrough to the real tailscale binary (e.g. ts-cmd ping xps)
+# ts-help     — cheatsheet + DNS resolution flow
+
+ts-up()   { sudo tailscale up   && echo "tailscale: up"; }
+ts-down() { sudo tailscale down && echo "tailscale: down"; }
+
+ts-status() {
+    tailscale status
+    echo
+    echo "── /etc/resolv.conf ──"
+    cat /etc/resolv.conf
+    echo
+    echo "── resolvconf database ──"
+    sudo resolvconf -l 2>/dev/null | grep -E '^(# resolv|nameserver|search)' \
+        | head -30
+}
+
+ts-cmd() { command tailscale "$@"; }
+
+ts-help() {
+    cat <<'EOF'
+    ┌──────────────────────────────┬───────────────────────────────────────┐
+    │ ========================= TAILSCALE ================================ │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Bring tailscale up           │ ts-up                                 │
+    │ Bring tailscale down         │ ts-down                               │
+    │ Show status + DNS            │ ts-status                             │
+    │ Raw tailscale CLI            │ ts-cmd <args>  (e.g. ts-cmd ping xps) │
+    │ Show this cheatsheet         │ ts-help                               │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ==================== DNS RESOLUTION FLOW =========================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ App (ping, curl, ssh, ...)                                           │
+    │     │                                                                │
+    │     ▼                                                                │
+    │ glibc getaddrinfo → /etc/nsswitch.conf                               │
+    │     │                                                                │
+    │     ├─ files         → /etc/hosts                                    │
+    │     ├─ mdns4_minimal → Avahi (answers *.local ONLY)                  │
+    │     └─ dns           → /etc/resolv.conf                              │
+    │                           │                                          │
+    │                           ▼                                          │
+    │                      openresolv merged file                          │
+    │                      (written by /sbin/resolvconf)                   │
+    │                                                                      │
+    │ Two writers hand their nameservers to /sbin/resolvconf:              │
+    │   • NetworkManager (dns=rc)  → WiFi upstream DNS                     │
+    │       192.168.1.200, 1.1.1.1, 8.8.8.8, 123.23.23.23, …              │
+    │   • tailscaled (when up)     → MagicDNS at 100.100.100.100           │
+    │                                + search tail68f715.ts.net            │
+    │                                (forwards non-tailnet queries         │
+    │                                 upstream automatically)              │
+    │                                                                      │
+    │ ts-up    → tailscaled adds its entry → /etc/resolv.conf regenerated  │
+    │            with MagicDNS (NM entries kept as fallback).              │
+    │ ts-down  → tailscaled removes its entry → /etc/resolv.conf           │
+    │            regenerated with only NM entries. Regular DNS keeps       │
+    │            working. MagicDNS names stop resolving (expected).        │
+    │                                                                      │
+    │ Note: systemd-resolved is NOT used on this host — its D-Bus          │
+    │ resolve1 activation path is broken and crashes the machine.          │
+    │ Use file-based DNS inspection (cat /etc/resolv.conf, resolvconf -l). │
+    ├──────────────────────────────────────────────────────────────────────┤
+    │ ====================== GOTCHAS & QUICK DEBUG ======================= │
+    ├──────────────────────────────────────────────────────────────────────┤
+    │ 1. Short tailnet names may lose to mDNS                              │
+    │    /etc/nsswitch.conf has:                                           │
+    │      hosts: files myhostname mdns4_minimal [NOTFOUND=return] … dns   │
+    │    If another LAN device advertises e.g. `xps.local` via Avahi,      │
+    │    `getent hosts xps` hits mDNS FIRST and returns its link-local     │
+    │    address — never reaching MagicDNS. Workaround: use the FQDN       │
+    │    `xps.tail68f715.ts.net`, or the tailnet IP, or edit nsswitch      │
+    │    to put `dns` before `mdns4_minimal`.                              │
+    │                                                                      │
+    │ 2. Why google.com still works when resolv.conf only lists            │
+    │    100.100.100.100:  MagicDNS is a recursive forwarder. Queries for  │
+    │    names outside tail68f715.ts.net are relayed to your WiFi upstream │
+    │    (1.1.1.1, 8.8.8.8, …) by tailscaled automatically. So even with   │
+    │    a MagicDNS-only resolv.conf, external DNS keeps working.          │
+    │                                                                      │
+    │ 3. Where the WiFi DNS list actually comes from                       │
+    │    • Manual (persistent): nmcli con show "<SSID>" | grep ipv4.dns    │
+    │      Edit with: nmcli con mod "<SSID>" ipv4.dns "1.1.1.1,8.8.8.8"    │
+    │                nmcli dev reapply <iface>                             │
+    │    • DHCP-provided: the router hands these out; visible in           │
+    │      `resolvconf -l` under the NM block but NOT in `ipv4.dns`.       │
+    │      To drop them: nmcli con mod "<SSID>" ipv4.ignore-auto-dns yes   │
+    │    • Merged result: /etc/resolv.conf (written by openresolv)         │
+    │                                                                      │
+    │ Quick debug commands (all file-based, no resolvectl):                │
+    │    cat /etc/resolv.conf              # what glibc actually uses      │
+    │    sudo resolvconf -l                # per-writer raw database       │
+    │    nmcli con show "<SSID>" | grep ipv4.dns   # NM's manual list      │
+    │    getent hosts <name>               # end-to-end resolution test    │
+    │    tailscale status                  # health warnings at the bottom │
+    └──────────────────────────────────────────────────────────────────────┘
+EOF
+}
+

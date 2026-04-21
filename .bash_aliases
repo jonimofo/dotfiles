@@ -70,7 +70,7 @@ if command -v tmux &>/dev/null; then
 fi
 
 # tmux
-if command -ag &>/dev/null; then
+if command -v ag &>/dev/null; then
     alias agg='ag --pager="less -R"'
 fi
 

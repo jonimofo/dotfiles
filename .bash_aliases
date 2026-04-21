@@ -13,13 +13,20 @@ alias des="cd ~/Desktop"
 # =============================================================================
 # File & Terminal Management
 # =============================================================================
+# open GUI file directory
+alias o="xdg-open ."
+if command -v code &>/dev/null; then
+    alias c="code ."
+fi
+
 # trash-put
 if command -v trash-put &>/dev/null; then
     alias rm="trash-put -i"
 else
     alias rm="rm -i"
 fi
-# eza
+
+# eza
 if command -v eza &>/dev/null; then
     alias ls="eza"
     alias ll="eza -lA"
@@ -31,28 +38,77 @@ else
     alias l="ls -la --color=auto"
     alias lt="ls -lAR --color=auto"
 fi
+
 # batcat
 if command -v batcat &>/dev/null; then
     alias cat="batcat -p"
 fi
+
+# glow
 if command -v glow &>/dev/null; then
     alias glow='glow -p'
 fi
+
+# fdfind
 if command -v fdfind &>/dev/null; then
     alias fd="fdfind"
 fi
-alias o="xdg-open ."
-if command -v code &>/dev/null; then
-    alias c="code ."
-fi
+
+# colordiff
 if command -v colordiff &>/dev/null; then
     alias diff="colordiff"
 fi
+
+# nvim
 if command -v nvim &>/dev/null; then
     alias vim="nvim"
 fi
+
+# tmux
 if command -v tmux &>/dev/null; then
     alias ta="tmux attach"
+fi
+
+# tmux
+if command -ag &>/dev/null; then
+    alias agg='ag --pager="less -R"'
+fi
+
+# Fasd
+if command -v fasd &>/dev/null; then
+    alias d="fasd -d"        # Directory
+    alias f="fasd -f"        # File
+    alias zz="fasd_cd -d -i" # cd with interactive selection
+fi
+
+# Vagrant
+if command -v vagrant &>/dev/null; then
+    alias vu="vagrant up"
+    alias vs="vagrant ssh"
+    alias vus="vagrant up && vagrant ssh"
+    alias vr="vagrant run"
+    alias vh="vagrant halt"
+    alias vp="vprovision"
+    alias vss="vagrant status"
+    alias vgs="vagrant global-status"
+    alias vdf="vagrant destroy -f"
+    alias vre="vagrant reload"
+    alias wss="watch vagrant status"
+    alias vd="vagrant destroy"
+    alias vup="vagrant up && vagrant provision"
+fi
+
+# NordVPN
+if command -v nordvpn &>/dev/null; then
+    alias npf="nordvpn connect France"
+    alias npt="nordvpn connect Thailand"
+    alias npd="nordvpn disconnect"
+fi
+
+# System Clock in Terminal
+if command -v tty-clock &>/dev/null; then
+    alias fclock='TZ="Europe/Paris" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
+    alias vclock='TZ="Asia/Ho_Chi_Minh" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
 fi
 
 
@@ -117,56 +173,6 @@ alias gpuu="git push -u origin main && git push -u gitlab main"
 
 
 # =============================================================================
-# Fasd (Quick Navigation)
-# =============================================================================
-if command -v fasd &>/dev/null; then
-    alias d="fasd -d"        # Directory
-    alias f="fasd -f"        # File
-    alias zz="fasd_cd -d -i" # cd with interactive selection
-fi
-
-
-# =============================================================================
-# Vagrant
-# =============================================================================
-if command -v vagrant &>/dev/null; then
-    alias vu="vagrant up"
-    alias vs="vagrant ssh"
-    alias vus="vagrant up && vagrant ssh"
-    alias vr="vagrant run"
-    alias vh="vagrant halt"
-    alias vp="vprovision"
-    alias vss="vagrant status"
-    alias vgs="vagrant global-status"
-    alias vdf="vagrant destroy -f"
-    alias vre="vagrant reload"
-    alias wss="watch vagrant status"
-    alias vd="vagrant destroy"
-    alias vup="vagrant up && vagrant provision"
-fi
-
-
-# =============================================================================
-# NordVPN
-# =============================================================================
-if command -v nordvpn &>/dev/null; then
-    alias npf="nordvpn connect France"
-    alias npt="nordvpn connect Thailand"
-    alias npd="nordvpn disconnect"
-fi
-
-
-# =============================================================================
-# Misc
-# =============================================================================
-# System Clock in Terminal
-if command -v tty-clock &>/dev/null; then
-    alias fclock='TZ="Europe/Paris" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
-    alias vclock='TZ="Asia/Ho_Chi_Minh" tty-clock -x -c -C 6 -f "%d/%m/%Y"'
-fi
-
-
-# =============================================================================
 # Host-specific gating
 # =============================================================================
 # Aliases referencing local-only paths/services are gated to this hostname.
@@ -199,6 +205,7 @@ if [[ "$HOSTNAME" == "$LAPTOP_HOSTNAME" ]]; then
     alias maza='docker run -d --rm --name mazanoke -p 3474:80 ghcr.io/civilblur/mazanoke:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3474 >/dev/null 2>&1 & disown'
     alias omni='docker run -d --rm --name omni-tools -p 3475:80 iib0011/omni-tools:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3475 >/dev/null 2>&1 & disown'
     alias it='docker run -d --rm --name it-tools -p 3476:80 corentinth/it-tools:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3476 >/dev/null 2>&1 & disown'
+    alias bento='docker run -d --rm --name bentopdf -p 3477:8080 ghcr.io/alam00000/bentopdf:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3477 >/dev/null 2>&1 & disown'
 
     # Bluetooth USB Driver Restart
     # The 'blue' alias reloads the Bluetooth USB driver to fix connectivity issues.

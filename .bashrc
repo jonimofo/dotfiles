@@ -63,7 +63,8 @@ shopt -s checkwinsize           # Adjust terminal size dynamically
 # =============================================================================
 # colored ls output
 export LS_OPTIONS="--color=auto"
-
+# display raw ANSI color escape sequences
+export LESS='-R'
 # Improve `less` behavior for colored output in `man`
 export LESS_TERMCAP_mb=$'\E[1;31m'     # begin bold
 export LESS_TERMCAP_md=$'\E[1;36m'     # begin blink

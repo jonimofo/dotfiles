@@ -133,3 +133,9 @@ if [ -f ~/.fzf.bash ]; then
 else
     echo "Warning: ~/.fzf.bash does not exist"
 fi
+
+if [ -f ~/.secrets/sops/age/keys.txt ]; then
+    export SOPS_AGE_KEY_FILE=~/.secrets/sops/age/keys.txt
+else
+    echo "Warning: ~/.secrets/sops/age/keys.txt does not exist, impossible to source SOPS_AGE_KEY_FILE"
+fi

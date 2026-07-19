@@ -202,11 +202,11 @@ if [[ "$HOSTNAME" == "$LAPTOP_HOSTNAME" ]]; then
     # >/dev/null 2>&1 → hides all stdout and stderr output from docker run and xdg-open
     # nohup → prevents the xdg-open process from being tied to your shell session.
     # & disown → sends it to the background and removes it from your job list so it won’t print anything when it finishes.
-    alias maza='docker run -d --rm --name mazanoke -p 3474:80 ghcr.io/civilblur/mazanoke:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3474 >/dev/null 2>&1 & disown'
-    alias omni='docker run -d --rm --name omni-tools -p 3475:80 iib0011/omni-tools:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3475 >/dev/null 2>&1 & disown'
-    alias it='docker run -d --rm --name it-tools -p 3476:80 corentinth/it-tools:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3476 >/dev/null 2>&1 & disown'
-    alias bento='docker run -d --rm --name bentopdf -p 3477:8080 ghcr.io/alam00000/bentopdf:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3477 >/dev/null 2>&1 & disown'
-    alias secret-share='docker run --rm --name ots -p 3478:3000 -e STORAGE_TYPE=mem -e SECRET_EXPIRY=300 ghcr.io/luzifer/ots:v1.21.8 >/dev/null 2>&1 && nohup xdg-open http://localhost:3478 >/dev/null 2>&1 & disown'
+    alias maza='docker run -d --rm --name mazanoke -p 127.0.0.1:3474:80 ghcr.io/civilblur/mazanoke:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3474 >/dev/null 2>&1 & disown'
+    alias omni='docker run -d --rm --name omni-tools 127.0.0.1:-p 3475:80 iib0011/omni-tools:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3475 >/dev/null 2>&1 & disown'
+    alias it='docker run -d --rm --name it-tools 127.0.0.1:-p 3476:80 corentinth/it-tools:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3476 >/dev/null 2>&1 & disown'
+    alias bento='docker run -d --rm --name bentopdf -p 127.0.0.1:3477:8080 ghcr.io/alam00000/bentopdf:latest >/dev/null 2>&1 && nohup xdg-open http://localhost:3477 >/dev/null 2>&1 & disown'
+    alias secret-share='docker run --rm --name ots -p 127.0.0.1:3478:3000 -e STORAGE_TYPE=mem -e SECRET_EXPIRY=300 ghcr.io/luzifer/ots:v1.21.8 >/dev/null 2>&1 && nohup xdg-open http://localhost:3478 >/dev/null 2>&1 & disown'
 
     # Bluetooth USB Driver Restart
     # The 'blue' alias reloads the Bluetooth USB driver to fix connectivity issues.

@@ -129,7 +129,6 @@ if command -v docker &>/dev/null; then
     alias ds="docker stop"
     alias dr="docker run"
     alias drf="docker rm -f"
-    alias dp="docker ps"
     alias dv="docker volume"
     alias dpa="docker ps -a"
     alias dei="docker exec -it"
@@ -138,7 +137,8 @@ if command -v docker &>/dev/null; then
 
     # Docker-Compose Commands
     alias dc="docker compose"
-    alias dpp='docker ps --format "table {{.Names}}\t{{.ID}}\t{{.Status}}\t{{.Ports}}"'
+    alias dpp="watch 'docker ps --format \"table {{.Names}}\t{{.ID}}\t{{.Status}}\t{{.Ports}}\"'"
+    # alias dp="watch 'docker ps --format \"table {{.Names}}\t{{.Status}}\t{{.Ports}}\"'"
     alias dcp="docker compose ps"
     alias dcu="docker compose up -d"
     alias dcd="docker compose down"

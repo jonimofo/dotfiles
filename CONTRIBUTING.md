@@ -88,7 +88,8 @@ Servers only get the files listed in [`server-files.txt`](server-files.txt), thr
 `server` branch, so pictures, notes and laptop configs never reach them.
 
 - `server` is **rebuilt automatically** by [`.github/workflows/server-branch.yml`](.github/workflows/server-branch.yml)
-  on every push to `main` (or manually: `gh workflow run server-branch`).
+  on every push to `main` (or manually: `gh workflow run server-branch`, from `main` only:
+  a run on any other ref is skipped).
 - It is a single orphan commit: no history from `main`, so a shallow single-branch clone
   downloads nothing else. **Never commit or push to `server`** (the `pre-push` hook blocks it).
 - To ship a new file to servers: add it to `server-files.txt` **and** to the symlink list

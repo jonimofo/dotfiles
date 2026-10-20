@@ -157,56 +157,6 @@ get_public_ip_info() {
 }
 
 
-# =============================================================================
-# Function to retry a given command until it succeeds or max retries are reached
-# =============================================================================
-retry_command() {
-    local command=""
-    local max_retries=0  # Default: infinite retries
-    local delay=5        # Delay between retries (seconds)
-    local count=0
-
-    # Usage message
-    usage() {
-        echo "Usage: retry_command -c <command> [-r <max_retries>]"
-        echo "  -c <command>     Command to execute (required)"
-        echo "  -r <max_retries> Maximum number of retries (default: infinite)"
-        echo "Example: retry_command -c 'xfreerdp /v:server /u:user' -r 5"
-    }
-
-    # Parse options
-    while getopts ":c:r:" opt; do
-        case "$opt" in
-            c) command="$OPTARG" ;;
-            r) max_retries="$OPTARG" ;;
-            :) echo "Error: Option -$OPTARG requires an argument." >&2; usage; return 1 ;;
-            \?) echo "Error: Invalid option -$OPTARG" >&2; usage; return 1 ;;
-        esac
-    done
-
-    # Validate command argument
-    if [[ -z "$command" ]]; then
-        echo "Error: Command (-c) is required." >&2
-        usage
-        return 1
-    fi
-
-    # Retry loop
-    while true; do
-        bash -i -c "$command" && return 0  # Run in an interactive shell to expand aliases
-
-        ((count++))
-        echo "Command '$command' failed, retrying in $delay seconds... (Attempt $count/${max_retries:-∞})"
-
-        if [[ "$max_retries" -gt 0 && "$count" -ge "$max_retries" ]]; then
-            echo "Max retries ($max_retries) reached. Exiting."
-            return 1
-        fi
-
-        sleep "$delay"
-    done
-}
-
 
 
 # =============================================================================
@@ -312,5 +262,21 @@ ts-help() {
     │    tailscale status                  # health warnings at the bottom │
     └──────────────────────────────────────────────────────────────────────┘
 EOF
+}
+
+
+
+# =============================================================================
+# Docker
+# =============================================================================
+dp() {
+    local name="${1:-}"
+    local format='table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+
+    if [[ -z "${name//[[:space:]]/}" ]]; then
+        watch -x docker ps --format "$format"
+    else
+        watch -x docker ps --filter "name=$name" --format "$format"
+    fi
 }
 

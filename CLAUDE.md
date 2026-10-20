@@ -46,9 +46,12 @@ Text expansion configs in `espanso/` are organized by context: `base.yml` (gener
 
 ## Git Commits
 
-- Follow Angular commit convention: `type(scope): description`
-- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
-- Never include "Co-Authored-By" lines or any mention of Claude/AI in commits
+Follow `CONTRIBUTING.md` (branch model, PRs, merge strategy, hooks). In short:
+
+- Never commit or push directly on `main`/`develop`: branch `<type>/<topic>` from `develop`, PR to `develop` (squash), then `develop → main` (merge commit) and `git push gitlab main`
+- Follow Angular commit convention: `type(scope): description`, subject under 72 characters, imperative mood
+- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+- Never include "Co-Authored-By" lines or any mention of Claude/AI in commits or PRs
 
 ## Deployment Notes
 

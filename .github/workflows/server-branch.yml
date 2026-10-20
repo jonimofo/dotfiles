@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   build:
+    # A manual run from another branch would publish unpromoted changes
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

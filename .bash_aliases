@@ -74,13 +74,6 @@ if command -v ag &>/dev/null; then
     alias agg='ag --pager="less -R"'
 fi
 
-# Fasd
-if command -v fasd &>/dev/null; then
-    alias d="fasd -d"        # Directory
-    alias f="fasd -f"        # File
-    alias zz="fasd_cd -d -i" # cd with interactive selection
-fi
-
 # Vagrant
 if command -v vagrant &>/dev/null; then
     alias vu="vagrant up"

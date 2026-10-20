@@ -1,0 +1,282 @@
+# =============================================================================
+# Help / Utils
+# =============================================================================
+# tmux cheatsheet
+th() {
+    cat <<EOF
+    ┌──────────────────────────────┬───────────────────────────────────────┐
+    │ ======================== SESSIONS ================================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Start tmux                   │ tmux                                  │
+    │ Start named session          │ tmux new -s <name>                    │
+    │ List sessions                │ tmux ls                               │
+    │ Attach to session            │ tmux attach -t <name>                 │
+    │ Reattach last session        │ tmux attach-session                   │
+    │ Detach from session          │ prefix + d                            │
+    │ Save session (resurrect)     │ prefix + Ctrl + s                     │
+    │ Restore session (resurrect)  │ prefix + Ctrl + r                     │
+    │ Kill a session               │ tmux kill-session -t <name>           │
+    │ Kill all sessions            │ tmux kill-server                      │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ========================== WINDOWS ================================= │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Create new window            │ prefix + c                            │
+    │ Rename window                │ prefix + ,                            │
+    │ Switch to next window        │ prefix + p / Ctrl + p                 │
+    │ Switch to previous window    │ prefix + o / Ctrl + o                 │
+    │ Close current window         │ exit or Ctrl + d                      │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ======================= COPY & PASTE =============================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Enter copy mode              │ prefix + m                            │
+    │ Start selection              │ v                                     │
+    │ Copy selection               │ y or Enter                            │
+    │ Paste from tmux buffer       │ prefix + ]                            │
+    │ Paste from system clipboard  │ Alt + V                               │
+    │ Mouse selection              │ Shift + drag OR native drag           │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ========================== PANES =================================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Split pane (horizontal)      │ prefix + i                            │
+    │ Split pane (vertical)        │ prefix + u                            │
+    │ Move between panes           │ prefix + h / j / k / l                │
+    │ Resize pane                  │ prefix + H / J / K / L                │
+    │ Close pane                   │ exit or Ctrl + d                      │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ========================== OTHER =================================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Reload tmux config           │ prefix + r                            │
+    └──────────────────────────────┴───────────────────────────────────────┘
+EOF
+}
+
+# ssh permissions
+perm() {
+    cat <<EOF
+┌────────┬──────────────────────────────┐
+│ Mode   │ File                         │
+├────────┼──────────────────────────────┤
+│ 700    │ ~/.ssh                       │
+│ 600    │ ~/.ssh/authorized_keys       │
+│ 664    │ ~/.ssh/config                │
+│ 600    │ ~/.ssh/id_rsa                │
+│ 644    │ ~/.ssh/id_rsa.pub            │
+│ 600    │ ~/.ssh/known_hosts           │
+└────────┴──────────────────────────────┘
+EOF
+}
+
+# chmod cheatsheet
+chmod_show() {
+  # helper: turn one octal digit (0–7) into rwx
+  _bit_to_rwx() {
+    local d=$1
+    (( d & 4 )) && printf 'r' || printf '-'
+    (( d & 2 )) && printf 'w' || printf '-'
+    (( d & 1 )) && printf 'x' || printf '-'
+  }
+
+  # convert full 3-digit mode to symbolics
+  _mode_to_sym() {
+    local m=$1
+    _bit_to_rwx "${m:0:1}"
+    _bit_to_rwx "${m:1:1}"
+    _bit_to_rwx "${m:2:1}"
+  }
+
+  if [ $# -eq 0 ]; then
+    printf "%-5s %-10s %s\n" "Mode" "Symbolic" "Description"
+    for mode in 600 644 666 700 755 775 777; do
+      sym=$(_mode_to_sym "$mode")
+      case "$mode" in
+        600) desc="rw------- (owner rw only)";;
+        644) desc="rw-r--r-- (owner rw, group/other r)";;
+        666) desc="rw-rw-rw- (all read/write)";;
+        700) desc="rwx------ (owner rwx only)";;
+        755) desc="rwxr-xr-x (owner rwx, grp/oth r+x)";;
+        775) desc="rwxrwxr-x (owner/grp rwx, oth r+x)";;
+        777) desc="rwxrwxrwx (everyone rwx)";;
+        *)   desc="";;
+      esac
+      printf "%-5s %-10s %s\n" "$mode" "$sym" "$desc"
+    done
+  else
+    for mode in "$@"; do
+      if [[ ! $mode =~ ^[0-7]{3}$ ]]; then
+        printf "Invalid mode: %s (must be three octal digits)\n" "$mode" >&2
+      else
+        sym=$(_mode_to_sym "$mode")
+        printf "%s → %s\n" "$mode" "$sym"
+      fi
+    done
+  fi
+}
+
+
+# =============================================================================
+# Prompt
+# =============================================================================
+# Add git branch to prompt
+    # Uses git symbolic-ref --short HEAD, which is faster than git branch
+    # Falls back to git rev-parse --short HEAD for detached HEAD state
+parse_git_branch() {
+    local branch
+    branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+    [[ -n $branch ]] && echo " ($branch)"
+}
+
+# =============================================================================
+# Network
+# =============================================================================
+ipinet() {
+    ip -4 addr show | awk '/inet / {print $2 "\t" $NF}'
+}
+
+# Function to check dependencies and fetch public IP information
+get_public_ip_info() {
+    # Ensure required commands are available
+    for cmd in curl jq; do
+        if ! command -v "$cmd" &> /dev/null; then
+            echo "Error: '$cmd' is required but not installed. Please install it."
+            return 1
+        fi
+    done
+
+    # Fetch IP information from ipinfo.io
+    local response
+    response=$(curl --silent --fail "https://ipinfo.io")
+
+    # Check if curl request was successful
+    if [[ -z "$response" ]]; then
+        echo "Error: Failed to fetch IP information."
+        return 1
+    fi
+
+    # Parse and format output using jq
+    jq --raw-output '"IP = " + .ip + "\nCity = " + .city + "\nRegion = " + .region + "\nCountry = " + .country + "\nTimezone = " + .timezone' <<< "$response"
+}
+
+
+
+
+# =============================================================================
+# Tailscale
+# =============================================================================
+# ts-up       — bring tailscale up    (adds MagicDNS via resolvconf)
+# ts-down     — bring tailscale down  (reverts /etc/resolv.conf to WiFi DNS)
+# ts-status   — tailscale status + current /etc/resolv.conf
+# ts-cmd      — passthrough to the real tailscale binary (e.g. ts-cmd ping xps)
+# ts-help     — cheatsheet + DNS resolution flow
+
+ts-up()   { sudo tailscale up   && echo "tailscale: up"; }
+ts-down() { sudo tailscale down && echo "tailscale: down"; }
+
+ts-status() {
+    tailscale status
+    echo
+    echo "── /etc/resolv.conf ──"
+    cat /etc/resolv.conf
+    echo
+    echo "── resolvconf database ──"
+    sudo resolvconf -l 2>/dev/null | grep -E '^(# resolv|nameserver|search)' \
+        | head -30
+}
+
+ts-cmd() { command tailscale "$@"; }
+
+ts-help() {
+    cat <<'EOF'
+    ┌──────────────────────────────┬───────────────────────────────────────┐
+    │ ========================= TAILSCALE ================================ │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ Bring tailscale up           │ ts-up                                 │
+    │ Bring tailscale down         │ ts-down                               │
+    │ Show status + DNS            │ ts-status                             │
+    │ Raw tailscale CLI            │ ts-cmd <args>  (e.g. ts-cmd ping xps) │
+    │ Show this cheatsheet         │ ts-help                               │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ ==================== DNS RESOLUTION FLOW =========================== │
+    ├──────────────────────────────┼───────────────────────────────────────┤
+    │ App (ping, curl, ssh, ...)                                           │
+    │     │                                                                │
+    │     ▼                                                                │
+    │ glibc getaddrinfo → /etc/nsswitch.conf                               │
+    │     │                                                                │
+    │     ├─ files         → /etc/hosts                                    │
+    │     ├─ mdns4_minimal → Avahi (answers *.local ONLY)                  │
+    │     └─ dns           → /etc/resolv.conf                              │
+    │                           │                                          │
+    │                           ▼                                          │
+    │                      openresolv merged file                          │
+    │                      (written by /sbin/resolvconf)                   │
+    │                                                                      │
+    │ Two writers hand their nameservers to /sbin/resolvconf:              │
+    │   • NetworkManager (dns=rc)  → WiFi upstream DNS                     │
+    │       192.168.1.200, 1.1.1.1, 8.8.8.8, 123.23.23.23, …              │
+    │   • tailscaled (when up)     → MagicDNS at 100.100.100.100           │
+    │                                + search tail68f715.ts.net            │
+    │                                (forwards non-tailnet queries         │
+    │                                 upstream automatically)              │
+    │                                                                      │
+    │ ts-up    → tailscaled adds its entry → /etc/resolv.conf regenerated  │
+    │            with MagicDNS (NM entries kept as fallback).              │
+    │ ts-down  → tailscaled removes its entry → /etc/resolv.conf           │
+    │            regenerated with only NM entries. Regular DNS keeps       │
+    │            working. MagicDNS names stop resolving (expected).        │
+    │                                                                      │
+    │ Note: systemd-resolved is NOT used on this host — its D-Bus          │
+    │ resolve1 activation path is broken and crashes the machine.          │
+    │ Use file-based DNS inspection (cat /etc/resolv.conf, resolvconf -l). │
+    ├──────────────────────────────────────────────────────────────────────┤
+    │ ====================== GOTCHAS & QUICK DEBUG ======================= │
+    ├──────────────────────────────────────────────────────────────────────┤
+    │ 1. Short tailnet names may lose to mDNS                              │
+    │    /etc/nsswitch.conf has:                                           │
+    │      hosts: files myhostname mdns4_minimal [NOTFOUND=return] … dns   │
+    │    If another LAN device advertises e.g. `xps.local` via Avahi,      │
+    │    `getent hosts xps` hits mDNS FIRST and returns its link-local     │
+    │    address — never reaching MagicDNS. Workaround: use the FQDN       │
+    │    `xps.tail68f715.ts.net`, or the tailnet IP, or edit nsswitch      │
+    │    to put `dns` before `mdns4_minimal`.                              │
+    │                                                                      │
+    │ 2. Why google.com still works when resolv.conf only lists            │
+    │    100.100.100.100:  MagicDNS is a recursive forwarder. Queries for  │
+    │    names outside tail68f715.ts.net are relayed to your WiFi upstream │
+    │    (1.1.1.1, 8.8.8.8, …) by tailscaled automatically. So even with   │
+    │    a MagicDNS-only resolv.conf, external DNS keeps working.          │
+    │                                                                      │
+    │ 3. Where the WiFi DNS list actually comes from                       │
+    │    • Manual (persistent): nmcli con show "<SSID>" | grep ipv4.dns    │
+    │      Edit with: nmcli con mod "<SSID>" ipv4.dns "1.1.1.1,8.8.8.8"    │
+    │                nmcli dev reapply <iface>                             │
+    │    • DHCP-provided: the router hands these out; visible in           │
+    │      `resolvconf -l` under the NM block but NOT in `ipv4.dns`.       │
+    │      To drop them: nmcli con mod "<SSID>" ipv4.ignore-auto-dns yes   │
+    │    • Merged result: /etc/resolv.conf (written by openresolv)         │
+    │                                                                      │
+    │ Quick debug commands (all file-based, no resolvectl):                │
+    │    cat /etc/resolv.conf              # what glibc actually uses      │
+    │    sudo resolvconf -l                # per-writer raw database       │
+    │    nmcli con show "<SSID>" | grep ipv4.dns   # NM's manual list      │
+    │    getent hosts <name>               # end-to-end resolution test    │
+    │    tailscale status                  # health warnings at the bottom │
+    └──────────────────────────────────────────────────────────────────────┘
+EOF
+}
+
+
+
+# =============================================================================
+# Docker
+# =============================================================================
+dp() {
+    local name="${1:-}"
+    local format='table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+
+    if [[ -z "${name//[[:space:]]/}" ]]; then
+        watch -x docker ps --format "$format"
+    else
+        watch -x docker ps --filter "name=$name" --format "$format"
+    fi
+}
+

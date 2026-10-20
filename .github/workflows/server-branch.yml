@@ -1,0 +1,63 @@
+# Rebuild the `server` branch from main with only the files listed in server-files.txt.
+# The branch is a single orphan commit: servers cloning it never receive main's history.
+name: server-branch
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: server-branch
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push the server branch
+        run: |
+          set -eu
+          export GIT_INDEX_FILE="$RUNNER_TEMP/server-index"
+          git read-tree --empty
+
+          missing=0
+          while IFS= read -r path || [ -n "$path" ]; do
+            case "$path" in
+              ''|'#'*) continue ;;
+            esac
+            entry=$(git ls-tree HEAD -- "$path")
+            if [ -z "$entry" ]; then
+              echo "::error file=server-files.txt::$path is not in main"
+              missing=1
+              continue
+            fi
+            mode=$(printf '%s' "$entry" | cut -d' ' -f1)
+            sha=$(printf '%s' "$entry" | cut -d' ' -f3 | cut -f1)
+            git update-index --add --cacheinfo "$mode,$sha,$path"
+          done < server-files.txt
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          tree=$(git write-tree)
+          if git fetch --depth=1 origin server 2>/dev/null; then
+            if [ "$(git rev-parse FETCH_HEAD^{tree})" = "$tree" ]; then
+              echo "server branch already up to date"
+              exit 0
+            fi
+          fi
+
+          export GIT_AUTHOR_NAME="github-actions[bot]"
+          export GIT_AUTHOR_EMAIL="41898282+github-actions[bot]@users.noreply.github.com"
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          commit=$(git commit-tree "$tree" -m "chore(server): build from main ${GITHUB_SHA}")
+          git push --force origin "$commit:refs/heads/server"
+          echo "server branch -> $commit (from main ${GITHUB_SHA})"

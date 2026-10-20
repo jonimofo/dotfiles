@@ -1,0 +1,18 @@
+# Files published to the generated `server` branch (one path per line).
+# The branch is rebuilt from main by .github/workflows/server-branch.yml: never edit it by hand.
+# Keep in sync with dotfiles_user_configs in QDV/ansible roles/dotfiles/defaults/main.yml.
+
+# Bash
+.bashrc
+.bash_aliases
+.bash_functions
+.inputrc
+
+# Tmux
+.tmux.conf
+tmux/powerline-config.sh
+tmux/powerline-theme.sh
+
+# Git
+.git-completion.bash
+.gitconfig

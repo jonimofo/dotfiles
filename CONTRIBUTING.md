@@ -10,6 +10,7 @@ feat/* | fix/* | docs/* | chore/*  ─(PR, squash)→  develop  ─(PR, merge co
 ```
 
 - **`main`**: the stable config, mirrored to GitLab. Never commit directly.
+- **`server`**: generated from `main` for servers (see [Server branch](#server-branch-generated)). Never touch it.
 - **`develop`**: integration. Never commit directly.
 - **`<type>/<topic>`**: one short-lived branch per change, created from `develop`
   (`feat/`, `fix/`, `docs/`, `chore/`, `refactor/`...). With an issue: `feat/123-topic`.
@@ -81,6 +82,24 @@ git push gitlab main
 It is the only direct push the `pre-push` hook allows (`gitlab` remote, `main` branch).
 Branches and `develop` stay on GitHub (`origin`) only.
 
+## Server branch (generated)
+
+Servers only get the files listed in [`server-files.txt`](server-files.txt), through the
+`server` branch, so pictures, notes and laptop configs never reach them.
+
+- `server` is **rebuilt automatically** by [`.github/workflows/server-branch.yml`](.github/workflows/server-branch.yml)
+  on every push to `main` (or manually: `gh workflow run server-branch`).
+- It is a single orphan commit: no history from `main`, so a shallow single-branch clone
+  downloads nothing else. **Never commit or push to `server`** (the `pre-push` hook blocks it).
+- To ship a new file to servers: add it to `server-files.txt` **and** to the symlink list
+  `dotfiles_user_configs` in `QDV/ansible` (`roles/dotfiles/defaults/main.yml`). The workflow
+  fails if a listed file is missing from `main`.
+- Deploying stays manual, from `QDV/ansible`:
+  ```bash
+  ansible-playbook site.yml --tags dotfiles --check --diff   # which servers are behind
+  ansible-playbook site.yml --tags dotfiles                  # deploy
+  ```
+
 ## Branch cleanup
 
 - When merging a branch: `--delete-branch` (remote) + `git fetch --prune` (local).
@@ -103,7 +122,7 @@ git config pull.ff only      # a pull that cannot fast-forward fails (no surpris
 
 - `commit-msg`: rejects subjects that break the Angular convention or exceed 71 characters,
   and messages carrying `Co-Authored-By` or "generated" footers.
-- `pre-push`: rejects pushes to `main`/`develop`, except `main` to the `gitlab` mirror.
+- `pre-push`: rejects pushes to `main`/`develop`/`server`, except `main` to the `gitlab` mirror.
 
 Other rules:
 - 1 PR = 1 logical change (small PRs).

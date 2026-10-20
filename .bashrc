@@ -86,11 +86,11 @@ fi
 
 
 # =============================================================================
-# fasd
+# zoxide
 # =============================================================================
-# Enable `fasd` for quick file access if installed
-if command -v fasd >/dev/null 2>&1; then
-    eval "$(fasd --init auto)"
+# Enable `zoxide` for quick directory jumps (z, zi) if installed
+if command -v zoxide >/dev/null 2>&1; then
+    eval "$(zoxide init bash)"
 fi
 
 

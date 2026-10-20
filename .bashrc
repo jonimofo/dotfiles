@@ -11,29 +11,25 @@ esac
 # =============================================================================
 # Prompt
 # =============================================================================
-# Set the prompt based on the hostname
+# Hostname color: green = staging, orange = production servers
+prompt_color=''
 case "$(hostname -s)" in
     baf-staging)
-        # Bright Green prompt for staging
-        PS1="\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
+        prompt_color='\[\033[01;32m\]'
         ;;
-    baf-production)
-        # Orange prompt for production
-        PS1="\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
-        ;;
-    pi)
-        # Orange prompt for production
-        PS1="\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
-        ;;
-    astrohub-server)
-        # Orange prompt for production
-        PS1="\[\033[38;5;208m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
-        ;;
-    *)
-        # Your custom default prompt for any other host
-        PS1="[\[\e[1;33m\]\u\[\e[m\] \[\e[1;32m\]\h\[\e[m\] \[\e[1;36m\]\W\[\e[m\]]\$(parse_git_branch) $ "
+    baf-production|pi|astrohub-server|scranton)
+        prompt_color='\[\033[38;5;208m\]'
         ;;
 esac
+
+if [ -n "$prompt_color" ]; then
+    # Servers: user@host:path (branch) $
+    PS1="${prompt_color}\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch) \$ "
+else
+    # Any other host (laptop): [user host dir] (branch) $
+    PS1="[\[\e[1;33m\]\u\[\e[m\] \[\e[1;32m\]\h\[\e[m\] \[\e[1;36m\]\W\[\e[m\]]\$(parse_git_branch) $ "
+fi
+unset prompt_color
 
 
 # -----------------------------------------------------------------------------

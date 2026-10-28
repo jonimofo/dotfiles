@@ -168,8 +168,8 @@ alias gpuu="git push -u origin main && git push -u gitlab main"
 # =============================================================================
 # Host-specific gating
 # =============================================================================
-# Aliases referencing local-only paths/services are gated to this hostname.
-LAPTOP_HOSTNAME="xps"
+# Aliases referencing local-only paths/services are gated to the laptop.
+# LAPTOP_HOSTNAME is defined once in .bashrc, which sources this file.
 
 if [[ "$HOSTNAME" == "$LAPTOP_HOSTNAME" ]]; then
     # Network Commands

@@ -366,7 +366,7 @@ execute_release() {
     say "Released $next_version"
     say "  Release: $url"
     say "  Merge:   $merge_sha"
-    say "  Notes:   $notes_file"
+    rm -f "$notes_file"
 }
 
 main() {

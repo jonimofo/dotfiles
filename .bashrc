@@ -9,6 +9,13 @@ case $- in
 esac
 
 # =============================================================================
+# Host identity
+# =============================================================================
+# Hostname of the laptop. Blocks that only make sense there (secrets, local
+# services, aliases in .bash_aliases) are gated on it; servers skip them silently.
+LAPTOP_HOSTNAME="xps"
+
+# =============================================================================
 # Prompt
 # =============================================================================
 # Hostname color: green = staging, orange = production servers
@@ -130,8 +137,11 @@ else
     echo "Warning: ~/.fzf.bash does not exist"
 fi
 
-if [ -f ~/.secrets/sops/age/keys.txt ]; then
-    export SOPS_AGE_KEY_FILE=~/.secrets/sops/age/keys.txt
-else
-    echo "Warning: ~/.secrets/sops/age/keys.txt does not exist, impossible to source SOPS_AGE_KEY_FILE"
+# SOPS age key: laptop only, servers never hold it.
+if [ "$HOSTNAME" = "$LAPTOP_HOSTNAME" ]; then
+    if [ -f ~/.secrets/sops/age/keys.txt ]; then
+        export SOPS_AGE_KEY_FILE=~/.secrets/sops/age/keys.txt
+    else
+        echo "Warning: ~/.secrets/sops/age/keys.txt does not exist, impossible to source SOPS_AGE_KEY_FILE"
+    fi
 fi

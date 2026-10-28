@@ -31,7 +31,7 @@ make lint        # <what it does>
 
 ## Documentation
 
-- <Path of the project docs folder, read before proposing changes>
+- <Path of the project docs folder, read before proposing changes; plans go in its `plans/`>
 - <Audit prompts location if any (used by /audit)>
 
 ## Deployment

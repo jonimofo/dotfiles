@@ -15,7 +15,8 @@ This is a personal dotfiles repository for a Linux workstation (Debian-based). I
 - **Desktop/GNOME**: `gnome/` (dconf backups), `autostart/`, `.xbindkeysrc`
 - **App configs**: `espanso/` (text expansion), `rofi/` (launcher), `flameshot.ini`
 - **SSH**: `ssh/config`
-- **Scripts**: `scripts/`, `rsync_xps.sh`
+- **Scripts**: `scripts/`
+- **Claude Code**: `claude/` (global `CLAUDE.md`, `rules/`, `skills/`, `templates/`, settings template, `install.sh`; see `claude/README.md`)
 
 ## Key Conventions
 

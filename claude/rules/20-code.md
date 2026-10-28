@@ -10,6 +10,19 @@
 - Every change ships with its tests when the repo has a test suite. Tests run, output quoted.
 - Documentation lives next to the code it describes and is updated in the same change.
 
+## Clean code
+
+- No hardcoded values: colors, spacing, URLs, ports, paths, limits, magic numbers and user-facing
+  strings live in config, env, constants, design tokens or translation files. One place, one name.
+- Reusable first: search for an existing component, helper or composable before writing one.
+  A pattern written twice is extracted into one shared element, with the two call sites updated.
+- Readable design: small units with one job, explicit names, early returns, no nesting deeper
+  than three levels, consistent file layout within a feature.
+- Every bug fix ships a regression test. Every new convention gets an automated check where
+  possible (audit test, lint rule), so only what cannot be automated stays in the LLM audit.
+- Propose rules: at the end of a feature or an audit, list up to 3 recurring patterns that should
+  become a project rule, an automated check or a shared element. The user decides.
+
 ## New dependencies: flag and justify, the user decides
 
 Before adding any package, library, plugin or external tool:
@@ -30,6 +43,16 @@ Before adding any package, library, plugin or external tool:
   in the current session. Heavy queries: `COUNT` first, always a `LIMIT`.
 - When two approaches exist, take the more secure one and say so. Ask before a change that
   weakens a security setting.
+
+## Errors, performance, idempotency
+
+- No silent catch. A failure surfaces with context: what was attempted, which record, which input.
+  Background jobs log start, end and failure. User-facing errors say what to do; technical detail
+  stays in the logs, never personal data.
+- No N+1: eager load and verify with the query log. Lists are paginated or limited by default.
+  Columns used in filters and sorts are indexed. Heavy work runs in queued jobs, not in requests.
+- Scripts, seeders, migrations, Ansible tasks and install steps are safe to run twice and report
+  "unchanged" when nothing changed.
 
 ## Data and schema
 

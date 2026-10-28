@@ -22,6 +22,8 @@
 ## Pull requests and issues
 
 - `gh pr create` with: summary, test plan, manual steps (symlink, package, migration).
+- A PR is not merged to `develop` before `/audit` (diff mode) reports 0 HIGH and the project's
+  test suites (unit, feature, JS) and lints are green. The audit summary goes in the PR body.
 - Check a PR's state (open, merged) before editing its body or assuming its scope.
 - Anything postponed becomes a GitHub issue, not a `TODO` in a file.
 - Merge conflicts: `develop` is the source of truth when both sides are equivalent.

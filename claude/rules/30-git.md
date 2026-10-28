@@ -34,5 +34,4 @@
 
 - Never delete a branch, local or remote, without explicit approval in the current session.
 - Deploys (ansible, make deploy, ssh to a server) are run by the user. Give the command, wait.
-- Audit reports, smoke outputs and scratch files go to the scratchpad or `/tmp`, never the repo root.
-- Local-only files (`todo.txt`, `TEMP/`, screenshots) are never committed unless the repo tracks them.
+- File locations and what is versioned: `35-files.md`.

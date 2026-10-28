@@ -14,7 +14,9 @@
 
 1. Read `CONTRIBUTING.md` first; it wins.
 2. `develop` exists: `<type>/<topic>` from `develop`, PR to `develop` (squash), `develop` to `main`
-   by PR with merge commit, never squash. Mirror `main` to a `gitlab` remote if one exists.
+   by PR with merge commit, never squash. Every promotion is a release: SemVer tag `vX.Y.Z` plus
+   GitHub Release through `/release` (PATCH automatic, MINOR on the user's decision, MAJOR on
+   BREAKING with confirmation). Mirror `main` and tags to a `gitlab` remote if one exists.
 3. Only `main` exists: `<type>/<topic>` from `main`, PR to `main` (squash).
 4. `main` and `develop` only fast-forward from origin. Never commit or push on them directly.
    Never force-push them.

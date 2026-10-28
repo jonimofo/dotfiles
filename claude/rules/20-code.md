@@ -53,6 +53,11 @@ Before adding any package, library, plugin or external tool:
   Columns used in filters and sorts are indexed. Heavy work runs in queued jobs, not in requests.
 - Scripts, seeders, migrations, Ansible tasks and install steps are safe to run twice and report
   "unchanged" when nothing changed.
+- Shell under `set -o pipefail`: never test `cmd | grep -q` or `cmd | head` directly in a condition.
+  The early exit sends SIGPIPE to `cmd` and the test reads as "no match". Capture the output in a
+  variable first, then test the variable.
+- A script with several irreversible remote steps (merge, tag push, release, mirror) records what is
+  done and, on failure, prints the exact remaining commands so the run can be completed by hand.
 
 ## Data and schema
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Versioned promotion develop -> main: merge the PR, tag, publish a GitHub Release, mirror to gitlab.
-# Usage: release.sh --pr <n> [--bump patch|minor|major] [--dry-run] [--next-only] [--yes]
+# Usage: release.sh --pr <n> [--bump patch|minor|major] [--dry-run] [--yes]
+#        release.sh --next-only [--bump patch|minor|major] [--no-fetch]
 set -euo pipefail
 
 pr=""
@@ -8,9 +9,11 @@ bump="patch"
 bump_given=0
 dry_run=0
 next_only=0
+no_fetch=0
 assume_yes=0
 version_re='^v[0-9]+\.[0-9]+\.[0-9]+$'
-breaking_re='^[a-z]+(\([^)]*\))?!:'
+breaking_subject_re='^[a-z]+(\([^)]*\))?!:'
+breaking_body_re='^BREAKING[ -]CHANGE:'
 
 say() {
     printf '%s\n' "$*"
@@ -22,7 +25,8 @@ die() {
 }
 
 usage() {
-    say "usage: $0 --pr <n> [--bump patch|minor|major] [--dry-run] [--next-only] [--yes]" >&2
+    say "usage: $0 --pr <n> [--bump patch|minor|major] [--dry-run] [--yes]" >&2
+    say "       $0 --next-only [--bump patch|minor|major] [--no-fetch]" >&2
     exit 2
 }
 
@@ -44,16 +48,34 @@ parse_args() {
                 bump_given=1
                 shift 2
                 ;;
-            --dry-run) dry_run=1; shift ;;
-            --next-only) next_only=1; shift ;;
-            --yes) assume_yes=1; shift ;;
-            *) usage ;;
+            --dry-run)
+                dry_run=1
+                shift
+                ;;
+            --next-only)
+                next_only=1
+                shift
+                ;;
+            --no-fetch)
+                no_fetch=1
+                shift
+                ;;
+            --yes)
+                assume_yes=1
+                shift
+                ;;
+            *)
+                usage
+                ;;
         esac
     done
     case "$bump" in
         patch|minor|major) ;;
         *) die "invalid --bump '$bump' (patch, minor or major)." ;;
     esac
+    if [[ $no_fetch -eq 1 && $next_only -eq 0 ]]; then
+        die "--no-fetch is only allowed with --next-only."
+    fi
     if [[ $next_only -eq 0 ]]; then
         if [[ ! "$pr" =~ ^[0-9]+$ ]]; then
             usage
@@ -68,6 +90,12 @@ check_repo() {
     if ! git remote get-url origin >/dev/null 2>&1; then
         die "no 'origin' remote."
     fi
+}
+
+# Never --prune-tags: it would delete local tags before any guardrail runs.
+fetch_origin() {
+    git fetch --prune origin
+    git fetch --tags origin
 }
 
 check_clean_tree() {
@@ -105,24 +133,31 @@ check_no_local_only() {
     done
 }
 
+# Output is captured before filtering: a `cmd | grep -q` or `cmd | head` pipeline can die of
+# SIGPIPE under pipefail and turn a match into a failure.
 last_tag() {
-    git tag --merged origin/main --list 'v*' --sort=-v:refname | grep -E "$version_re" | head -n1 || true
+    local tags versions
+    tags="$(git tag --merged origin/main --list 'v*' --sort=-v:refname)"
+    versions="$(grep -E "$version_re" <<< "$tags" || true)"
+    printf '%s\n' "${versions%%$'\n'*}"
 }
 
 has_breaking() {
-    if git log origin/main..origin/develop --format='%s' | grep -Eq "$breaking_re"; then
+    local subjects bodies
+    subjects="$(git log origin/main..origin/develop --format='%s')"
+    bodies="$(git log origin/main..origin/develop --format='%b')"
+    if grep -Eq "$breaking_subject_re" <<< "$subjects"; then
         return 0
     fi
-    if git log origin/main..origin/develop --format='%b' | grep -q 'BREAKING CHANGE:'; then
+    if grep -Eq "$breaking_body_re" <<< "$bodies"; then
         return 0
     fi
     return 1
 }
 
-# Sets the globals level and next_version.
+# Sets the globals level, breaking, first_release and next_version.
 compute_version() {
-    local prev major minor patch
-    prev="$(last_tag)"
+    local major minor patch
     level="$bump"
     if has_breaking; then
         if [[ $bump_given -eq 1 && "$bump" != "major" ]]; then
@@ -131,12 +166,12 @@ compute_version() {
         level="major"
         breaking=1
     fi
-    if [[ -z "$prev" ]]; then
+    if [[ -z "$prev_tag" ]]; then
         next_version="v1.0.0"
         first_release=1
         return 0
     fi
-    IFS=. read -r major minor patch <<< "${prev#v}"
+    IFS=. read -r major minor patch <<< "${prev_tag#v}"
     case "$level" in
         major) next_version="v$((major + 1)).0.0" ;;
         minor) next_version="v$major.$((minor + 1)).0" ;;
@@ -153,6 +188,20 @@ check_tag_free() {
     fi
 }
 
+# Prints the lines of $2 matching the extended regex $1 as a "- " list.
+bullet_lines() {
+    local pattern="$1"
+    local text="$2"
+    local matched line
+    matched="$(grep -E -- "$pattern" <<< "$text" || true)"
+    if [[ -z "$matched" ]]; then
+        return 0
+    fi
+    while IFS= read -r line; do
+        printf -- '- %s\n' "$line"
+    done <<< "$matched"
+}
+
 notes_section() {
     local title="$1"
     local lines="$2"
@@ -163,20 +212,16 @@ notes_section() {
 }
 
 build_notes() {
-    local subjects count feat fix docs refactor other
+    local subjects count section type title
     subjects="$(git log origin/main..origin/develop --format='%s')"
-    count="$(printf '%s\n' "$subjects" | grep -c . || true)"
-    feat="$(printf '%s\n' "$subjects" | grep -E '^feat(\(|!|:)' | sed 's/^/- /' || true)"
-    fix="$(printf '%s\n' "$subjects" | grep -E '^fix(\(|!|:)' | sed 's/^/- /' || true)"
-    docs="$(printf '%s\n' "$subjects" | grep -E '^docs(\(|!|:)' | sed 's/^/- /' || true)"
-    refactor="$(printf '%s\n' "$subjects" | grep -E '^refactor(\(|!|:)' | sed 's/^/- /' || true)"
-    other="$(printf '%s\n' "$subjects" | grep -Ev '^(feat|fix|docs|refactor)(\(|!|:)' | grep . | sed 's/^/- /' || true)"
+    count="$(grep -c . <<< "$subjects" || true)"
     printf 'Promotion develop -> main, %s commit(s).\n' "$count"
-    notes_section "Features" "$feat"
-    notes_section "Fixes" "$fix"
-    notes_section "Documentation" "$docs"
-    notes_section "Refactoring" "$refactor"
-    notes_section "Other" "$other"
+    for section in feat:Features fix:Fixes docs:Documentation refactor:Refactoring; do
+        type="${section%%:*}"
+        title="${section#*:}"
+        notes_section "$title" "$(bullet_lines "^$type(\(|!|:)" "$subjects")"
+    done
+    notes_section "Other" "$(bullet_lines '^.' "$(grep -Ev '^(feat|fix|docs|refactor)(\(|!|:)' <<< "$subjects" || true)")"
 }
 
 confirm_major() {
@@ -200,6 +245,7 @@ confirm_major() {
 print_plan() {
     say "Release plan"
     say "  PR:       #$pr (develop -> main, merge commit)"
+    say "  Head:     $head_sha (origin/develop, merge refused if it moves)"
     say "  Previous: ${prev_tag:-none}"
     if [[ $first_release -eq 1 ]]; then
         say "  Version:  $next_version (first release)"
@@ -228,26 +274,90 @@ fast_forward() {
     fi
 }
 
-execute_release() {
-    local merge_sha url
-    say "Merging PR #$pr..."
-    gh pr merge "$pr" --merge --subject "release: promote develop to main $next_version (#$pr)"
-    git fetch origin
-    merge_sha="$(git rev-parse origin/main)"
-    if [[ "$(git log -1 --format=%s "$merge_sha")" != "release: promote develop to main $next_version (#$pr)" ]]; then
+# Runs on every exit. After the merge, a failure prints what is done and what is left.
+print_resume() {
+    local status=$?
+    if [[ $status -eq 0 || $merge_done -eq 0 ]]; then
+        return 0
+    fi
+    local target="${merge_sha:-<merge commit sha, check origin/main>}"
+    {
+        say ""
+        say "RELEASE PARTIALLY DONE ($next_version): PR #$pr is merged, the rest failed."
+        say "Done:"
+        say "  - merge of PR #$pr"
+        if [[ $verified -eq 1 ]]; then
+            say "  - merge commit $merge_sha verified"
+        fi
+        if [[ $tagged -eq 1 ]]; then
+            say "  - local tag $next_version"
+        fi
+        if [[ $tag_pushed -eq 1 ]]; then
+            say "  - tag pushed to origin"
+        fi
+        if [[ $released -eq 1 ]]; then
+            say "  - GitHub Release"
+        fi
+        if [[ $mirrored -eq 1 ]]; then
+            say "  - gitlab mirror"
+        fi
+        say "Left to run, from this repo, after fixing the cause above:"
+        if [[ $verified -eq 0 ]]; then
+            say "  # check first that origin/main is the merge of PR #$pr with second parent $head_sha"
+        fi
+        if [[ $tagged -eq 0 ]]; then
+            say "  git tag -a $next_version $target -m 'release $next_version' -m \"\$(cat $notes_file)\""
+        fi
+        if [[ $tag_pushed -eq 0 ]]; then
+            say "  git push origin $next_version"
+        fi
+        if [[ $released -eq 0 ]]; then
+            say "  gh release create $next_version --verify-tag --title $next_version --notes-file $notes_file"
+        fi
+        if [[ $has_gitlab -eq 1 && $mirrored -eq 0 ]]; then
+            say "  git push gitlab $target:refs/heads/main"
+            say "  git push gitlab $next_version"
+        fi
+        say "  git fetch origin main:main      # or git pull --ff-only when main is checked out"
+        say "  git fetch origin develop:develop"
+    } >&2
+}
+
+verify_merge() {
+    local second_parent
+    if [[ "$(git log -1 --format=%s "$merge_sha")" != "$merge_subject" ]]; then
         die "origin/main ($merge_sha) is not the expected merge commit; stopping before tagging."
     fi
-    if ! git merge-base --is-ancestor origin/develop origin/main; then
-        die "origin/main does not contain origin/develop; stopping before tagging."
+    if ! second_parent="$(git rev-parse --verify --quiet "$merge_sha^2")"; then
+        die "origin/main ($merge_sha) is not a merge commit; stopping before tagging."
     fi
+    if [[ "$second_parent" != "$head_sha" ]]; then
+        die "merged head $second_parent differs from the planned $head_sha; stopping before tagging."
+    fi
+    verified=1
+}
+
+execute_release() {
+    local url
+    trap print_resume EXIT
+    say "Merging PR #$pr..."
+    gh pr merge "$pr" --merge --match-head-commit "$head_sha" --subject "$merge_subject"
+    merge_done=1
+    git fetch origin
+    merge_sha="$(git rev-parse origin/main)"
+    verify_merge
     say "Tagging $next_version..."
-    git tag -a "$next_version" origin/main -m "release $next_version" -m "$notes"
+    git tag -a "$next_version" "$merge_sha" -m "release $next_version" -m "$notes"
+    tagged=1
     git push origin "$next_version"
-    gh release create "$next_version" --verify-tag --title "$next_version" --notes "$notes"
+    tag_pushed=1
+    gh release create "$next_version" --verify-tag --title "$next_version" --notes-file "$notes_file"
+    released=1
     if [[ $has_gitlab -eq 1 ]]; then
         say "Mirroring to gitlab..."
-        git push gitlab origin/main:refs/heads/main
+        git push gitlab "$merge_sha:refs/heads/main"
         git push gitlab "$next_version"
+        mirrored=1
     fi
     fast_forward main
     fast_forward develop
@@ -256,6 +366,7 @@ execute_release() {
     say "Released $next_version"
     say "  Release: $url"
     say "  Merge:   $merge_sha"
+    say "  Notes:   $notes_file"
 }
 
 main() {
@@ -264,9 +375,25 @@ main() {
     breaking=0
     first_release=0
     has_gitlab=0
+    prev_tag=""
+    head_sha=""
+    notes=""
+    notes_file=""
+    merge_sha=""
+    merge_subject=""
+    merge_done=0
+    verified=0
+    tagged=0
+    tag_pushed=0
+    released=0
+    mirrored=0
     parse_args "$@"
     check_repo
     if [[ $next_only -eq 1 ]]; then
+        if [[ $no_fetch -eq 0 ]]; then
+            fetch_origin >&2
+        fi
+        prev_tag="$(last_tag)"
         compute_version
         if [[ $breaking -eq 1 ]]; then
             say "BREAKING change detected: MAJOR bump." >&2
@@ -275,10 +402,11 @@ main() {
         exit 0
     fi
     check_clean_tree
-    git fetch --prune --prune-tags origin
+    fetch_origin
     check_pr
     check_promoted_commits
     check_no_local_only
+    head_sha="$(git rev-parse origin/develop)"
     prev_tag="$(last_tag)"
     compute_version
     check_tag_free
@@ -286,12 +414,15 @@ main() {
         has_gitlab=1
     fi
     notes="$(build_notes)"
+    merge_subject="release: promote develop to main $next_version (#$pr)"
     print_plan
     if [[ $dry_run -eq 1 ]]; then
         say "Dry run: nothing changed."
         exit 0
     fi
     confirm_major
+    notes_file="$(mktemp "${TMPDIR:-/tmp}/release-notes-$next_version.XXXXXX")"
+    printf '%s\n' "$notes" > "$notes_file"
     execute_release
 }
 

@@ -90,26 +90,39 @@ scripts/release.sh --pr <#> --dry-run   # checks + plan + release notes, changes
 scripts/release.sh --pr <#>             # merge, tag, GitHub Release, gitlab mirror
 ```
 
-What it does, in order: merges the PR with a merge commit (never squash, `develop` kept),
-creates an annotated tag `vX.Y.Z` on `origin/main`, pushes it, publishes a GitHub Release,
-pushes `main` and the tag to `gitlab` if that remote exists, then fast-forwards local `main`
-and `develop`.
+Open the PR first with the title `release: promote develop to main (YYYY-MM-DD)`.
+
+What it does, in order: records the head of `origin/develop` in the plan, merges the PR with a
+merge commit (never squash, `develop` kept) only if `develop` still points to that head,
+checks that the merge commit's second parent is that head, creates an annotated tag `vX.Y.Z`
+on it, pushes the tag, publishes a GitHub Release, pushes `main` and the tag to `gitlab` if
+that remote exists, then fast-forwards local `main` and `develop`.
 
 | Bump | When |
 |---|---|
 | PATCH | Default. |
 | MINOR | Human decision only: `--bump minor`. |
-| MAJOR | A promoted commit is `type!:` or has a `BREAKING CHANGE:` body. Needs `--bump major`, `--yes` or a y/N confirmation. A lower `--bump` is refused. |
+| MAJOR | A promoted commit is `type!:` or has a body line starting with `BREAKING CHANGE:` or `BREAKING-CHANGE:`. Needs confirmation, or `--bump major` / `--yes` for non-interactive runs. A lower `--bump` is refused. |
 | `v1.0.0` | First release (no `vX.Y.Z` tag on `main` yet), whatever the bump. |
 
 **Record of a release**: the annotated tag and the GitHub Release, both carrying the notes
 (promoted commits grouped by type). No changelog file.
 
-**Guardrails** (the script aborts before changing anything): dirty working tree, PR not open
-or not `develop → main`, nothing to promote, local `main`/`develop` with commits not on
+**Guardrails** (the script aborts before changing anything; it only fetches `origin` with
+`git fetch --prune` and `git fetch --tags`, never `--prune-tags`): dirty working tree, PR not
+open or not `develop → main`, nothing to promote, local `main`/`develop` with commits not on
 `origin`, tag already existing locally or on `origin`.
 
-`scripts/release.sh --next-only [--bump …]` prints the next version only.
+**Partial release**: once the PR is merged, any later failure prints a "RELEASE PARTIALLY
+DONE" block with what succeeded and the exact remaining commands (tag, tag push,
+`gh release create … --notes-file <file>`, gitlab pushes, fast-forwards). The notes file is
+kept under `${TMPDIR:-/tmp}`. Fix the cause and run those commands; do not re-run the script.
+
+`scripts/release.sh --next-only [--bump …] [--no-fetch]` prints the next version only. It
+fetches `origin` first unless `--no-fetch` is given.
+
+Run `scripts/release-test.sh` after changing the release script: it checks the version logic
+on throwaway repos and must print `All cases passed.`
 
 ## Server branch (generated)
 

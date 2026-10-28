@@ -1,7 +1,7 @@
 # Contributing to dotfiles
 
-Adapted from the BAF workflow (`QDV/baf/CONTRIBUTING.md`), without the Laravel, Ansible and
-release-versioning parts.
+Adapted from the BAF workflow (`QDV/baf/CONTRIBUTING.md`), without the Laravel and Ansible parts.
+Release versioning is kept, in a portable form ([`scripts/release.sh`](scripts/release.sh)).
 
 ## Branch model
 
@@ -59,7 +59,7 @@ gh issue close <number>
 | Transition | Strategy | Why |
 |---|---|---|
 | `<type>/* → develop` | **Squash & merge** + delete the branch | One clean commit per change on `develop`, easy revert. |
-| `develop → main` | **Merge commit (`--no-ff`)**, no deletion | Keeps `develop` history and marks promotions. Never squash a long-lived branch. |
+| `develop → main` | **Merge commit (`--no-ff`)**, no deletion, via `scripts/release.sh` | Keeps `develop` history and marks promotions. Never squash a long-lived branch. |
 
 - Squash: the **PR title becomes the commit message**, so it must follow the Angular convention.
 
@@ -68,19 +68,48 @@ gh issue close <number>
 gh pr merge <#> --squash --delete-branch
 git fetch --prune
 
-# develop → main (promotion)
-gh pr create --base main --head develop --title "release: promote develop to main (YYYY-MM-DD)" --body "…"
-gh pr merge <#> --merge
-
-# then mirror main to GitLab
-git checkout main
-git pull --ff-only origin main
-git push gitlab main
+# develop → main (versioned promotion, see below)
+gh pr create --base main --head develop --title "release: promote develop to main" --body "…"
+scripts/release.sh --pr <#> --dry-run
+scripts/release.sh --pr <#>
 ```
 
-**`main` is mirrored to GitLab**: after every promotion, push `main` to the `gitlab` remote.
-It is the only direct push the `pre-push` hook allows (`gitlab` remote, `main` branch).
+**`main` is mirrored to GitLab**: `scripts/release.sh` pushes `main` and the new tag to the
+`gitlab` remote after every promotion. It is the only direct branch push the `pre-push` hook
+allows (`gitlab` remote, `main` branch).
 Branches and `develop` stay on GitHub (`origin`) only.
+
+## Versioning & releases
+
+Every `develop → main` promotion is a versioned release (SemVer `vX.Y.Z`), done by
+[`scripts/release.sh`](scripts/release.sh). It works in any repo with `main`, `develop` and
+`origin` on GitHub (needs `git` and `gh`).
+
+```bash
+scripts/release.sh --pr <#> --dry-run   # checks + plan + release notes, changes nothing
+scripts/release.sh --pr <#>             # merge, tag, GitHub Release, gitlab mirror
+```
+
+What it does, in order: merges the PR with a merge commit (never squash, `develop` kept),
+creates an annotated tag `vX.Y.Z` on `origin/main`, pushes it, publishes a GitHub Release,
+pushes `main` and the tag to `gitlab` if that remote exists, then fast-forwards local `main`
+and `develop`.
+
+| Bump | When |
+|---|---|
+| PATCH | Default. |
+| MINOR | Human decision only: `--bump minor`. |
+| MAJOR | A promoted commit is `type!:` or has a `BREAKING CHANGE:` body. Needs `--bump major`, `--yes` or a y/N confirmation. A lower `--bump` is refused. |
+| `v1.0.0` | First release (no `vX.Y.Z` tag on `main` yet), whatever the bump. |
+
+**Record of a release**: the annotated tag and the GitHub Release, both carrying the notes
+(promoted commits grouped by type). No changelog file.
+
+**Guardrails** (the script aborts before changing anything): dirty working tree, PR not open
+or not `develop → main`, nothing to promote, local `main`/`develop` with commits not on
+`origin`, tag already existing locally or on `origin`.
+
+`scripts/release.sh --next-only [--bump …]` prints the next version only.
 
 ## Server branch (generated)
 
@@ -124,6 +153,7 @@ git config pull.ff only      # a pull that cannot fast-forward fails (no surpris
 - `commit-msg`: rejects subjects that break the Angular convention or exceed 71 characters,
   and messages carrying `Co-Authored-By` or "generated" footers.
 - `pre-push`: rejects pushes to `main`/`develop`/`server`, except `main` to the `gitlab` mirror.
+  Tag pushes (`git push origin vX.Y.Z`) are allowed.
 
 Other rules:
 - 1 PR = 1 logical change (small PRs).
@@ -162,4 +192,5 @@ git checkout develop && git pull --ff-only && git fetch --prune
 - ❌ Opening a PR from a topic branch to `main`: always go through `develop`.
 - ❌ `git push --force` on `develop`/`main`.
 - ❌ Squashing the `develop → main` PR: history is lost.
-- ❌ Forgetting `git pull --ff-only` after a merge, or `git push gitlab main` after a promotion.
+- ❌ Forgetting `git pull --ff-only` after a merge.
+- ❌ Promoting with `gh pr merge` by hand: use `scripts/release.sh` so the release is tagged and mirrored.

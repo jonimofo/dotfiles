@@ -29,3 +29,7 @@ change, infra change, anything touching more than one file.
 - A question that comes up mid-work: answer it yourself if you can, else surface it once at the end.
 - Improvements spotted on the way are listed at the end as "Separately: ...", never done silently.
 - Multi-page or multi-item walkthroughs: ask which item next, never pick autonomously.
+- Commands the user runs for you (ansible, deploys, tests on another host) end with
+  `2>&1 | tee /tmp/<tool>-<target>-<step>.log`, one file per run (`check`, `apply1`, `apply2`).
+  Then read the log yourself, strip ANSI colors, and report recap, failures and `changed` tasks.
+  Ask for a pasted recap only when the log cannot be read.

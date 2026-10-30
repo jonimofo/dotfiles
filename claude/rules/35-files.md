@@ -9,6 +9,7 @@ Never write in the repo root. The project `CLAUDE.md` names its docs folder; wit
 | Lasting decisions, specs, runbooks | `<project docs>/*.md` (ARCHITECTURE, UI, FEATURE...) | yes |
 | Screenshots, rendered mockups | `<project docs>/design/` only when the user keeps them, else scratchpad | yes if kept |
 | Local notes (`todo.txt`, `TEMP/`) | gitignored | no |
+| Git worktrees (parallel branch, isolation from another session) | `/home/bgi/Repos/Sandbox/Worktrees/<repo>-<topic>`, removed once the branch is merged, with the user's OK | no |
 | Claude memory | `~/.claude/projects/<project>/memory/` | no, machine-local |
 | Global rules, skills, templates | `~/Repos/dotfiles/claude/` | yes, dotfiles |
 

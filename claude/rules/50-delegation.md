@@ -17,6 +17,8 @@ Planning and design are never delegated, even for research-heavy plans.
 
 ## Brief format (every agent gets this)
 
+0. Visible change: the validated ASCII mockup and the user's answers, verbatim. No mockup in the
+   brief, no brief.
 1. Goal in one sentence, and what is explicitly out of scope.
 2. Files and docs to read first (paths), decisions already made, patterns to reuse.
 3. Steps, in order.

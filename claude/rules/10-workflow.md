@@ -22,6 +22,12 @@ change, infra change, anything touching more than one file.
 - Skip words in the request: `go`, `gogo`, `ok go`, `do it`, `just <verb>`. Execute directly.
   Step-by-step still applies when the execution has more than one step.
 - When in doubt whether a task is trivial, it is not.
+- A change to what the user SEES (layout, position, grouping, wording, colour, size) is never
+  trivial, even as a follow-up round on an open PR and even when the request sounds precise.
+  It gets: a one-line restatement, the open questions (one screen each), an ASCII mockup in the
+  option preview, explicit validation. Only then the agent brief.
+- Any word that needs interpreting ("grouped by page", "the name", "more readable") is a question,
+  not an assumption.
 
 ## Mid-work rules
 
@@ -29,3 +35,7 @@ change, infra change, anything touching more than one file.
 - A question that comes up mid-work: answer it yourself if you can, else surface it once at the end.
 - Improvements spotted on the way are listed at the end as "Separately: ...", never done silently.
 - Multi-page or multi-item walkthroughs: ask which item next, never pick autonomously.
+- Commands the user runs for you (ansible, deploys, tests on another host) end with
+  `2>&1 | tee /tmp/<tool>-<target>-<step>.log`, one file per run (`check`, `apply1`, `apply2`).
+  Then read the log yourself, strip ANSI colors, and report recap, failures and `changed` tasks.
+  Ask for a pasted recap only when the log cannot be read.

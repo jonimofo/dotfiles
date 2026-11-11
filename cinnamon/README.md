@@ -5,7 +5,8 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 
 ## What lives here
 
-- `extensions/scale-wheel-switch@bgi/`: mouse wheel switches workspace while Scale is open.
+- `extensions/scale-wheel-switch@bgi/`: in Scale, a top strip of workspace thumbnails, and the
+  mouse wheel switches workspace.
   Tested on Cinnamon 6.4 (X11).
 
 ## Install

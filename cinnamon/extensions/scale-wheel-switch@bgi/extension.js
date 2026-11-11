@@ -2,6 +2,7 @@ const Clutter = imports.gi.Clutter;
 const Meta = imports.gi.Meta;
 const Main = imports.ui.main;
 const WorkspacesView = imports.ui.workspacesView;
+const WorkspaceStrip = require('./workspaceStrip');
 
 // One switch per slide animation, so a touchpad flick does not skip workspaces.
 const COOLDOWN_MS = WorkspacesView.WORKSPACE_SWITCH_TIME * 1000;
@@ -9,6 +10,8 @@ const COOLDOWN_MS = WorkspacesView.WORKSPACE_SWITCH_TIME * 1000;
 const SMOOTH_STEP = 1.0;
 
 let scrollId = 0;
+let overviewSignalIds = [];
+let strip = null;
 let lastSwitchTime = 0;
 let smoothAccumulator = 0;
 
@@ -62,11 +65,35 @@ function onCapturedEvent(actor, event) {
     return Clutter.EVENT_STOP;
 }
 
+function showStrip() {
+    if (!strip)
+        strip = new WorkspaceStrip.WorkspaceStrip();
+}
+
+function hideStrip() {
+    if (!strip)
+        return;
+
+    strip.destroy();
+    strip = null;
+}
+
 function init(metadata) {}
 
-// Captured on the stage: scroll events never bubble to the overview actors.
 function enable() {
+    // Captured on the stage: scroll events never bubble to the overview actors.
     scrollId = global.stage.connect('captured-event', onCapturedEvent);
+
+    // Connected before Scale's own 'showing' handler, which lays the windows out:
+    // the strip has already shrunk the big view when that runs.
+    overviewSignalIds = [
+        Main.overview.connect('showing', showStrip),
+        Main.overview.connect('hidden', hideStrip),
+    ];
+    if (Main.overview.visible && !Main.overview._hideInProgress) {
+        showStrip();
+        strip.repositionBigView();
+    }
 }
 
 function disable() {
@@ -74,5 +101,9 @@ function disable() {
         global.stage.disconnect(scrollId);
         scrollId = 0;
     }
+    for (const id of overviewSignalIds)
+        Main.overview.disconnect(id);
+    overviewSignalIds = [];
+    hideStrip();
     smoothAccumulator = 0;
 }

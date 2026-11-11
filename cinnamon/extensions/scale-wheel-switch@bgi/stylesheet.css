@@ -1,0 +1,22 @@
+.scale-strip {
+    padding: 12px;
+    spacing: 16px;
+    background-color: rgba(0, 0, 0, 0.45);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.scale-strip-thumbnail {
+    border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.scale-strip-thumbnail:selected {
+    border-color: #78aeed;
+}
+
+.scale-strip-label {
+    padding: 2px 8px;
+    font-size: 10pt;
+    font-weight: bold;
+    color: #ffffff;
+    background-color: rgba(0, 0, 0, 0.8);
+}

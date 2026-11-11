@@ -6,9 +6,10 @@ const Workspace = imports.ui.workspace;
 // Longest side of the window picture that follows the pointer: smaller than a strip
 // thumbnail, so the highlighted drop target stays visible around it.
 const DRAG_ACTOR_MAX_SIZE = 128;
-const DRAG_ACTOR_OPACITY = Math.round(255 * 0.8);
+const OPAQUE = 255;
+const DRAG_ACTOR_OPACITY = Math.round(OPAQUE * 0.8);
 // The window left in the big view while its picture is being dragged.
-const DRAG_SOURCE_OPACITY = Math.round(255 * 0.4);
+const DRAG_SOURCE_OPACITY = Math.round(OPAQUE * 0.4);
 
 let originalAddWindowClone = null;
 // windowClone -> its signal ids, for the clones of the Scale view currently open.
@@ -47,7 +48,7 @@ function makeDraggable(windowClone) {
     });
     draggable.connect('drag-end', () => {
         if (!windowClone.actor.is_finalized())
-            windowClone.actor.opacity = 255;
+            windowClone.actor.opacity = OPAQUE;
     });
     const destroyId = windowClone.actor.connect('destroy', () => draggableClones.delete(windowClone));
     draggableClones.set(windowClone, destroyId);

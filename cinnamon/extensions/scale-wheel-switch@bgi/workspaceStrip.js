@@ -13,6 +13,8 @@ const ACTIVE_PSEUDO_CLASS = 'selected';
 const DROP_TARGET_STYLE_CLASS = 'scale-strip-thumbnail-drop-target';
 // Windows are spread in a grid inside a thumbnail: free space kept around each one, in pixels.
 const WINDOW_GAP = 6;
+// Flags value of WorkspaceMonitor.positionWindows (its flag names are private to workspace.js).
+const POSITION_WITHOUT_ANIMATION = 0;
 
 // Same rule as Scale's big view, so a thumbnail shows exactly the windows Scale shows
 // (a sticky drop-down terminal would otherwise cover every thumbnail).
@@ -283,12 +285,15 @@ var WorkspaceStrip = class WorkspaceStrip {
 
     // What is left of the monitor for Scale's big view.
     getBigViewArea() {
-        const inset = this._getInset();
+        return this._getAreaBelow(this._getInset());
+    }
+
+    _getAreaBelow(topInset) {
         return {
             x: this._monitor.x,
-            y: this._monitor.y + inset,
+            y: this._monitor.y + topInset,
             width: this._monitor.width,
-            height: this._monitor.height - inset,
+            height: this._monitor.height - topInset,
         };
     }
 
@@ -342,12 +347,7 @@ var WorkspaceStrip = class WorkspaceStrip {
         if (!view)
             return;
 
-        const area = {
-            x: this._monitor.x,
-            y: this._monitor.y + topInset,
-            width: this._monitor.width,
-            height: this._monitor.height - topInset,
-        };
+        const area = this._getAreaBelow(topInset);
         for (const workspace of view._workspaces) {
             const workspaceMonitor = workspace._monitors[this._monitorIndex];
             if (!workspaceMonitor)
@@ -355,7 +355,7 @@ var WorkspaceStrip = class WorkspaceStrip {
             workspaceMonitor.setGeometry(area.x, area.y, area.width, area.height, workspaceMonitor._margin);
             workspaceMonitor._monitor = topInset > 0 ? area : this._monitor;
             if (reposition) {
-                workspaceMonitor.positionWindows(0);
+                workspaceMonitor.positionWindows(POSITION_WITHOUT_ANIMATION);
                 workspaceMonitor._updateEmptyPlaceholder();
             }
         }

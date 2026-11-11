@@ -10,6 +10,11 @@ const MAX_RESULTS = 12;
 const RESULT_COLUMNS = 6;
 const RESULT_ICON_SIZE = 64;
 const SELECTED_PSEUDO_CLASS = 'selected';
+const OPAQUE = 255;
+const TRANSPARENT = 0;
+// Unicode range of control characters, which a key can produce but are not text.
+const FIRST_PRINTABLE_CODE_POINT = 0x20;
+const DELETE_CODE_POINT = 0x7f;
 // Keys held with one of these are shortcuts, never text for the search.
 const SHORTCUT_MODIFIERS = Clutter.ModifierType.CONTROL_MASK | Clutter.ModifierType.MOD1_MASK |
     Clutter.ModifierType.MOD4_MASK | Clutter.ModifierType.SUPER_MASK;
@@ -58,6 +63,14 @@ function buildIndex() {
         genericName: normalize(app.get_app_info().get_generic_name()),
         keywords: normalize(app.get_keywords()),
     }));
+}
+
+function isPrintable(character) {
+    if (!character)
+        return false;
+
+    const codePoint = character.codePointAt(0);
+    return codePoint >= FIRST_PRINTABLE_CODE_POINT && codePoint !== DELETE_CODE_POINT;
 }
 
 function rankMatch(entry, pattern) {
@@ -163,7 +176,7 @@ var AppSearch = class AppSearch {
     _setWindowsVisible(isVisible) {
         const view = Main.overview.workspacesView;
         if (view)
-            view.actor.opacity = isVisible ? 255 : 0;
+            view.actor.opacity = isVisible ? OPAQUE : TRANSPARENT;
     }
 
     _buildTiles() {
@@ -270,8 +283,7 @@ var AppSearch = class AppSearch {
             return false;
 
         const character = event.get_key_unicode();
-        const isPrintable = character && character.codePointAt(0) >= 0x20 && character.codePointAt(0) !== 0x7f;
-        if (!isPrintable || (character === ' ' && !allowSpace))
+        if (!isPrintable(character) || (character === ' ' && !allowSpace))
             return false;
 
         this._entry.set_text(this._getText() + character);

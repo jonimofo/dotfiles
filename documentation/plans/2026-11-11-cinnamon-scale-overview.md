@@ -110,6 +110,7 @@ The "Enter -> launch first" line is an annotation, not text in the interface.
 | `workspaceStrip.js` | Strip, thumbnails, grid layout, click, drop target, big view inset |
 | `windowDrag.js` | Makes Scale's window clones draggable |
 | `superKey.js` | Super hotkey |
+| `uiHelpers.js` | Shared constants, click swallowing, natural sizes, modal checks |
 | `stylesheet.css` | Colors, paddings, sizes |
 
 Findings worth keeping:

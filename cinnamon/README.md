@@ -58,7 +58,9 @@ which is `Super_L::Super_R` in that file.
 journalctl --user -b --since "-2 min" --no-pager | grep -E 'scale-wheel|JS ERROR'
 ```
 
-No Cinnamon restart needed.
+No Cinnamon restart needed. One exception: St keeps the computed style of a class it has
+already drawn, so a changed rule for an existing class in `stylesheet.css` may only show
+after the next login.
 
 ## Uninstall
 
@@ -83,9 +85,29 @@ Then give Super back to the Menu (see above).
 
 Design record: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../documentation/plans/2026-11-11-cinnamon-scale-overview.md).
 
-The extension patches three private parts of Cinnamon 6.4, all undone when it is disabled.
-Check them first after a Cinnamon upgrade:
+The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
+Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
 
-- `WorkspaceMonitor.setGeometry` and `_monitor`, to push Scale's windows below the header.
-- `WorkspaceMonitor.prototype._addWindowClone`, to make Scale's windows draggable.
-- `Workspace.prototype._onKeyPress`, to send typed keys to the search first.
+Prototype patches (2):
+
+- `WorkspaceMonitor.prototype._addWindowClone` (`workspace.js`), to make Scale's windows draggable.
+- `Workspace.prototype._onKeyPress` (`workspace.js`), to send typed keys to the search first.
+
+Private fields and methods read, called or written:
+
+| Object | Members | Used for |
+|---|---|---|
+| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the header is inserted, close animation in progress |
+| `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written) | reach each workspace, hide the windows during a search |
+| `Workspace` | `_monitors` | the per-monitor object of the primary monitor |
+| `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
+| `WindowClone` | `getDragActor`, `getDragActorSource`, `_draggable` (added to each instance) | the drag picture |
+| dnd `Draggable` | `buttonPressEventId`, `destroyEventId` | removing the drag handlers on disable |
+| `Main` | `modalCount` | is Scale the only modal |
+
+Assumptions about behaviour:
+
+- Handlers of the overview's `showing` signal run in connection order, so the header shrinks
+  the big view before Scale lays its windows out.
+- `WorkspacesView.updateWindowPositions()` is broken in 6.4, so it is not used.
+- `extension.sh reload` calls the D-Bus method `org.Cinnamon.ReloadXlet(uuid, "EXTENSION")`.

@@ -9,6 +9,36 @@ My Cinnamon extensions, versioned. Each one is symlinked into
   Tested on Cinnamon 6.4 (X11).
 - `extension.sh`: enable, disable or reload one extension, keeping the others enabled.
 - `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
+- `cinnamon_custom_shortcuts.dconf`: my custom keyboard shortcuts (see below).
+
+## Custom shortcuts
+
+Restored from the GNOME backup (`gnome/gnome_custom_shortcuts.dconf`) on 2026-11-11.
+
+| Key | Runs |
+|---|---|
+| Ctrl+Alt+P | Flameshot capture |
+| Super+F | FSearch |
+| Ctrl+Space | `rofi/rofi_url_search.sh` |
+| Ctrl+Shift+Alt+P | Display settings |
+| Shift+Alt+D | Night Light settings |
+| Shift+Alt+C | Bluetooth (blueman) |
+| Super+E | `scripts/tdrop_toggle_filemanager.sh`, dropdown Nemo |
+
+Super+E was Cinnamon's "open Home folder"; that action keeps only the Explorer media key.
+Print (screenshot) and Ctrl+Alt+Escape (restart Cinnamon) are left to Cinnamon on purpose.
+
+Backup after a change, restore on a new machine:
+
+```bash
+dconf dump /org/cinnamon/desktop/keybindings/custom-keybindings/ > ~/Repos/dotfiles/cinnamon/cinnamon_custom_shortcuts.dconf
+
+dconf load /org/cinnamon/desktop/keybindings/custom-keybindings/ < ~/Repos/dotfiles/cinnamon/cinnamon_custom_shortcuts.dconf
+gsettings set org.cinnamon.desktop.keybindings custom-list "['custom0', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'custom6']"
+gsettings set org.cinnamon.desktop.keybindings.media-keys home "['XF86Explorer']"
+```
+
+The dump does not hold `custom-list`: Cinnamon ignores a shortcut that is not listed there.
 
 ## What scale-wheel-switch does
 

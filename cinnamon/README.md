@@ -8,6 +8,37 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 - `extensions/scale-wheel-switch@bgi/`: turns Scale into a GNOME-style overview.
   Tested on Cinnamon 6.4 (X11).
 - `extension.sh`: enable, disable or reload one extension, keeping the others enabled.
+- `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
+- `cinnamon_keybindings.dconf`: my keyboard shortcuts, custom and changed built-in ones (see below).
+
+## Custom shortcuts
+
+Restored from the GNOME backup (`gnome/gnome_custom_shortcuts.dconf`) on 2026-11-11.
+
+| Key | Runs |
+|---|---|
+| Ctrl+Alt+P | Flameshot capture |
+| Super+F | FSearch |
+| Ctrl+Space | `rofi/rofi_url_search.sh` |
+| Ctrl+Shift+Alt+P | Display settings |
+| Shift+Alt+D | Night Light settings |
+| Shift+Alt+C | Bluetooth (blueman) |
+| Super+E | `scripts/tdrop_toggle_filemanager.sh`, dropdown Nemo |
+
+Super+E was Cinnamon's "open Home folder"; that action keeps only the Explorer media key.
+Print (screenshot) and Ctrl+Alt+Escape (restart Cinnamon) are left to Cinnamon on purpose.
+
+Backup after a change, restore on a new machine:
+
+```bash
+dconf dump /org/cinnamon/desktop/keybindings/ > ~/Repos/dotfiles/cinnamon/cinnamon_keybindings.dconf
+
+dconf load /org/cinnamon/desktop/keybindings/ < ~/Repos/dotfiles/cinnamon/cinnamon_keybindings.dconf
+```
+
+The dump covers the whole keybindings path, not only `custom-keybindings/`: it also holds
+`custom-list`, without which Cinnamon ignores a custom shortcut, and the changed built-in
+bindings (`media-keys`, `wm`).
 
 ## What scale-wheel-switch does
 

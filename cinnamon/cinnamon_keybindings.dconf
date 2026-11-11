@@ -1,0 +1,44 @@
+[/]
+custom-list=['custom0', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'custom6']
+
+[custom-keybindings/custom0]
+binding=['<Primary><Alt>p']
+command='/usr/bin/flameshot gui'
+name='flameshot'
+
+[custom-keybindings/custom1]
+binding=['<Super>f']
+command='/usr/bin/fsearch'
+name='FSearch'
+
+[custom-keybindings/custom2]
+binding=['<Primary>space']
+command='/home/bgi/Repos/dotfiles/rofi/rofi_url_search.sh'
+name='rofi URL search'
+
+[custom-keybindings/custom3]
+binding=['<Primary><Shift><Alt>p']
+command='cinnamon-settings display'
+name='Display settings'
+
+[custom-keybindings/custom4]
+binding=['<Shift><Alt>d']
+command='cinnamon-settings nightlight'
+name='Night Light settings'
+
+[custom-keybindings/custom5]
+binding=['<Shift><Alt>c']
+command='blueman-manager'
+name='Bluetooth'
+
+[custom-keybindings/custom6]
+binding=['<Super>e']
+command='/home/bgi/Repos/dotfiles/scripts/tdrop_toggle_filemanager.sh'
+name='Dropdown Nemo'
+
+[media-keys]
+home=['XF86Explorer']
+
+[wm]
+maximize=['<Super>Up']
+push-tile-up=@as []

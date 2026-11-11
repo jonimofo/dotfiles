@@ -21,6 +21,7 @@ thumbnail per workspace, then Scale's windows.
 - Dropping a window on a thumbnail moves it to that workspace.
 - The mouse wheel switches workspace.
 - A middle click on a window does nothing (stock Scale closes the application).
+- A right click on a window opens it, like a left click (stock Scale shows the window menu).
 
 ## Install
 
@@ -92,7 +93,7 @@ Everything it changes is undone when it is disabled. Check this list after a Cin
 Prototype patches (3):
 
 - `WorkspaceMonitor.prototype._addWindowClone` (`workspace.js`), to make Scale's windows draggable.
-- `WindowClone.prototype._onButtonRelease` (`workspace.js`), so a middle click no longer closes the application.
+- `WindowClone.prototype._onButtonRelease` (`workspace.js`), so a middle click no longer closes the application and a right click opens the window.
 - `Workspace.prototype._onKeyPress` (`workspace.js`), to send typed keys to the search first.
 
 Private fields and methods read, called or written:

@@ -23,6 +23,7 @@ curl -fsSL -o "$dl/Dracula-cursors.tar.xz" https://github.com/dracula/gtk/releas
 mkdir -p ~/.themes ~/.icons
 tar -xJf "$dl/Dracula.tar.xz" -C ~/.themes Dracula
 tar -xJf "$dl/Dracula-cursors.tar.xz" -C ~/.icons
+rm -r "$dl"
 ```
 
 The theme archive also holds variants (`Dracula-slim`, `Dracula-standard-buttons`, ...).
@@ -49,9 +50,9 @@ CSS. On this machine: Text Editor, Calculator, Files (Nautilus), System Monitor,
 Analyzer, Image Viewer (Loupe), Font Viewer. Disks, Seahorse and Nemo are GTK3.
 
 ```bash
-ln -s ~/.themes/Dracula/gtk-4.0/gtk.css ~/.config/gtk-4.0/gtk.css
-ln -s ~/.themes/Dracula/gtk-4.0/gtk-dark.css ~/.config/gtk-4.0/gtk-dark.css
-ln -s ~/.themes/Dracula/assets ~/.config/assets
+ln -sfn ~/.themes/Dracula/gtk-4.0/gtk.css ~/.config/gtk-4.0/gtk.css
+ln -sfn ~/.themes/Dracula/gtk-4.0/gtk-dark.css ~/.config/gtk-4.0/gtk-dark.css
+ln -sfn ~/.themes/Dracula/assets ~/.config/assets
 ```
 
 The CSS loads its images from `../assets`, relative to `~/.config/gtk-4.0/`, hence

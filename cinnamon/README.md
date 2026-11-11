@@ -20,6 +20,7 @@ thumbnail per workspace, then Scale's windows.
 - A click on a thumbnail switches workspace. Scale stays open.
 - Dropping a window on a thumbnail moves it to that workspace.
 - The mouse wheel switches workspace.
+- A middle click on a window does nothing (stock Scale closes the application).
 
 ## Install
 
@@ -88,9 +89,10 @@ Design record: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
 
-Prototype patches (2):
+Prototype patches (3):
 
 - `WorkspaceMonitor.prototype._addWindowClone` (`workspace.js`), to make Scale's windows draggable.
+- `WindowClone.prototype._onButtonRelease` (`workspace.js`), so a middle click no longer closes the application.
 - `Workspace.prototype._onKeyPress` (`workspace.js`), to send typed keys to the search first.
 
 Private fields and methods read, called or written:

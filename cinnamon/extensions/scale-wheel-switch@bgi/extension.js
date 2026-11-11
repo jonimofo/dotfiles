@@ -5,6 +5,7 @@ const WorkspacesView = imports.ui.workspacesView;
 const WorkspaceStrip = require('./workspaceStrip');
 const WindowDrag = require('./windowDrag');
 const SuperKey = require('./superKey');
+const AppSearch = require('./appSearch');
 
 // One switch per slide animation, so a touchpad flick does not skip workspaces.
 const COOLDOWN_MS = WorkspacesView.WORKSPACE_SWITCH_TIME * 1000;
@@ -14,6 +15,7 @@ const SMOOTH_STEP = 1.0;
 let scrollId = 0;
 let overviewSignalIds = [];
 let strip = null;
+let search = null;
 let lastSwitchTime = 0;
 let smoothAccumulator = 0;
 
@@ -67,15 +69,22 @@ function onCapturedEvent(actor, event) {
     return Clutter.EVENT_STOP;
 }
 
-function showStrip() {
-    if (!strip)
-        strip = new WorkspaceStrip.WorkspaceStrip();
+// Top of the primary monitor, in order: search field, workspace strip, then Scale's windows.
+function showHeader() {
+    if (strip)
+        return;
+
+    search = new AppSearch.AppSearch();
+    strip = new WorkspaceStrip.WorkspaceStrip(search.getHeight());
+    search.setResultsArea(strip.getBigViewArea());
 }
 
-function hideStrip() {
+function hideHeader() {
     if (!strip)
         return;
 
+    search.destroy();
+    search = null;
     strip.destroy();
     strip = null;
 }
@@ -89,13 +98,14 @@ function enable() {
     // Connected before Scale's own 'showing' handler, which lays the windows out:
     // the strip has already shrunk the big view when that runs.
     overviewSignalIds = [
-        Main.overview.connect('showing', showStrip),
-        Main.overview.connect('hidden', hideStrip),
+        Main.overview.connect('showing', showHeader),
+        Main.overview.connect('hidden', hideHeader),
     ];
     WindowDrag.enable();
     SuperKey.enable();
+    AppSearch.enable();
     if (Main.overview.visible && !Main.overview._hideInProgress) {
-        showStrip();
+        showHeader();
         strip.repositionBigView();
     }
 }
@@ -108,7 +118,8 @@ function disable() {
     for (const id of overviewSignalIds)
         Main.overview.disconnect(id);
     overviewSignalIds = [];
-    hideStrip();
+    hideHeader();
+    AppSearch.disable();
     WindowDrag.disable();
     SuperKey.disable();
     smoothAccumulator = 0;

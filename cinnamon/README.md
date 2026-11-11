@@ -5,8 +5,9 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 
 ## What lives here
 
-- `extensions/scale-wheel-switch@bgi/`: Super toggles Scale; in Scale, a top strip of workspace
-  thumbnails (click to switch, drop a window to move it), and the mouse wheel switches workspace.
+- `extensions/scale-wheel-switch@bgi/`: Super toggles Scale; in Scale, typing searches and
+  launches applications, a strip of workspace thumbnails switches workspace (click) and moves
+  windows (drop), and the mouse wheel switches workspace.
   Tested on Cinnamon 6.4 (X11).
 
 ## Install

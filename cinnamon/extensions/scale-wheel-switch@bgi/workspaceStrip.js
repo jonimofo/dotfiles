@@ -239,10 +239,12 @@ class WorkspaceThumbnail {
     }
 }
 
-// Top strip of workspace thumbnails, shown on the primary monitor while Scale is open.
-// The big Scale view is pushed below it for as long as the strip exists.
+// Strip of workspace thumbnails, shown on the primary monitor while Scale is open, @topOffset
+// pixels below the top of the monitor. The big Scale view is pushed below it for as long
+// as the strip exists.
 var WorkspaceStrip = class WorkspaceStrip {
-    constructor() {
+    constructor(topOffset = 0) {
+        this._topOffset = topOffset;
         this._monitorIndex = Main.layoutManager.primaryIndex;
         this._monitor = Main.layoutManager.primaryMonitor;
         this._signals = new SignalManager.SignalManager(null);
@@ -255,7 +257,7 @@ var WorkspaceStrip = class WorkspaceStrip {
         this.actor = new St.BoxLayout({ style_class: 'scale-strip', reactive: true });
         this.actor.connect('button-press-event', () => Clutter.EVENT_STOP);
         this.actor.connect('button-release-event', () => Clutter.EVENT_STOP);
-        this.actor.set_position(this._monitor.x, this._monitor.y);
+        this.actor.set_position(this._monitor.x, this._monitor.y + topOffset);
         this.actor.set_width(this._monitor.width);
 
         // Below the cover pane, which blocks input during the Scale open and close animations.
@@ -263,7 +265,7 @@ var WorkspaceStrip = class WorkspaceStrip {
         overviewGroup.insert_child_below(this.actor, Main.overview._coverPane);
 
         this._buildThumbnails();
-        this._insetBigView(this._getHeight());
+        this._insetBigView(this._getInset());
 
         const display = global.display;
         this._signals.connect(display, 'restacked', this._queueRefresh, this);
@@ -273,9 +275,21 @@ var WorkspaceStrip = class WorkspaceStrip {
         this._signals.connect(global.workspace_manager, 'notify::n-workspaces', this._onWorkspacesChanged, this);
     }
 
-    _getHeight() {
+    // Height taken at the top of the monitor, down to the bottom edge of the strip.
+    _getInset() {
         const [, naturalHeight] = this.actor.get_preferred_height(-1);
-        return Math.round(naturalHeight);
+        return this._topOffset + Math.round(naturalHeight);
+    }
+
+    // What is left of the monitor for Scale's big view.
+    getBigViewArea() {
+        const inset = this._getInset();
+        return {
+            x: this._monitor.x,
+            y: this._monitor.y + inset,
+            width: this._monitor.width,
+            height: this._monitor.height - inset,
+        };
     }
 
     _buildThumbnails() {
@@ -304,7 +318,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
     _onWorkspacesChanged() {
         this._buildThumbnails();
-        this._insetBigView(this._getHeight());
+        this._insetBigView(this._getInset());
     }
 
     // Several window signals fire for one change: refresh once, when idle.
@@ -349,7 +363,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
     // For a strip created while Scale is already open: Scale has laid its windows out full height.
     repositionBigView() {
-        this._insetBigView(this._getHeight(), true);
+        this._insetBigView(this._getInset(), true);
     }
 
     destroy() {

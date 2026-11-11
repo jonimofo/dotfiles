@@ -14,7 +14,7 @@ My Cinnamon extensions and applets, versioned. Each one is symlinked into
 - `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
   Enable adds it at the right end of panel1's right zone.
 - `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
-- `cinnamon_custom_shortcuts.dconf`: my custom keyboard shortcuts (see below).
+- `cinnamon_keybindings.dconf`: my keyboard shortcuts, custom and changed built-in ones (see below).
 
 ## Custom shortcuts
 
@@ -36,14 +36,14 @@ Print (screenshot) and Ctrl+Alt+Escape (restart Cinnamon) are left to Cinnamon o
 Backup after a change, restore on a new machine:
 
 ```bash
-dconf dump /org/cinnamon/desktop/keybindings/custom-keybindings/ > ~/Repos/dotfiles/cinnamon/cinnamon_custom_shortcuts.dconf
+dconf dump /org/cinnamon/desktop/keybindings/ > ~/Repos/dotfiles/cinnamon/cinnamon_keybindings.dconf
 
-dconf load /org/cinnamon/desktop/keybindings/custom-keybindings/ < ~/Repos/dotfiles/cinnamon/cinnamon_custom_shortcuts.dconf
-gsettings set org.cinnamon.desktop.keybindings custom-list "['custom0', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'custom6']"
-gsettings set org.cinnamon.desktop.keybindings.media-keys home "['XF86Explorer']"
+dconf load /org/cinnamon/desktop/keybindings/ < ~/Repos/dotfiles/cinnamon/cinnamon_keybindings.dconf
 ```
 
-The dump does not hold `custom-list`: Cinnamon ignores a shortcut that is not listed there.
+The dump covers the whole keybindings path, not only `custom-keybindings/`: it also holds
+`custom-list`, without which Cinnamon ignores a custom shortcut, and the changed built-in
+bindings (`media-keys`, `wm`).
 
 ## Custom shortcut: dropdown Nemo
 

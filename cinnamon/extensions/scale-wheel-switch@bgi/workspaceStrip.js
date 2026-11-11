@@ -2,6 +2,7 @@ const Clutter = imports.gi.Clutter;
 const Mainloop = imports.mainloop;
 const Meta = imports.gi.Meta;
 const St = imports.gi.St;
+const DND = imports.ui.dnd;
 const Main = imports.ui.main;
 const SignalManager = imports.misc.signalManager;
 const WindowUtils = imports.misc.windowUtils;
@@ -9,6 +10,7 @@ const WindowUtils = imports.misc.windowUtils;
 // Thumbnail size as a fraction of the primary monitor. Colors and spacing are in stylesheet.css.
 const THUMBNAIL_SCALE = 0.12;
 const ACTIVE_PSEUDO_CLASS = 'selected';
+const DROP_TARGET_STYLE_CLASS = 'scale-strip-thumbnail-drop-target';
 
 // Same rule as Scale's big view, so a thumbnail shows exactly the windows Scale shows
 // (a sticky drop-down terminal would otherwise cover every thumbnail).
@@ -51,6 +53,10 @@ class WorkspaceThumbnail {
         content.add_actor(label);
 
         this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
+        this.actor._delegate = this;
+        this._dragSource = null;
+        this._dragEndId = 0;
+        this.actor.connect('destroy', () => this._clearDropTarget());
         this._pressed = false;
         this.actor.connect('button-press-event', this._onButtonPress.bind(this));
         this.actor.connect('button-release-event', this._onButtonRelease.bind(this));
@@ -114,6 +120,58 @@ class WorkspaceThumbnail {
         this._windows.add_actor(clone);
     }
 
+    // Drop target interface of imports.ui.dnd, called while a Scale window is dragged over.
+    handleDragOver(source) {
+        if (!this._canDrop(source))
+            return DND.DragMotionResult.CONTINUE;
+
+        this._markDropTarget(source);
+        return DND.DragMotionResult.MOVE_DROP;
+    }
+
+    handleDragOut() {
+        this._clearDropTarget();
+    }
+
+    acceptDrop(source) {
+        if (!this._canDrop(source))
+            return false;
+
+        this._clearDropTarget();
+        source.metaWindow.change_workspace(this.metaWorkspace);
+        return true;
+    }
+
+    // A sticky window is on every workspace already; a window on this workspace has nowhere to go.
+    _canDrop(source) {
+        const metaWindow = source && source.metaWindow;
+        if (!metaWindow || metaWindow.is_on_all_workspaces())
+            return false;
+
+        return metaWindow.get_workspace() !== this.metaWorkspace;
+    }
+
+    // dnd only reports a drag leaving when the pointer moves out: a drag cancelled
+    // with Escape over the thumbnail is caught through the draggable's 'drag-end'.
+    _markDropTarget(source) {
+        if (this._dragSource)
+            return;
+
+        this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS);
+        this._dragSource = source._draggable;
+        this._dragEndId = this._dragSource.connect('drag-end', () => this._clearDropTarget());
+    }
+
+    _clearDropTarget() {
+        if (!this._dragSource)
+            return;
+
+        this._dragSource.disconnect(this._dragEndId);
+        this._dragSource = null;
+        this._dragEndId = 0;
+        this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS);
+    }
+
     setActive(isActive) {
         if (isActive)
             this.actor.add_style_pseudo_class(ACTIVE_PSEUDO_CLASS);
@@ -133,7 +191,11 @@ var WorkspaceStrip = class WorkspaceStrip {
         this._refreshIdleId = 0;
         this._thumbnails = [];
 
-        this.actor = new St.BoxLayout({ style_class: 'scale-strip' });
+        // Reactive and swallowing clicks: a click in the gaps must not reach Scale's background,
+        // which closes Scale on an empty workspace.
+        this.actor = new St.BoxLayout({ style_class: 'scale-strip', reactive: true });
+        this.actor.connect('button-press-event', () => Clutter.EVENT_STOP);
+        this.actor.connect('button-release-event', () => Clutter.EVENT_STOP);
         this.actor.set_position(this._monitor.x, this._monitor.y);
         this.actor.set_width(this._monitor.width);
 

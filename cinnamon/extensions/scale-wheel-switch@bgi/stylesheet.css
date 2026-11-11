@@ -13,6 +13,11 @@
     border-color: #78aeed;
 }
 
+.scale-strip-thumbnail-drop-target,
+.scale-strip-thumbnail-drop-target:selected {
+    border-color: #ffffff;
+}
+
 .scale-strip-label {
     padding: 2px 8px;
     font-size: 10pt;

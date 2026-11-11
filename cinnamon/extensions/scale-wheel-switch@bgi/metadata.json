@@ -1,7 +1,7 @@
 {
     "uuid": "scale-wheel-switch@bgi",
     "name": "Scale Wheel Switch",
-    "description": "Switch workspace with the mouse wheel while Scale is open, like the GNOME overview.",
+    "description": "GNOME-style overview for Scale: Super toggles it, type to search and launch apps, a workspace strip to switch (click, wheel) and to move windows (drag and drop).",
     "cinnamon-version": ["6.4"],
     "version": "1.0.0",
     "url": "https://github.com/jonimofo/dotfiles"

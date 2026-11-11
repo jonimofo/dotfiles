@@ -6,6 +6,7 @@ const WorkspaceStrip = require('./workspaceStrip');
 const WindowDrag = require('./windowDrag');
 const SuperKey = require('./superKey');
 const AppSearch = require('./appSearch');
+const UiHelpers = require('./uiHelpers');
 
 // One switch per slide animation, so a touchpad flick does not skip workspaces.
 const COOLDOWN_MS = WorkspacesView.WORKSPACE_SWITCH_TIME * 1000;
@@ -58,7 +59,7 @@ function switchWorkspace(direction) {
 function onCapturedEvent(actor, event) {
     if (event.type() !== Clutter.EventType.SCROLL)
         return Clutter.EVENT_PROPAGATE;
-    if (!Main.overview.visible || Main.overview.animationInProgress)
+    if (!UiHelpers.isScaleTheOnlyModal() || Main.overview.animationInProgress)
         return Clutter.EVENT_PROPAGATE;
 
     const direction = directionFromEvent(event);
@@ -71,27 +72,45 @@ function onCapturedEvent(actor, event) {
 
 // Top of the primary monitor, in order: search field, workspace strip, then Scale's windows.
 function showHeader() {
-    if (strip)
+    if (search || strip)
         return;
 
-    search = new AppSearch.AppSearch();
-    strip = new WorkspaceStrip.WorkspaceStrip(search.getHeight());
-    search.setResultsArea(strip.getBigViewArea());
+    try {
+        search = new AppSearch.AppSearch();
+        strip = new WorkspaceStrip.WorkspaceStrip(search.getHeight());
+        search.setResultsArea(strip.getBigViewArea());
+    } catch (e) {
+        hideHeader();
+        throw e;
+    }
 }
 
+// Each part is torn down on its own: one may exist without the other after a failure.
 function hideHeader() {
-    if (!strip)
-        return;
-
-    search.destroy();
-    search = null;
-    strip.destroy();
-    strip = null;
+    if (search) {
+        search.destroy();
+        search = null;
+    }
+    if (strip) {
+        strip.destroy();
+        strip = null;
+    }
 }
 
 function init(metadata) {}
 
+// Cinnamon never calls disable() after a failed enable(): undo here, or the handlers
+// and prototype patches would stay until Cinnamon restarts.
 function enable() {
+    try {
+        enableAll();
+    } catch (e) {
+        disable();
+        throw e;
+    }
+}
+
+function enableAll() {
     // Captured on the stage: scroll events never bubble to the overview actors.
     scrollId = global.stage.connect('captured-event', onCapturedEvent);
 

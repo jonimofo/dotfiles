@@ -1,4 +1,5 @@
 const Main = imports.ui.main;
+const UiHelpers = require('./uiHelpers');
 
 const HOTKEY_NAME = 'scale-wheel-switch-toggle-scale';
 // Cinnamon keybinding string: two bindings separated by '::'. A bare modifier fires when
@@ -16,21 +17,21 @@ function toggleScale() {
     if (Main.expo.visible)
         return;
 
-    // Another modal is on top (menu, dialog, window drag in Scale): leave it alone.
-    const scaleModalCount = Main.overview.visible ? 1 : 0;
-    if (Main.modalCount !== scaleModalCount)
-        return;
-
-    if (Main.overview.visible) {
+    if (UiHelpers.isScaleTheOnlyModal()) {
         Main.overview.hide();
         return;
     }
-    if (Date.now() - lastHideTime >= REOPEN_GUARD_MS)
+    if (UiHelpers.isNothingModal() && Date.now() - lastHideTime >= REOPEN_GUARD_MS)
         Main.overview.show();
 }
 
 function enable() {
+    if (hidingId)
+        return;
+
     hidingId = Main.overview.connect('hiding', () => { lastHideTime = Date.now(); });
+    // addHotKey keeps the old callback when the name and keys are already registered.
+    Main.keybindingManager.removeHotKey(HOTKEY_NAME);
     const isBound = Main.keybindingManager.addHotKey(HOTKEY_NAME, HOTKEY_BINDINGS, toggleScale);
     if (!isBound)
         global.logError(`[scale-wheel-switch] Super is already bound elsewhere (Menu applet?): see cinnamon/README.md`);

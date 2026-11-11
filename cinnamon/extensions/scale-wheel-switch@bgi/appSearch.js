@@ -4,14 +4,15 @@ const CMenu = imports.gi.CMenu;
 const St = imports.gi.St;
 const Main = imports.ui.main;
 const Workspace = imports.ui.workspace;
+const UiHelpers = require('./uiHelpers');
 
-// Layout of the result grid. Colors, paddings and the tile width are in stylesheet.css.
+// Translated by Cinnamon itself: the Menu applet uses the same string.
+const SEARCH_PLACEHOLDER = "Type to search...";
+// Layout of the result grid. Colors, paddings, spacing and the tile width are in stylesheet.css.
 const MAX_RESULTS = 12;
-const RESULT_COLUMNS = 6;
+// Fewer columns are used when the monitor is too narrow for this many tiles.
+const MAX_RESULT_COLUMNS = 6;
 const RESULT_ICON_SIZE = 64;
-const SELECTED_PSEUDO_CLASS = 'selected';
-const OPAQUE = 255;
-const TRANSPARENT = 0;
 // Unicode range of control characters, which a key can produce but are not text.
 const FIRST_PRINTABLE_CODE_POINT = 0x20;
 const DELETE_CODE_POINT = 0x7f;
@@ -108,27 +109,26 @@ var AppSearch = class AppSearch {
         this._index = null;
         this._apps = [];
         this._tiles = [];
+        this._columns = MAX_RESULT_COLUMNS;
         this._selected = 0;
 
         // Not reactive: a click must not move the keyboard focus away from Scale.
         this._entry = new St.Entry({
             style_class: 'scale-search-entry',
-            hint_text: _("Type to search..."),
+            hint_text: _(SEARCH_PLACEHOLDER),
             can_focus: false,
         });
         this._entry.clutter_text.connect('text-changed', () => this._onTextChanged());
 
         this.actor = new St.Bin({ style_class: 'scale-search-bar', child: this._entry, reactive: true });
-        this.actor.connect('button-press-event', () => Clutter.EVENT_STOP);
-        this.actor.connect('button-release-event', () => Clutter.EVENT_STOP);
+        UiHelpers.swallowClicks(this.actor);
         this.actor.set_position(this._monitor.x, this._monitor.y);
         this.actor.set_width(this._monitor.width);
         Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
 
         // Above Scale's windows, which live in the overlay group: it covers them and takes their clicks.
-        this._results = new St.BoxLayout({ style_class: 'scale-search-results', vertical: true, reactive: true });
-        this._results.connect('button-press-event', () => Clutter.EVENT_STOP);
-        this._results.connect('button-release-event', () => Clutter.EVENT_STOP);
+        this._results = new St.BoxLayout({ style_class: 'scale-search-grid', vertical: true, reactive: true });
+        UiHelpers.swallowClicks(this._results);
         this._results.hide();
         global.overlay_group.add_actor(this._results);
 
@@ -139,8 +139,7 @@ var AppSearch = class AppSearch {
     }
 
     getHeight() {
-        const [, naturalHeight] = this.actor.get_preferred_height(-1);
-        return Math.round(naturalHeight);
+        return UiHelpers.getNaturalHeight(this.actor);
     }
 
     // The grid takes the area of Scale's big view, below the strip.
@@ -176,7 +175,7 @@ var AppSearch = class AppSearch {
     _setWindowsVisible(isVisible) {
         const view = Main.overview.workspacesView;
         if (view)
-            view.actor.opacity = isVisible ? OPAQUE : TRANSPARENT;
+            view.actor.opacity = isVisible ? UiHelpers.OPAQUE : UiHelpers.TRANSPARENT;
     }
 
     _buildTiles() {
@@ -185,15 +184,36 @@ var AppSearch = class AppSearch {
 
         let row = null;
         this._apps.forEach((app, i) => {
-            if (i % RESULT_COLUMNS === 0) {
-                row = new St.BoxLayout({ style_class: 'scale-search-row', x_align: Clutter.ActorAlign.CENTER });
-                this._results.add_actor(row);
-            }
             const tile = this._createTile(app, i);
             this._tiles.push(tile);
+            if (i === 0) {
+                row = this._addRow();
+                row.add_actor(tile);
+                this._columns = this._countColumns(row, tile);
+                return;
+            }
+            if (i % this._columns === 0)
+                row = this._addRow();
             row.add_actor(tile);
         });
         this._syncSelection();
+    }
+
+    _addRow() {
+        const row = new St.BoxLayout({ style_class: 'scale-search-row', x_align: Clutter.ActorAlign.CENTER });
+        this._results.add_actor(row);
+        return row;
+    }
+
+    // How many tiles fit in the width of the grid, measured on the first tile of the first
+    // row: sizes come from the stylesheet, and are only known once the actors are on the stage.
+    _countColumns(row, tile) {
+        const resultsNode = this._results.get_theme_node();
+        const padding = resultsNode.get_padding(St.Side.LEFT) + resultsNode.get_padding(St.Side.RIGHT);
+        const spacing = row.get_theme_node().get_length('spacing');
+        const tileWidth = UiHelpers.getNaturalWidth(tile);
+        const fitting = Math.floor((this._results.width - padding + spacing) / (tileWidth + spacing));
+        return Math.min(MAX_RESULT_COLUMNS, Math.max(1, fitting));
     }
 
     _createTile(app, index) {
@@ -205,21 +225,21 @@ var AppSearch = class AppSearch {
         });
         tile.add_actor(new St.Bin({ child: app.create_icon_texture(RESULT_ICON_SIZE) }));
         tile.add_actor(new St.Label({ style_class: 'scale-search-result-label', text: app.get_name() }));
-        tile.connect('button-press-event', () => Clutter.EVENT_STOP);
+        // Connected before swallowClicks, whose handlers stop the event.
         tile.connect('button-release-event', (actor, event) => {
             if (event.get_button() === Clutter.BUTTON_PRIMARY)
                 this._launch(index);
-            return Clutter.EVENT_STOP;
         });
+        UiHelpers.swallowClicks(tile);
         return tile;
     }
 
     _syncSelection() {
         this._tiles.forEach((tile, i) => {
             if (i === this._selected)
-                tile.add_style_pseudo_class(SELECTED_PSEUDO_CLASS);
+                tile.add_style_pseudo_class(UiHelpers.SELECTED_PSEUDO_CLASS);
             else
-                tile.remove_style_pseudo_class(SELECTED_PSEUDO_CLASS);
+                tile.remove_style_pseudo_class(UiHelpers.SELECTED_PSEUDO_CLASS);
         });
     }
 
@@ -244,7 +264,10 @@ var AppSearch = class AppSearch {
     // Returns true when the key was for the search; false leaves it to Scale.
     // With an empty field only a printable key is taken: arrows, Enter and Escape stay Scale's.
     // With text, every key is taken, so no Scale shortcut acts on the hidden windows.
+    // Scale keeps its modal grab during its close animation: keys typed then are not text.
     handleKeyPress(event) {
+        if (Main.overview._hideInProgress)
+            return false;
         if (!this._isSearching())
             return this._appendCharacter(event, false);
 
@@ -266,10 +289,10 @@ var AppSearch = class AppSearch {
             this._moveSelection(1);
             break;
         case Clutter.KEY_Up:
-            this._moveSelection(-RESULT_COLUMNS);
+            this._moveSelection(-this._columns);
             break;
         case Clutter.KEY_Down:
-            this._moveSelection(RESULT_COLUMNS);
+            this._moveSelection(this._columns);
             break;
         default:
             this._appendCharacter(event, true);
@@ -303,6 +326,10 @@ var AppSearch = class AppSearch {
 // Scale's key handling starts in Workspace._onKeyPress, looked up on each key: wrap it so
 // the search sees the key first. Undone in disable().
 function enable() {
+    // Already patched: saving the wrapper as the original would make it permanent.
+    if (originalOnKeyPress)
+        return;
+
     const prototype = Workspace.Workspace.prototype;
     originalOnKeyPress = prototype._onKeyPress;
     prototype._onKeyPress = function(actor, event) {

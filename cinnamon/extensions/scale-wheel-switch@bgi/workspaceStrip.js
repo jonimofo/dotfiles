@@ -6,13 +6,14 @@ const DND = imports.ui.dnd;
 const Main = imports.ui.main;
 const SignalManager = imports.misc.signalManager;
 const WindowUtils = imports.misc.windowUtils;
+const UiHelpers = require('./uiHelpers');
 
-// Thumbnail size as a fraction of the primary monitor. Colors and spacing are in stylesheet.css.
+// Thumbnail size as a fraction of the primary monitor, reduced when the workspaces do not
+// fit in the monitor's width. Colors and spacing are in stylesheet.css.
 const THUMBNAIL_SCALE = 0.12;
-const ACTIVE_PSEUDO_CLASS = 'selected';
 const DROP_TARGET_STYLE_CLASS = 'scale-strip-thumbnail-drop-target';
-// Windows are spread in a grid inside a thumbnail: free space kept around each one, in pixels.
-const WINDOW_GAP = 6;
+// Stylesheet property of a thumbnail: free space kept around each window of its grid.
+const WINDOW_GAP_PROPERTY = '-scale-window-gap';
 // Flags value of WorkspaceMonitor.positionWindows (its flag names are private to workspace.js).
 const POSITION_WITHOUT_ANIMATION = 0;
 
@@ -59,15 +60,25 @@ function computeGridCells(count, width, height) {
     return cells;
 }
 
+// The strip of the Scale view currently open, if any.
+let activeStrip = null;
+
+// Height of a strip thumbnail, for the modules that size things after it.
+function getThumbnailHeight() {
+    const scale = activeStrip ? activeStrip.thumbnailScale : THUMBNAIL_SCALE;
+    return Math.round(Main.layoutManager.primaryMonitor.height * scale);
+}
+
 // One workspace: wallpaper, live window clones and the workspace name.
 class WorkspaceThumbnail {
-    constructor(metaWorkspace, monitor, monitorIndex) {
+    constructor(metaWorkspace, monitor, monitorIndex, scale) {
         this.metaWorkspace = metaWorkspace;
         this._monitor = monitor;
         this._monitorIndex = monitorIndex;
+        this._scale = scale;
 
-        const width = Math.round(monitor.width * THUMBNAIL_SCALE);
-        const height = Math.round(monitor.height * THUMBNAIL_SCALE);
+        const width = Math.round(monitor.width * scale);
+        const height = Math.round(monitor.height * scale);
 
         this._desktop = new Clutter.Actor({ width, height, clip_to_allocation: true });
         this._addWallpaper();
@@ -126,21 +137,23 @@ class WorkspaceThumbnail {
 
         // The background actor spans the whole screen: shift it so the monitor's corner is at 0,0.
         const wallpaper = Meta.X11BackgroundActor.new_for_display(global.display);
-        wallpaper.set_scale(THUMBNAIL_SCALE, THUMBNAIL_SCALE);
-        wallpaper.set_position(-this._monitor.x * THUMBNAIL_SCALE, -this._monitor.y * THUMBNAIL_SCALE);
+        wallpaper.set_scale(this._scale, this._scale);
+        wallpaper.set_position(-this._monitor.x * this._scale, -this._monitor.y * this._scale);
         this._desktop.add_actor(wallpaper);
     }
 
-    // Call once the thumbnail is on the stage: the label has no size before that.
+    // Call once the thumbnail is on the stage: the label and the stylesheet gap have no
+    // value before that.
     refreshWindows() {
         this._windows.destroy_all_children();
 
         const windowActors = this._getWindowActors();
         const [width, height] = this._desktop.get_size();
         // The band behind the label stays free, so the name never covers a window.
-        const [, labelHeight] = this._label.get_preferred_height(-1);
+        const labelHeight = UiHelpers.getNaturalHeight(this._label);
+        const gap = this.actor.get_theme_node().get_length(WINDOW_GAP_PROPERTY);
         const cells = computeGridCells(windowActors.length, width, height - labelHeight);
-        windowActors.forEach((windowActor, i) => this._addWindowClone(windowActor, cells[i]));
+        windowActors.forEach((windowActor, i) => this._addWindowClone(windowActor, cells[i], gap));
     }
 
     _getWindowActors() {
@@ -159,13 +172,13 @@ class WorkspaceThumbnail {
 
     // Fits the window frame in its cell, keeping its aspect ratio. The actor is larger
     // than the frame (shadows), so its clone is offset inside a frame-sized holder.
-    _addWindowClone(windowActor, [cellX, cellY, cellWidth, cellHeight]) {
+    _addWindowClone(windowActor, [cellX, cellY, cellWidth, cellHeight], gap) {
         const clone = WindowUtils.getCloneOrContent(windowActor);
         if (!clone)
             return;
 
         const frame = windowActor.get_meta_window().get_frame_rect();
-        const scale = Math.min((cellWidth - WINDOW_GAP) / frame.width, (cellHeight - WINDOW_GAP) / frame.height, 1);
+        const scale = Math.min((cellWidth - gap) / frame.width, (cellHeight - gap) / frame.height, 1);
         const [actorX, actorY] = windowActor.get_position();
         const [actorWidth, actorHeight] = windowActor.get_size();
         clone.set_position((actorX - frame.x) * scale, (actorY - frame.y) * scale);
@@ -235,9 +248,9 @@ class WorkspaceThumbnail {
 
     setActive(isActive) {
         if (isActive)
-            this.actor.add_style_pseudo_class(ACTIVE_PSEUDO_CLASS);
+            this.actor.add_style_pseudo_class(UiHelpers.SELECTED_PSEUDO_CLASS);
         else
-            this.actor.remove_style_pseudo_class(ACTIVE_PSEUDO_CLASS);
+            this.actor.remove_style_pseudo_class(UiHelpers.SELECTED_PSEUDO_CLASS);
     }
 }
 
@@ -253,12 +266,11 @@ var WorkspaceStrip = class WorkspaceStrip {
         this._workspaceSignals = new SignalManager.SignalManager(null);
         this._refreshIdleId = 0;
         this._thumbnails = [];
+        this.thumbnailScale = THUMBNAIL_SCALE;
 
-        // Reactive and swallowing clicks: a click in the gaps must not reach Scale's background,
-        // which closes Scale on an empty workspace.
+        // Reactive, so a click in the gaps between thumbnails is swallowed too.
         this.actor = new St.BoxLayout({ style_class: 'scale-strip', reactive: true });
-        this.actor.connect('button-press-event', () => Clutter.EVENT_STOP);
-        this.actor.connect('button-release-event', () => Clutter.EVENT_STOP);
+        UiHelpers.swallowClicks(this.actor);
         this.actor.set_position(this._monitor.x, this._monitor.y + topOffset);
         this.actor.set_width(this._monitor.width);
 
@@ -268,6 +280,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
         this._buildThumbnails();
         this._insetBigView(this._getInset());
+        activeStrip = this;
 
         const display = global.display;
         this._signals.connect(display, 'restacked', this._queueRefresh, this);
@@ -279,8 +292,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
     // Height taken at the top of the monitor, down to the bottom edge of the strip.
     _getInset() {
-        const [, naturalHeight] = this.actor.get_preferred_height(-1);
-        return this._topOffset + Math.round(naturalHeight);
+        return this._topOffset + UiHelpers.getNaturalHeight(this.actor);
     }
 
     // What is left of the monitor for Scale's big view.
@@ -297,7 +309,33 @@ var WorkspaceStrip = class WorkspaceStrip {
         };
     }
 
+    // Built at the default size first; when that is wider than the monitor (many
+    // workspaces), built again at the size that fits.
     _buildThumbnails() {
+        this.thumbnailScale = THUMBNAIL_SCALE;
+        this._buildThumbnailsAtScale();
+
+        const fittingScale = this._getFittingScale();
+        if (fittingScale < this.thumbnailScale) {
+            this.thumbnailScale = fittingScale;
+            this._buildThumbnailsAtScale();
+        }
+    }
+
+    // The strip's natural width is its thumbnails plus what the stylesheet adds (padding,
+    // spacing, borders): only the thumbnails can shrink.
+    _getFittingScale() {
+        const count = this._thumbnails.length;
+        const naturalWidth = UiHelpers.getNaturalWidth(this.actor);
+        if (count === 0 || naturalWidth <= this._monitor.width)
+            return this.thumbnailScale;
+
+        const thumbnailsWidth = count * Math.round(this._monitor.width * this.thumbnailScale);
+        const fixedWidth = naturalWidth - thumbnailsWidth;
+        return Math.floor((this._monitor.width - fixedWidth) / count) / this._monitor.width;
+    }
+
+    _buildThumbnailsAtScale() {
         this._workspaceSignals.disconnectAllSignals();
         this.actor.destroy_all_children();
         this._thumbnails = [];
@@ -305,7 +343,8 @@ var WorkspaceStrip = class WorkspaceStrip {
         const workspaceManager = global.workspace_manager;
         for (let i = 0; i < workspaceManager.n_workspaces; i++) {
             const metaWorkspace = workspaceManager.get_workspace_by_index(i);
-            const thumbnail = new WorkspaceThumbnail(metaWorkspace, this._monitor, this._monitorIndex);
+            const thumbnail = new WorkspaceThumbnail(
+                metaWorkspace, this._monitor, this._monitorIndex, this.thumbnailScale);
             this._workspaceSignals.connect(metaWorkspace, 'window-added', this._queueRefresh, this);
             this._workspaceSignals.connect(metaWorkspace, 'window-removed', this._queueRefresh, this);
             this._thumbnails.push(thumbnail);
@@ -367,6 +406,8 @@ var WorkspaceStrip = class WorkspaceStrip {
     }
 
     destroy() {
+        if (activeStrip === this)
+            activeStrip = null;
         this._signals.disconnectAllSignals();
         this._workspaceSignals.disconnectAllSignals();
         if (this._refreshIdleId) {

@@ -7,6 +7,7 @@
 
 .scale-strip-thumbnail {
     border: 3px solid rgba(255, 255, 255, 0.3);
+    -scale-window-gap: 6px;
 }
 
 .scale-strip-thumbnail:selected {
@@ -46,9 +47,10 @@
     color: rgba(255, 255, 255, 0.75);
 }
 
-.scale-search-results {
+.scale-search-grid {
     padding: 32px;
     spacing: 16px;
+    background-color: rgba(0, 0, 0, 0.6);
 }
 
 .scale-search-row {

@@ -2,14 +2,15 @@ const Clutter = imports.gi.Clutter;
 const DND = imports.ui.dnd;
 const Main = imports.ui.main;
 const Workspace = imports.ui.workspace;
+const UiHelpers = require('./uiHelpers');
+const WorkspaceStrip = require('./workspaceStrip');
 
-// Longest side of the window picture that follows the pointer: smaller than a strip
-// thumbnail, so the highlighted drop target stays visible around it.
-const DRAG_ACTOR_MAX_SIZE = 128;
-const OPAQUE = 255;
-const DRAG_ACTOR_OPACITY = Math.round(OPAQUE * 0.8);
+// Longest side of the window picture that follows the pointer, as a fraction of a strip
+// thumbnail's height: the highlighted drop target stays visible around it.
+const DRAG_ACTOR_THUMBNAIL_FRACTION = 0.9;
+const DRAG_ACTOR_OPACITY = Math.round(UiHelpers.OPAQUE * 0.8);
 // The window left in the big view while its picture is being dragged.
-const DRAG_SOURCE_OPACITY = Math.round(OPAQUE * 0.4);
+const DRAG_SOURCE_OPACITY = Math.round(UiHelpers.OPAQUE * 0.4);
 
 let originalAddWindowClone = null;
 // windowClone -> its signal ids, for the clones of the Scale view currently open.
@@ -22,7 +23,8 @@ function createDragActor(windowClone) {
     const [width, height] = windowClone.actor.get_transformed_size();
     const [x, y] = windowClone.actor.get_transformed_position();
     const [pointerX, pointerY] = global.get_pointer();
-    const scale = Math.min(1, DRAG_ACTOR_MAX_SIZE / Math.max(width, height));
+    const maxSize = WorkspaceStrip.getThumbnailHeight() * DRAG_ACTOR_THUMBNAIL_FRACTION;
+    const scale = Math.min(1, maxSize / Math.max(width, height));
 
     const dragActor = new Clutter.Clone({ source: windowClone.actor, x, y, width, height });
     dragActor.set_pivot_point(clampUnit((pointerX - x) / width), clampUnit((pointerY - y) / height));
@@ -48,7 +50,7 @@ function makeDraggable(windowClone) {
     });
     draggable.connect('drag-end', () => {
         if (!windowClone.actor.is_finalized())
-            windowClone.actor.opacity = OPAQUE;
+            windowClone.actor.opacity = UiHelpers.OPAQUE;
     });
     const destroyId = windowClone.actor.connect('destroy', () => draggableClones.delete(windowClone));
     draggableClones.set(windowClone, destroyId);
@@ -78,6 +80,10 @@ function forEachOpenClone(callback) {
 
 // Scale builds its window clones in WorkspaceMonitor._addWindowClone: wrap it, undo in disable().
 function enable() {
+    // Already patched: saving the wrapper as the original would make it permanent.
+    if (originalAddWindowClone)
+        return;
+
     const prototype = Workspace.WorkspaceMonitor.prototype;
     originalAddWindowClone = prototype._addWindowClone;
     prototype._addWindowClone = function(win) {

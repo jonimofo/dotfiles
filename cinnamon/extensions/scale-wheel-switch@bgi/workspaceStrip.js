@@ -50,8 +50,34 @@ class WorkspaceThumbnail {
         content.add_actor(this._desktop);
         content.add_actor(label);
 
-        this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content });
+        this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
+        this._pressed = false;
+        this.actor.connect('button-press-event', this._onButtonPress.bind(this));
+        this.actor.connect('button-release-event', this._onButtonRelease.bind(this));
+        this.actor.connect('leave-event', () => { this._pressed = false; });
         this.refreshWindows();
+    }
+
+    // Stopped here on purpose: a press that reaches Scale's background starts its swipe,
+    // and a click there closes Scale when the workspace is empty.
+    _onButtonPress(actor, event) {
+        this._pressed = event.get_button() === Clutter.BUTTON_PRIMARY;
+        return Clutter.EVENT_STOP;
+    }
+
+    _onButtonRelease(actor, event) {
+        const isClick = this._pressed && event.get_button() === Clutter.BUTTON_PRIMARY;
+        this._pressed = false;
+        if (isClick)
+            this._activateWorkspace();
+        return Clutter.EVENT_STOP;
+    }
+
+    _activateWorkspace() {
+        if (this.metaWorkspace === global.workspace_manager.get_active_workspace())
+            return;
+
+        this.metaWorkspace.activate(global.get_current_time());
     }
 
     _addWallpaper() {

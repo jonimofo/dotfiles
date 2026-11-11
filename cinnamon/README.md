@@ -8,6 +8,7 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 - `extensions/scale-wheel-switch@bgi/`: turns Scale into a GNOME-style overview.
   Tested on Cinnamon 6.4 (X11).
 - `extension.sh`: enable, disable or reload one extension, keeping the others enabled.
+- `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
 
 ## What scale-wheel-switch does
 

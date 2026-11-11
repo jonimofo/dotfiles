@@ -13,7 +13,7 @@ This is a personal dotfiles repository for a Linux workstation (Debian-based). I
 - **Editors**: `.vimrc`, `init.vim` (neovim), `code/` (VS Code), `subl/` (Sublime Text)
 - **Terminal**: `terminator_config`, `.tmux.conf`, `guake/`
 - **Desktop/GNOME**: `gnome/` (dconf backups), `autostart/`, `.xbindkeysrc`
-- **Cinnamon**: `cinnamon/` (extensions, symlinked into `~/.local/share/cinnamon/extensions/`; see `cinnamon/README.md`)
+- **Cinnamon**: `cinnamon/` (extensions, symlinked into `~/.local/share/cinnamon/extensions/`; see `cinnamon/README.md`; Dracula theme setup in `cinnamon/THEME.md`)
 - **App configs**: `espanso/` (text expansion), `rofi/` (launcher), `flameshot.ini`
 - **SSH**: `ssh/config`
 - **Scripts**: `scripts/`

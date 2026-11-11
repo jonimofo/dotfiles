@@ -13,6 +13,7 @@ My Cinnamon extensions and applets, versioned. Each one is symlinked into
   Tested on Cinnamon 6.4 (X11). See [Quick Settings](#quick-settings-what-it-does) below.
 - `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
   Enable adds it at the right end of panel1's right zone.
+- `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
 
 ## Custom shortcut: dropdown Nemo
 

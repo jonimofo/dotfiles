@@ -4,6 +4,7 @@ const Main = imports.ui.main;
 const WorkspacesView = imports.ui.workspacesView;
 const WorkspaceStrip = require('./workspaceStrip');
 const WindowDrag = require('./windowDrag');
+const WindowClick = require('./windowClick');
 const SuperKey = require('./superKey');
 const AppSearch = require('./appSearch');
 const UiHelpers = require('./uiHelpers');
@@ -121,6 +122,7 @@ function enableAll() {
         Main.overview.connect('hidden', hideHeader),
     ];
     WindowDrag.enable();
+    WindowClick.enable();
     SuperKey.enable();
     AppSearch.enable();
     if (Main.overview.visible && !Main.overview._hideInProgress) {
@@ -140,6 +142,7 @@ function disable() {
     hideHeader();
     AppSearch.disable();
     WindowDrag.disable();
+    WindowClick.disable();
     SuperKey.disable();
     smoothAccumulator = 0;
 }

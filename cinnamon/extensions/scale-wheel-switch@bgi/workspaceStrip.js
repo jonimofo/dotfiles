@@ -9,13 +9,12 @@ const WindowUtils = imports.misc.windowUtils;
 // Thumbnail size as a fraction of the primary monitor. Colors and spacing are in stylesheet.css.
 const THUMBNAIL_SCALE = 0.12;
 const ACTIVE_PSEUDO_CLASS = 'selected';
-const HIDDEN_WINDOW_TYPES = [Meta.WindowType.DESKTOP, Meta.WindowType.DOCK];
 
+// Same rule as Scale's big view, so a thumbnail shows exactly the windows Scale shows
+// (a sticky drop-down terminal would otherwise cover every thumbnail).
 function isThumbnailWindow(windowActor, workspaceIndex, monitorIndex) {
     const metaWindow = windowActor.get_meta_window();
-    if (!metaWindow || metaWindow.is_override_redirect())
-        return false;
-    if (HIDDEN_WINDOW_TYPES.includes(metaWindow.get_window_type()))
+    if (!metaWindow || !Main.isInteresting(metaWindow))
         return false;
     if (metaWindow.get_monitor() !== monitorIndex)
         return false;

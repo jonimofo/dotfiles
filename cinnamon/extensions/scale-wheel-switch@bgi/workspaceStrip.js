@@ -268,8 +268,10 @@ var WorkspaceStrip = class WorkspaceStrip {
         this._thumbnails = [];
         this.thumbnailScale = THUMBNAIL_SCALE;
 
-        // Reactive, so a click in the gaps between thumbnails is swallowed too.
-        this.actor = new St.BoxLayout({ style_class: 'scale-strip', reactive: true });
+        // Full-width band with the thumbnails centered in it, like the search field above.
+        // Reactive, so a click in the gaps around the thumbnails is swallowed too.
+        this._row = new St.BoxLayout({ style_class: 'scale-strip-row' });
+        this.actor = new St.Bin({ style_class: 'scale-strip', child: this._row, reactive: true });
         UiHelpers.swallowClicks(this.actor);
         this.actor.set_position(this._monitor.x, this._monitor.y + topOffset);
         this.actor.set_width(this._monitor.width);
@@ -337,7 +339,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
     _buildThumbnailsAtScale() {
         this._workspaceSignals.disconnectAllSignals();
-        this.actor.destroy_all_children();
+        this._row.destroy_all_children();
         this._thumbnails = [];
 
         const workspaceManager = global.workspace_manager;
@@ -348,7 +350,7 @@ var WorkspaceStrip = class WorkspaceStrip {
             this._workspaceSignals.connect(metaWorkspace, 'window-added', this._queueRefresh, this);
             this._workspaceSignals.connect(metaWorkspace, 'window-removed', this._queueRefresh, this);
             this._thumbnails.push(thumbnail);
-            this.actor.add_actor(thumbnail.actor);
+            this._row.add_actor(thumbnail.actor);
             thumbnail.refreshWindows();
         }
         this._syncActive();

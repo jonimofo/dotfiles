@@ -5,8 +5,8 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 
 ## What lives here
 
-- `extensions/scale-wheel-switch@bgi/`: in Scale, a top strip of workspace thumbnails, and the
-  mouse wheel switches workspace.
+- `extensions/scale-wheel-switch@bgi/`: Super toggles Scale; in Scale, a top strip of workspace
+  thumbnails (click to switch, drop a window to move it), and the mouse wheel switches workspace.
   Tested on Cinnamon 6.4 (X11).
 
 ## Install
@@ -15,6 +15,15 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 ln -s ~/Repos/dotfiles/cinnamon/extensions/scale-wheel-switch@bgi \
   ~/.local/share/cinnamon/extensions/scale-wheel-switch@bgi
 ```
+
+## Free the Super key (once per machine)
+
+The Menu applet owns Super by default, and the extension cannot take a key that is in use.
+Right-click the Menu applet > Configure > Keyboard shortcut to open and close the menu:
+set it to Super+A.
+
+That setting lives outside this repo, in `~/.config/cinnamon/spices/menu@cinnamon.org/0.json`
+(`"overlay-key"`, value `<Super>a`).
 
 ## Enable
 

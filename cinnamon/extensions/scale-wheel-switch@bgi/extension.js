@@ -4,6 +4,7 @@ const Main = imports.ui.main;
 const WorkspacesView = imports.ui.workspacesView;
 const WorkspaceStrip = require('./workspaceStrip');
 const WindowDrag = require('./windowDrag');
+const SuperKey = require('./superKey');
 
 // One switch per slide animation, so a touchpad flick does not skip workspaces.
 const COOLDOWN_MS = WorkspacesView.WORKSPACE_SWITCH_TIME * 1000;
@@ -92,6 +93,7 @@ function enable() {
         Main.overview.connect('hidden', hideStrip),
     ];
     WindowDrag.enable();
+    SuperKey.enable();
     if (Main.overview.visible && !Main.overview._hideInProgress) {
         showStrip();
         strip.repositionBigView();
@@ -108,5 +110,6 @@ function disable() {
     overviewSignalIds = [];
     hideStrip();
     WindowDrag.disable();
+    SuperKey.disable();
     smoothAccumulator = 0;
 }

@@ -18,18 +18,16 @@ ln -s ~/Repos/dotfiles/cinnamon/extensions/scale-wheel-switch@bgi \
 
 ## Enable
 
-This replaces the whole list. Check the current one first, and keep its other entries:
+`extension.sh` edits `org.cinnamon enabled-extensions` and keeps the other enabled extensions.
 
 ```bash
-gsettings get org.cinnamon enabled-extensions
-gsettings set org.cinnamon enabled-extensions "['scale-wheel-switch@bgi']"
+~/Repos/dotfiles/cinnamon/extension.sh enable scale-wheel-switch@bgi
 ```
 
 ## Reload after an edit
 
 ```bash
-gsettings set org.cinnamon enabled-extensions "[]"
-gsettings set org.cinnamon enabled-extensions "['scale-wheel-switch@bgi']"
+~/Repos/dotfiles/cinnamon/extension.sh reload scale-wheel-switch@bgi
 journalctl --user -b --since "-2 min" --no-pager | grep -E 'scale-wheel|JS ERROR'
 ```
 
@@ -38,6 +36,6 @@ No Cinnamon restart needed.
 ## Uninstall
 
 ```bash
-gsettings set org.cinnamon enabled-extensions "[]"
+~/Repos/dotfiles/cinnamon/extension.sh disable scale-wheel-switch@bgi
 rm ~/.local/share/cinnamon/extensions/scale-wheel-switch@bgi
 ```

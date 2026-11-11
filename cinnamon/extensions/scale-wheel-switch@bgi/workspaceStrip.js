@@ -11,6 +11,8 @@ const WindowUtils = imports.misc.windowUtils;
 const THUMBNAIL_SCALE = 0.12;
 const ACTIVE_PSEUDO_CLASS = 'selected';
 const DROP_TARGET_STYLE_CLASS = 'scale-strip-thumbnail-drop-target';
+// Windows are spread in a grid inside a thumbnail: free space kept around each one, in pixels.
+const WINDOW_GAP = 6;
 
 // Same rule as Scale's big view, so a thumbnail shows exactly the windows Scale shows
 // (a sticky drop-down terminal would otherwise cover every thumbnail).
@@ -22,6 +24,37 @@ function isThumbnailWindow(windowActor, workspaceIndex, monitorIndex) {
         return false;
 
     return Main.isWindowActorDisplayedOnWorkspace(windowActor, workspaceIndex);
+}
+
+// The windows of Scale's big view for this workspace, in Scale's own order, so a thumbnail
+// is a small copy of that view. Empty when Scale has no view (it is closing).
+function getScaleWindowOrder(metaWorkspace, monitorIndex) {
+    const view = Main.overview.workspacesView;
+    const workspace = view && view._workspaces.find(candidate => candidate.metaWorkspace === metaWorkspace);
+    const workspaceMonitor = workspace && workspace._monitors[monitorIndex];
+    if (!workspaceMonitor)
+        return [];
+
+    return workspaceMonitor._windows.map(windowClone => windowClone.metaWindow);
+}
+
+// Same grid as Scale: as many columns as rows (rounded up), a short last row centered.
+// Returns one [x, y, width, height] cell per window, inside a width x height area.
+function computeGridCells(count, width, height) {
+    const columns = Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / columns);
+    const cellWidth = width / columns;
+    const cellHeight = height / rows;
+    const lastRowCount = count - (rows - 1) * columns;
+    const lastRowShift = (columns - lastRowCount) * cellWidth / 2;
+
+    const cells = [];
+    for (let i = 0; i < count; i++) {
+        const row = Math.floor(i / columns);
+        const shift = row === rows - 1 ? lastRowShift : 0;
+        cells.push([(i % columns) * cellWidth + shift, row * cellHeight, cellWidth, cellHeight]);
+    }
+    return cells;
 }
 
 // One workspace: wallpaper, live window clones and the workspace name.
@@ -39,7 +72,7 @@ class WorkspaceThumbnail {
         this._windows = new Clutter.Actor();
         this._desktop.add_actor(this._windows);
 
-        const label = new St.Label({
+        this._label = new St.Label({
             style_class: 'scale-strip-label',
             text: Main.getWorkspaceName(metaWorkspace.index()),
             x_expand: true,
@@ -50,7 +83,7 @@ class WorkspaceThumbnail {
 
         const content = new St.Widget({ layout_manager: new Clutter.BinLayout(), width, height });
         content.add_actor(this._desktop);
-        content.add_actor(label);
+        content.add_actor(this._label);
 
         this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
         this.actor._delegate = this;
@@ -61,7 +94,6 @@ class WorkspaceThumbnail {
         this.actor.connect('button-press-event', this._onButtonPress.bind(this));
         this.actor.connect('button-release-event', this._onButtonRelease.bind(this));
         this.actor.connect('leave-event', () => { this._pressed = false; });
-        this.refreshWindows();
     }
 
     // Stopped here on purpose: a press that reaches Scale's background starts its swipe,
@@ -97,27 +129,54 @@ class WorkspaceThumbnail {
         this._desktop.add_actor(wallpaper);
     }
 
-    // global.get_window_actors() is in stacking order, so clones are added bottom to top.
+    // Call once the thumbnail is on the stage: the label has no size before that.
     refreshWindows() {
         this._windows.destroy_all_children();
 
-        const workspaceIndex = this.metaWorkspace.index();
-        for (const windowActor of global.get_window_actors()) {
-            if (isThumbnailWindow(windowActor, workspaceIndex, this._monitorIndex))
-                this._addWindowClone(windowActor);
-        }
+        const windowActors = this._getWindowActors();
+        const [width, height] = this._desktop.get_size();
+        // The band behind the label stays free, so the name never covers a window.
+        const [, labelHeight] = this._label.get_preferred_height(-1);
+        const cells = computeGridCells(windowActors.length, width, height - labelHeight);
+        windowActors.forEach((windowActor, i) => this._addWindowClone(windowActor, cells[i]));
     }
 
-    _addWindowClone(windowActor) {
+    _getWindowActors() {
+        const workspaceIndex = this.metaWorkspace.index();
+        const windowActors = global.get_window_actors().filter(
+            windowActor => isThumbnailWindow(windowActor, workspaceIndex, this._monitorIndex));
+
+        // Windows Scale does not list yet (just opened) go last, in stacking order.
+        const scaleOrder = getScaleWindowOrder(this.metaWorkspace, this._monitorIndex);
+        const rank = windowActor => {
+            const index = scaleOrder.indexOf(windowActor.get_meta_window());
+            return index === -1 ? scaleOrder.length : index;
+        };
+        return windowActors.sort((a, b) => rank(a) - rank(b));
+    }
+
+    // Fits the window frame in its cell, keeping its aspect ratio. The actor is larger
+    // than the frame (shadows), so its clone is offset inside a frame-sized holder.
+    _addWindowClone(windowActor, [cellX, cellY, cellWidth, cellHeight]) {
         const clone = WindowUtils.getCloneOrContent(windowActor);
         if (!clone)
             return;
 
-        const [x, y] = windowActor.get_position();
-        const [width, height] = windowActor.get_size();
-        clone.set_position((x - this._monitor.x) * THUMBNAIL_SCALE, (y - this._monitor.y) * THUMBNAIL_SCALE);
-        clone.set_size(width * THUMBNAIL_SCALE, height * THUMBNAIL_SCALE);
-        this._windows.add_actor(clone);
+        const frame = windowActor.get_meta_window().get_frame_rect();
+        const scale = Math.min((cellWidth - WINDOW_GAP) / frame.width, (cellHeight - WINDOW_GAP) / frame.height, 1);
+        const [actorX, actorY] = windowActor.get_position();
+        const [actorWidth, actorHeight] = windowActor.get_size();
+        clone.set_position((actorX - frame.x) * scale, (actorY - frame.y) * scale);
+        clone.set_size(actorWidth * scale, actorHeight * scale);
+
+        const holder = new Clutter.Actor({
+            x: Math.round(cellX + (cellWidth - frame.width * scale) / 2),
+            y: Math.round(cellY + (cellHeight - frame.height * scale) / 2),
+            width: frame.width * scale,
+            height: frame.height * scale,
+        });
+        holder.add_actor(clone);
+        this._windows.add_actor(holder);
     }
 
     // Drop target interface of imports.ui.dnd, called while a Scale window is dragged over.
@@ -232,6 +291,7 @@ var WorkspaceStrip = class WorkspaceStrip {
             this._workspaceSignals.connect(metaWorkspace, 'window-removed', this._queueRefresh, this);
             this._thumbnails.push(thumbnail);
             this.actor.add_actor(thumbnail.actor);
+            thumbnail.refreshWindows();
         }
         this._syncActive();
     }

@@ -23,6 +23,11 @@ readonly STUB_POINTER="100 100"
 readonly STUB_MONITORS=" 0: +*TEST-1 1920/527x1080/296+0+0  TEST-1"
 readonly STUB_UNMAXIMIZED_SIZE="1400 700"
 readonly STUB_UNMAXIMIZE_DELAY_SECONDS=0.3
+readonly STUB_SLOW_XRANDR_SECONDS=1
+readonly STUB_LAYOUT_KEY="_GTK_WORKAREAS_D0(CARDINAL) = 0, 30, 1920, 1050"
+readonly STUB_HINTS_LINE="WM_NORMAL_HINTS(WM_SIZE_HINTS):"
+readonly STUB_USER_POSITION_LINE=$'\t\tuser specified location: 0, 0'
+readonly STUB_MIN_SIZE_LINE=$'\t\tprogram specified minimum size: 314 by 195'
 
 cleanup() {
     local pid_file pid
@@ -71,7 +76,7 @@ if [[ -e $STUB_ROOT/nemo-creates-window ]]; then
 fi
 exec sleep 30'
     write_stub xprop '
-if [[ $1 == -root ]]; then
+if [[ $1 == -root && $2 == _NET_CLIENT_LIST ]]; then
     ids="'"$FOREIGN_WID_HEX"'"
     if [[ -f $STUB_ROOT/managed ]]; then
         ids="$ids, $(cat "$STUB_ROOT/managed")"
@@ -79,20 +84,28 @@ if [[ $1 == -root ]]; then
     echo "_NET_CLIENT_LIST(WINDOW): window id # $ids"
     exit 0
 fi
-dir="$STUB_ROOT/windows/$2"
+if [[ $1 == -root ]]; then
+    dir="$STUB_ROOT/root"
+    shift 1
+else
+    dir="$STUB_ROOT/windows/$2"
+    shift 2
+fi
 if [[ ! -d $dir ]]; then
     echo "X Error: BadWindow" >&2
     exit 1
 fi
-if [[ ${3:-} == -f ]]; then
-    echo "$4(STRING) = \"$8\"" >"$dir/$4"
+if [[ ${1:-} == -f ]]; then
+    echo "$2(STRING) = \"$6\"" >"$dir/$2"
     exit 0
 fi
-if [[ -f $dir/$3 ]]; then
-    cat "$dir/$3"
-else
-    echo "$3:  not found."
-fi'
+for property in "$@"; do
+    if [[ -f $dir/$property ]]; then
+        cat "$dir/$property"
+    else
+        echo "$property:  not found."
+    fi
+done'
     write_stub xwininfo '
 dir="$STUB_ROOT/windows/$2"
 if [[ ! -d $dir ]]; then
@@ -135,18 +148,38 @@ case $1 in
         echo "'"$NEMO_WID_HEX"'" >"$STUB_ROOT/managed"
         ;;
 esac'
+    # Records the file on its fd 9: the lock during a press, "closed" in the
+    # background refresh.
     write_stub xrandr '
+echo "xrandr-fd9 $(readlink /proc/$$/fd/9 || echo closed)" >>"$STUB_ROOT/calls.log"
+if [[ -e $STUB_ROOT/xrandr-slow ]]; then
+    sleep '"$STUB_SLOW_XRANDR_SECONDS"'
+fi
 echo "Monitors: 1"
 cat "$STUB_ROOT/monitors"'
     write_stub notify-send ''
-    # Answers the dependency probe; an unmaximize request clears the maximized
-    # state at once but changes the size only later, as a WM may.
+    # Answers the GdkX11 probe, writes the position hint, or unmaximizes: an
+    # unmaximize request clears the maximized state at once but changes the
+    # size only later, as a WM may.
     write_stub python3 '
-if [[ ${2:-} != - ]]; then
+if [[ ${2:-} == -c ]]; then
+    if [[ -e $STUB_ROOT/gi-missing ]]; then
+        exit 1
+    fi
     exit 0
 fi
-cat >/dev/null
+code=$(cat)
 dir="$STUB_ROOT/windows/$3"
+if [[ $code == *XSetWMNormalHints* ]]; then
+    echo "hint-writer $3" >>"$STUB_ROOT/calls.log"
+    if [[ -e $STUB_ROOT/hint-fails ]]; then
+        echo "window $3: cannot read WM_NORMAL_HINTS" >&2
+        exit 1
+    fi
+    printf "\t\t%s\n" "user specified location: 0, 0" >>"$dir/WM_NORMAL_HINTS"
+    exit 0
+fi
+echo "unmaximize $3" >>"$STUB_ROOT/calls.log"
 rm -f "$dir/_NET_WM_STATE"
 (sleep '"$STUB_UNMAXIMIZE_DELAY_SECONDS"'; echo "'"$STUB_UNMAXIMIZED_SIZE"'" >"$dir/size") &'
 }
@@ -159,14 +192,18 @@ add_window() {
     echo "_NET_WM_DESKTOP(CARDINAL) = 0" >"$dir/_NET_WM_DESKTOP"
     echo "_NET_FRAME_EXTENTS(CARDINAL) = 0, 0, 36, 0" >"$dir/_NET_FRAME_EXTENTS"
     echo "$STUB_CLIENT_WIDTH $STUB_CLIENT_HEIGHT" >"$dir/size"
+    printf '%s\n' "$STUB_HINTS_LINE" "$STUB_MIN_SIZE_LINE" >"$dir/WM_NORMAL_HINTS"
 }
 
 # Resets the stub world: a foreign window is managed, Nemo's window is not.
 reset_world() {
     rm -rf "$tmp_root/windows" "$tmp_root/runtime" "$tmp_root/managed" \
         "$tmp_root/calls.log" "$tmp_root/nemo-creates-window" "$tmp_root"/nemo-fds.* \
-        "$tmp_root/windowsize-fails"
+        "$tmp_root/windowsize-fails" "$tmp_root/root" "$tmp_root/hint-fails" \
+        "$tmp_root/gi-missing" "$tmp_root/xrandr-slow"
     echo "$STUB_POINTER" >"$tmp_root/pointer"
+    mkdir -p "$tmp_root/root"
+    echo "$STUB_LAYOUT_KEY" >"$tmp_root/root/_GTK_WORKAREAS_D0"
     echo "$STUB_MONITORS" >"$tmp_root/monitors"
     mkdir -p "$tmp_root/runtime"
     chmod 700 "$tmp_root/runtime"
@@ -175,13 +212,17 @@ reset_world() {
     add_window "$NEMO_WID" '"nemo", "Nemo"'
 }
 
-# Runs the toggle; leaves its exit code in $rc and its stderr in $err.
+toggle_with_stubs() {
+    PATH="$stub_bin:$PATH" XDG_RUNTIME_DIR="$tmp_root/runtime" \
+        NEMO_DROPDOWN_TIMEOUT_SECONDS="$TEST_TIMEOUT_SECONDS" "$toggle"
+}
+
+# Runs the toggle; leaves its exit code in $rc and its stderr in $err. Reading
+# stderr through a pipe also waits for the background monitor refresh, which
+# keeps stderr open until it ends.
 run_toggle() {
     rc=0
-    PATH="$stub_bin:$PATH" XDG_RUNTIME_DIR="$tmp_root/runtime" \
-        NEMO_DROPDOWN_TIMEOUT_SECONDS="$TEST_TIMEOUT_SECONDS" \
-        "$toggle" 2>"$tmp_root/stderr" || rc=$?
-    err=$(cat "$tmp_root/stderr")
+    err=$(toggle_with_stubs 2>&1 >/dev/null) || rc=$?
 }
 
 # Prints how many recorded calls start with $1.
@@ -269,7 +310,7 @@ check_rejected() {
 }
 
 case_create_then_hide() {
-    local name="create adopts and marks the new window, next run hides it" saved
+    local name="create adopts, marks and hints the new window, next run hides it" saved
     reset_world
     touch "$tmp_root/nemo-creates-window"
     run_toggle
@@ -280,6 +321,10 @@ case_create_then_hide() {
     fi
     if ! calls_contain "xprop -id $NEMO_WID -f NEMO_DROPDOWN"; then
         fail "$name" "window $NEMO_WID was not marked"
+        return 0
+    fi
+    if ! calls_contain "hint-writer $NEMO_WID"; then
+        fail "$name" "the position hint was not set at creation"
         return 0
     fi
     run_toggle
@@ -381,12 +426,252 @@ case_maximized_dropdown_is_unmaximized_first() {
     echo "1920 1044" >"$dir/size"
     echo "_NET_WM_STATE(ATOM) = _NET_WM_STATE_MAXIMIZED_HORZ, _NET_WM_STATE_MAXIMIZED_VERT" >"$dir/_NET_WM_STATE"
     run_toggle
-    if ! calls_contain "python3 -I - $NEMO_WID"; then
-        fail "$name" "no unmaximize request (rc=$rc err='$err')"
+    if ! calls_contain "python3 -I -c" || ! calls_contain "unmaximize $NEMO_WID"; then
+        fail "$name" "no GdkX11 probe or no unmaximize request (rc=$rc err='$err')"
         return 0
     fi
     if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowmove $NEMO_WID 260 172"; then
         fail "$name" "not centered with the restored size (rc=$rc err='$err')"
+        return 0
+    fi
+    pass "$name"
+}
+
+# The GdkX11 probe runs only once an unmaximize is needed, and its failure
+# stops the run.
+case_missing_gi_stops_the_unmaximize() {
+    local name="python3-gi missing at unmaximize time exits 1 with a notification"
+    local dir="$tmp_root/windows/$NEMO_WID"
+    prepare_hidden_dropdown
+    touch "$tmp_root/gi-missing"
+    echo "_NET_WM_STATE(ATOM) = _NET_WM_STATE_MAXIMIZED_HORZ, _NET_WM_STATE_MAXIMIZED_VERT" >"$dir/_NET_WM_STATE"
+    run_toggle
+    if [[ $rc -ne 1 || $err != *"python3-gi with GdkX11 3.0 is not installed"* ]]; then
+        fail "$name" "rc=$rc err='$err'"
+        return 0
+    fi
+    if ! calls_contain "notify-send " || calls_contain "unmaximize $NEMO_WID"; then
+        fail "$name" "no notification, or an unmaximize was attempted"
+        return 0
+    fi
+    pass "$name"
+}
+
+set_user_position_hint() {
+    echo "$STUB_USER_POSITION_LINE" >>"$tmp_root/windows/$NEMO_WID/WM_NORMAL_HINTS"
+}
+
+# Prints the line number of the first recorded call starting with $1, 0 if none.
+first_call_line() {
+    local log number=0 line
+    log=$(cat "$tmp_root/calls.log")
+    while read -r line; do
+        number=$((number + 1))
+        if [[ $line == "$1"* ]]; then
+            echo "$number"
+            return 0
+        fi
+    done <<<"$log"
+    echo 0
+}
+
+# is_before <first call> <second call>: both recorded, the first one earlier.
+is_before() {
+    local first second
+    first=$(first_call_line "$1")
+    second=$(first_call_line "$2")
+    ((first > 0 && second > first))
+}
+
+case_show_moves_before_mapping() {
+    local name="a show with the position hint moves the window before mapping it"
+    prepare_hidden_dropdown
+    set_user_position_hint
+    run_toggle
+    if [[ $rc -ne 0 ]] || ! is_before "xdotool windowmove $NEMO_WID 560 222" "xdotool windowmap $NEMO_WID"; then
+        fail "$name" "windowmove not before windowmap (rc=$rc err='$err')"
+        return 0
+    fi
+    if [[ $(count_calls "xdotool windowmove") -ne 1 ]]; then
+        fail "$name" "moved $(count_calls "xdotool windowmove") times"
+        return 0
+    fi
+    pass "$name"
+}
+
+case_plain_hide_and_show_run_no_python() {
+    local name="no python on a hide and a show once the hint is set"
+    prepare_hidden_dropdown
+    set_user_position_hint
+    run_toggle
+    run_toggle
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowunmap $NEMO_WID"; then
+        fail "$name" "show then hide failed (rc=$rc err='$err')"
+        return 0
+    fi
+    if calls_contain "python3 "; then
+        fail "$name" "python3 ran"
+        return 0
+    fi
+    pass "$name"
+}
+
+case_hint_is_written_once() {
+    local name="a missing position hint is written once, keeping the other hints"
+    local hints_file="$tmp_root/windows/$NEMO_WID/WM_NORMAL_HINTS"
+    prepare_hidden_dropdown
+    run_toggle
+    run_toggle
+    run_toggle
+    if [[ $rc -ne 0 || $(count_calls "hint-writer $NEMO_WID") -ne 1 ]]; then
+        fail "$name" "hint written $(count_calls "hint-writer $NEMO_WID") time(s) (rc=$rc err='$err')"
+        return 0
+    fi
+    if [[ $(cat "$hints_file") != *"minimum size"* ]]; then
+        fail "$name" "the other hints were lost"
+        return 0
+    fi
+    pass "$name"
+}
+
+# The hint cannot be set: the window is mapped, then moved, and the press
+# still succeeds without a notification.
+case_hint_failure_falls_back_to_moving_after_map() {
+    local name="a failed hint write maps then moves, exit 0, no notification"
+    prepare_hidden_dropdown
+    touch "$tmp_root/hint-fails"
+    run_toggle
+    if [[ $rc -ne 0 || $err != *"will be moved after it is mapped"* ]]; then
+        fail "$name" "rc=$rc err='$err'"
+        return 0
+    fi
+    if ! is_before "xdotool windowmap $NEMO_WID" "xdotool windowmove $NEMO_WID 560 222" || calls_contain "notify-send "; then
+        fail "$name" "not mapped then moved, or a notification was sent"
+        return 0
+    fi
+    pass "$name"
+}
+
+# Without frame extents the window is mapped first, then the frame is taken
+# as the client area: 800x600 at 560,240.
+case_missing_extents_fall_back_to_moving_after_map() {
+    local name="no frame extents while hidden: mapped, then moved without a frame"
+    prepare_hidden_dropdown
+    set_user_position_hint
+    rm "$tmp_root/windows/$NEMO_WID/_NET_FRAME_EXTENTS"
+    run_toggle
+    if [[ $rc -ne 0 || $err != *"has no frame extents"* ]]; then
+        fail "$name" "rc=$rc err='$err'"
+        return 0
+    fi
+    if ! is_before "xdotool windowmap $NEMO_WID" "xdotool windowmove $NEMO_WID 560 240"; then
+        fail "$name" "not mapped then moved to 560 240"
+        return 0
+    fi
+    pass "$name"
+}
+
+readonly CACHE_MONITORS=" 0: +*CACHED-1 1920/527x1080/296+1920+0  CACHED-1"
+
+# write_monitor_cache <key>: a cache that puts the only monitor at +1920+0,
+# while the xrandr stub reports one at +0+0.
+write_monitor_cache() {
+    printf '%s\n%s\n%s\n' "$1" "Monitors: 1" "$CACHE_MONITORS" >"$tmp_root/runtime/nemo-dropdown/monitors"
+}
+
+# Pointer 2000,100. From the cache: frame 800x636 at 1920 + 560, 222. From
+# xrandr the pointer is outside the only monitor, so the first one: 560,222.
+prepare_cache_case() {
+    prepare_hidden_dropdown
+    set_user_position_hint
+    echo "2000 100" >"$tmp_root/pointer"
+}
+
+synchronous_xrandr_calls() {
+    count_calls "xrandr-fd9 $tmp_root/runtime/nemo-dropdown/lock"
+}
+
+case_cache_hit_skips_xrandr() {
+    local name="a cache with the current key is used, no xrandr during the press"
+    prepare_cache_case
+    write_monitor_cache "$STUB_LAYOUT_KEY"
+    run_toggle
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowmove $NEMO_WID 2480 222"; then
+        fail "$name" "not centered on the cached monitor (rc=$rc err='$err')"
+        return 0
+    fi
+    if [[ $(synchronous_xrandr_calls) -ne 0 ]]; then
+        fail "$name" "xrandr ran while holding the lock"
+        return 0
+    fi
+    pass "$name"
+}
+
+# check_cache_fallback <case name>: the press calls xrandr itself, then the
+# background refresh stores the current key and the xrandr monitors.
+check_cache_fallback() {
+    local name=$1 cache
+    run_toggle
+    if [[ $rc -ne 0 || $(synchronous_xrandr_calls) -ne 1 ]] || ! calls_contain "xdotool windowmove $NEMO_WID 560 222"; then
+        fail "$name" "no synchronous xrandr or wrong place (rc=$rc err='$err')"
+        return 0
+    fi
+    cache=$(cat "$tmp_root/runtime/nemo-dropdown/monitors" 2>/dev/null || true)
+    if [[ $cache != "$STUB_LAYOUT_KEY"*"$STUB_MONITORS"* ]]; then
+        fail "$name" "cache not refreshed: '$cache'"
+        return 0
+    fi
+    pass "$name"
+}
+
+case_missing_cache_calls_xrandr() {
+    prepare_cache_case
+    check_cache_fallback "no cache: xrandr during the press, cache written after"
+}
+
+case_changed_key_calls_xrandr() {
+    prepare_cache_case
+    write_monitor_cache "_GTK_WORKAREAS_D0(CARDINAL) = 0, 0, 1280, 1024"
+    check_cache_fallback "a cache saved under another key is not used"
+}
+
+case_garbage_cache_calls_xrandr() {
+    prepare_cache_case
+    printf '%s\n%s\n' "$STUB_LAYOUT_KEY" "garbage" >"$tmp_root/runtime/nemo-dropdown/monitors"
+    check_cache_fallback "an unreadable cache falls back to xrandr"
+}
+
+case_no_layout_key_always_calls_xrandr() {
+    local name="no layout key: xrandr at every show, no cache written"
+    prepare_cache_case
+    rm "$tmp_root/root/_GTK_WORKAREAS_D0"
+    run_toggle
+    run_toggle
+    run_toggle
+    if [[ $rc -ne 0 || $(synchronous_xrandr_calls) -ne 2 || -e $tmp_root/runtime/nemo-dropdown/monitors ]]; then
+        fail "$name" "$(synchronous_xrandr_calls) synchronous xrandr call(s) (rc=$rc err='$err')"
+        return 0
+    fi
+    pass "$name"
+}
+
+# The refresh runs with fd 9 closed: a press during a slow refresh is not
+# skipped as if another run held the lock.
+case_background_refresh_does_not_hold_lock() {
+    local name="the background refresh does not hold the lock"
+    prepare_cache_case
+    touch "$tmp_root/xrandr-slow"
+    write_monitor_cache "$STUB_LAYOUT_KEY"
+    rc=0
+    toggle_with_stubs 2>"$tmp_root/stderr" >/dev/null || rc=$?
+    run_toggle
+    sleep "$STUB_SLOW_XRANDR_SECONDS"
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowunmap $NEMO_WID"; then
+        fail "$name" "the press during the refresh did not hide (rc=$rc err='$err')"
+        return 0
+    fi
+    if ! calls_contain "xrandr-fd9 closed"; then
+        fail "$name" "the refresh did not run with fd 9 closed"
         return 0
     fi
     pass "$name"
@@ -419,6 +704,18 @@ case_offset_monitor_adds_its_origin
 case_title_cannot_fake_the_size
 case_maximized_dropdown_is_unmaximized_first
 case_symlinked_lock_is_refused
+case_missing_gi_stops_the_unmaximize
+case_show_moves_before_mapping
+case_plain_hide_and_show_run_no_python
+case_hint_is_written_once
+case_hint_failure_falls_back_to_moving_after_map
+case_missing_extents_fall_back_to_moving_after_map
+case_cache_hit_skips_xrandr
+case_missing_cache_calls_xrandr
+case_changed_key_calls_xrandr
+case_garbage_cache_calls_xrandr
+case_no_layout_key_always_calls_xrandr
+case_background_refresh_does_not_hold_lock
 
 if [[ $failures -gt 0 ]]; then
     say "$failures failure(s)."

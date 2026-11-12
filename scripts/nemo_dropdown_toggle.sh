@@ -13,13 +13,19 @@
 # (System Settings > Keyboard > Shortcuts > Custom Shortcuts).
 #
 # Needs: xdotool xprop xwininfo xrandr flock setsid. python3 with libX11 sets
-# the position hint once per dropdown; without it the dropdown is moved after
-# it appears. python3-gi (GdkX11) unmaximizes a maximized dropdown and is
-# checked only then. Optional: notify-send, which shows errors as a
-# notification, since a keybinding's stderr is never seen.
+# the position hint whenever the dropdown lacks it, normally once at its
+# creation; without it the dropdown is moved after it appears. python3-gi
+# (GdkX11) unmaximizes a maximized dropdown and is checked only then.
+# Optional: notify-send, which shows errors as a notification, since a
+# keybinding's stderr is never seen.
 #
-# Timing: while the file trace exists in the state directory, each press
-# appends "microseconds-since-start stage" lines to timing.log there.
+# State directory: $XDG_RUNTIME_DIR/nemo-dropdown, else /tmp/nemo-dropdown-$UID.
+# It holds wid, lock and monitors: 'xrandr --listmonitors' saved under the
+# _GTK_WORKAREAS_D0 it was read with, written again in the background after a
+# press finds it missing, saved under another value, or unreadable.
+# Timing: while the file trace exists there, each press appends
+# "microseconds-since-start stage" lines to timing.log, which grows until
+# trace is removed. A traced show holds the lock until the window is viewable.
 #
 # Why not tdrop: Nemo is a single-instance application. A `nemo` command
 # hands its request to the running process and exits, so the new window never
@@ -33,13 +39,17 @@
 #   Nemo shows "nemo" until the folder loads, and the folder name is localized.
 # - A new dropdown appears where the WM places it, then moves to the center.
 # - A maximized dropdown appears maximized, then moves once it is restored.
+# - A workspace switch during a show leaves the dropdown on the previous one.
+# - A monitor change that keeps _GTK_WORKAREAS_D0 keeps the cached monitors.
 #
 # Tests: scripts/nemo_dropdown_toggle-test.sh
 
 set -euo pipefail
 # set -e does not apply inside $(...): a function whose output is captured
 # only reads and dies on failure, and every call that changes a window runs in
-# the caller's shell with an explicit check.
+# the caller's shell with an explicit check. A captured call that can fail is
+# checked at once, never nested in another call: its die ends only its own
+# subshell, so the caller then exits without a second notification.
 
 readonly START_MICROSECONDS="${EPOCHREALTIME/[.,]/}"
 readonly WIDTH_PERCENT=80
@@ -57,6 +67,11 @@ readonly STICKY_DESKTOP=4294967295
 readonly HINTS_HEADER="WM_NORMAL_HINTS(WM_SIZE_HINTS):"
 readonly USER_POSITION_LINE="user specified location:"
 readonly LAYOUT_KEY_PROPERTY=_GTK_WORKAREAS_D0
+readonly LAYOUT_KEY_PATTERN="($LAYOUT_KEY_PROPERTY\\(CARDINAL\\) = [0-9, ]+)"
+# No leading zero: bash arithmetic would read the number as octal.
+readonly DECIMAL='(0|[1-9][0-9]*)'
+# A whole "width/mmxheight/mm+x+y" word of 'xrandr --listmonitors'.
+readonly MONITOR_PATTERN='(^|[[:space:]])'"$DECIMAL"'/[0-9]+x'"$DECIMAL"'/[0-9]+\+(-?'"$DECIMAL"')\+(-?'"$DECIMAL"')([[:space:]]|$)'
 readonly NOTIFY_TITLE="Dropdown Nemo"
 # Everything the hot path needs from the dropdown and the root, one xprop each.
 readonly WINDOW_PROPERTIES=(WM_CLASS "$MARK_PROPERTY" _NET_WM_STATE _NET_WM_DESKTOP WM_NORMAL_HINTS _NET_FRAME_EXTENTS)
@@ -101,9 +116,15 @@ warn() {
     echo "$SCRIPT_NAME: $*" >&2
 }
 
+# now_microseconds <variable>: sets the variable rather than printing it, so
+# that polling forks nothing. EPOCHREALTIME uses the locale's decimal separator.
+now_microseconds() {
+    printf -v "$1" '%s' "${EPOCHREALTIME/[.,]/}"
+}
+
 # trace <stage>: a diagnostic, so a failed write never fails the press.
 trace() {
-    local stage=$1
+    local stage=$1 now
     if [[ ! -f $TRACE_SWITCH ]]; then
         return 0
     fi
@@ -111,7 +132,8 @@ trace() {
         stage="--- start $stage"
         trace_started=true
     fi
-    if ! { printf '%s %s\n' "$((${EPOCHREALTIME/[.,]/} - START_MICROSECONDS))" "$stage" >>"$TRACE_FILE"; } 2>/dev/null; then
+    now_microseconds now
+    if ! { printf '%s %s\n' "$((now - START_MICROSECONDS))" "$stage" >>"$TRACE_FILE"; } 2>/dev/null; then
         return 0
     fi
 }
@@ -255,6 +277,19 @@ current_desktop() {
     echo "$desktop"
 }
 
+# read_root_state <root variable> <workspace variable>: sets both variables
+# of the caller from one xprop.
+# shellcheck disable=SC2034 # namerefs set the caller's variables
+read_root_state() {
+    local -n root_out=$1 desktop_out=$2
+    if ! root_out=$(xprop -root "${ROOT_PROPERTIES[@]}"); then
+        die "could not read the root window properties with xprop"
+    fi
+    if ! desktop_out=$(current_desktop "$root_out"); then
+        exit 1
+    fi
+}
+
 # is_shown_here <window properties> <xwininfo output> <current workspace>
 # Muffin keeps the windows of other workspaces mapped (IsViewable), so
 # viewable alone does not mean the user can see the window.
@@ -272,17 +307,13 @@ is_shown_here() {
     [[ ${BASH_REMATCH[1]} == "$desktop" || ${BASH_REMATCH[1]} == "$STICKY_DESKTOP" ]]
 }
 
-# EPOCHREALTIME uses the locale's decimal separator.
-now_microseconds() {
-    echo "${EPOCHREALTIME/[.,]/}"
-}
-
 # wait_for_status <0|1> <command...>: runs the command until its status is
 # success (0) or failure (1), for at most TIMEOUT_SECONDS.
 wait_for_status() {
-    local wanted=$1 deadline status
+    local wanted=$1 now deadline status
     shift
-    deadline=$(($(now_microseconds) + TIMEOUT_SECONDS * MICROSECONDS_PER_SECOND))
+    now_microseconds now
+    deadline=$((now + TIMEOUT_SECONDS * MICROSECONDS_PER_SECOND))
     while true; do
         if "$@"; then
             status=0
@@ -292,7 +323,8 @@ wait_for_status() {
         if ((status == wanted)); then
             return 0
         fi
-        if (($(now_microseconds) >= deadline)); then
+        now_microseconds now
+        if ((now >= deadline)); then
             return 1
         fi
         sleep "$POLL_SECONDS"
@@ -305,24 +337,6 @@ wait_until() {
 
 wait_while() {
     wait_for_status 1 "$@"
-}
-
-# Prints the layout key line from xprop's root output, empty when the WM does
-# not set it. _GTK_WORKAREAS_D0 holds one rectangle per monitor, so it
-# changes when a monitor is added, removed, moved or resized.
-layout_key_from() {
-    local root=$1 pattern="($LAYOUT_KEY_PROPERTY\\(CARDINAL\\) = [0-9, ]+)"
-    if [[ $root =~ $pattern ]]; then
-        echo "${BASH_REMATCH[1]}"
-    fi
-}
-
-layout_key() {
-    local root
-    if ! root=$(xprop -root "$LAYOUT_KEY_PROPERTY" 2>/dev/null); then
-        return 0
-    fi
-    layout_key_from "$root"
 }
 
 # Prints the cached 'xrandr --listmonitors' output if it was saved under $1.
@@ -340,33 +354,15 @@ cached_monitors() {
     printf '%s\n' "${lines[@]:1}"
 }
 
-# Runs in the background after a show: xrandr costs more than the rest of the
-# press. A layout change that leaves the key unchanged centers the window on
-# the old layout for one press at worst. The key is read before xrandr, so a
-# change during the refresh leaves an old key, never a new key on old data.
-write_monitor_cache() {
-    local key monitors tmp="$MONITOR_CACHE_FILE.$BASHPID"
-    key=$(layout_key)
-    if [[ -z $key ]]; then
+# store_monitor_cache <key> <monitors>: a failed write leaves no temp file.
+store_monitor_cache() {
+    local tmp="$MONITOR_CACHE_FILE.$BASHPID"
+    if printf '%s\n%s\n' "$1" "$2" >"$tmp" && mv -f "$tmp" "$MONITOR_CACHE_FILE"; then
         return 0
     fi
-    if ! monitors=$(xrandr --current --listmonitors); then
-        warn "could not refresh the monitor cache with xrandr"
-        return 1
-    fi
-    if ! printf '%s\n%s\n' "$key" "$monitors" >"$tmp"; then
-        warn "could not write $tmp"
-        return 1
-    fi
-    if ! mv -f "$tmp" "$MONITOR_CACHE_FILE"; then
-        warn "could not replace $MONITOR_CACHE_FILE"
-        return 1
-    fi
-}
-
-# The refresh outlives the press: it must not inherit the lock.
-refresh_monitor_cache_in_background() {
-    write_monitor_cache 9>&- </dev/null >/dev/null &
+    warn "could not write the monitor cache $MONITOR_CACHE_FILE"
+    rm -f "$tmp"
+    return 1
 }
 
 # monitor_containing <x> <y> <'xrandr --listmonitors' output>: prints
@@ -376,13 +372,13 @@ monitor_containing() {
     local point_x=$1 point_y=$2 monitors=$3 line first=""
     local width height x y
     while read -r line; do
-        if [[ ! $line =~ ([0-9]+)/[0-9]+x([0-9]+)/[0-9]+\+(-?[0-9]+)\+(-?[0-9]+) ]]; then
+        if [[ ! $line =~ $MONITOR_PATTERN ]]; then
             continue
         fi
-        width=${BASH_REMATCH[1]}
-        height=${BASH_REMATCH[2]}
-        x=${BASH_REMATCH[3]}
-        y=${BASH_REMATCH[4]}
+        width=${BASH_REMATCH[2]}
+        height=${BASH_REMATCH[3]}
+        x=${BASH_REMATCH[4]}
+        y=${BASH_REMATCH[6]}
         if [[ -z $first ]]; then
             first="$width $height $x $y"
         fi
@@ -397,11 +393,42 @@ monitor_containing() {
     echo "$first"
 }
 
-# pointer_monitor_geometry <layout key, may be empty>: prints "width height x
-# y" of the monitor containing the pointer, or of the first monitor when the
-# pointer is outside every monitor. An unusable cache falls back to xrandr.
+# monitor_at <x> <y> <layout key, may be empty>: an unusable cache falls back
+# to xrandr, whose output is then cached. The key was read before xrandr ran,
+# so a layout change during the press leaves an old key, never a new key on
+# old data.
+monitor_at() {
+    local point_x=$1 point_y=$2 key=$3 monitors
+    if [[ -n $key ]]; then
+        if monitors=$(cached_monitors "$key"); then
+            if monitor_containing "$point_x" "$point_y" "$monitors"; then
+                return 0
+            fi
+        fi
+    fi
+    if ! monitors=$(xrandr --current --listmonitors); then
+        die "could not list the monitors with xrandr"
+    fi
+    if ! monitor_containing "$point_x" "$point_y" "$monitors"; then
+        die "no monitor found in 'xrandr --listmonitors'"
+    fi
+    # The write outlives the press: it must not inherit the lock, nor the
+    # stdout of the capture that runs this function.
+    if [[ -n $key ]]; then
+        store_monitor_cache "$key" "$monitors" 9>&- </dev/null >/dev/null &
+    fi
+}
+
+# pointer_monitor_geometry <root properties>: prints "width height x y" of
+# the monitor containing the pointer, or of the first monitor when the
+# pointer is outside every monitor. _GTK_WORKAREAS_D0 holds one rectangle per
+# monitor, so it changes when a monitor is added, removed, moved or resized:
+# it is the cache key, empty when the WM does not set it.
 pointer_monitor_geometry() {
-    local key=$1 location line pointer_x="" pointer_y="" monitors
+    local root=$1 key="" location line pointer_x="" pointer_y=""
+    if [[ $root =~ $LAYOUT_KEY_PATTERN ]]; then
+        key=${BASH_REMATCH[1]}
+    fi
     if ! location=$(xdotool getmouselocation --shell); then
         die "could not read the pointer location with xdotool"
     fi
@@ -414,19 +441,7 @@ pointer_monitor_geometry() {
     if [[ ! $pointer_x =~ ^-?[0-9]+$ || ! $pointer_y =~ ^-?[0-9]+$ ]]; then
         die "unexpected pointer location from 'xdotool getmouselocation': $location"
     fi
-    if [[ -n $key ]]; then
-        if monitors=$(cached_monitors "$key"); then
-            if monitor_containing "$pointer_x" "$pointer_y" "$monitors"; then
-                return 0
-            fi
-        fi
-    fi
-    if ! monitors=$(xrandr --current --listmonitors); then
-        die "could not list the monitors with xrandr"
-    fi
-    if ! monitor_containing "$pointer_x" "$pointer_y" "$monitors"; then
-        die "no monitor found in 'xrandr --listmonitors'"
-    fi
+    monitor_at "$pointer_x" "$pointer_y" "$key"
 }
 
 # Prints "left right top bottom" from xprop output; fails when the WM has not
@@ -439,24 +454,21 @@ frame_extents_from() {
     echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[4]}"
 }
 
-has_frame_extents() {
+# Prints the frame extents of the window, silently failing while it has none.
+window_frame_extents() {
     local extents
     if ! extents=$(window_property "$1" _NET_FRAME_EXTENTS); then
         return 1
     fi
-    frame_extents_from "$extents" >/dev/null
+    frame_extents_from "$extents"
 }
 
 # Right after a map the WM may not have set the frame extents yet; without
 # them the frame is taken as the client area alone.
 mapped_frame_extents() {
-    local wid=$1 extents
-    if wait_until has_frame_extents "$wid"; then
-        if extents=$(window_property "$wid" _NET_FRAME_EXTENTS); then
-            if frame_extents_from "$extents"; then
-                return 0
-            fi
-        fi
+    local wid=$1
+    if wait_until window_frame_extents "$wid"; then
+        return 0
     fi
     warn "window $wid has no frame extents, assuming no frame"
     echo "0 0 0 0"
@@ -489,54 +501,58 @@ client_size() {
     client_size_from "$info" "$wid"
 }
 
+# A wait_while predicate: it runs in the caller's shell, so exit ends the press.
 client_size_is() {
     local wid=$1 expected=$2 current
-    current=$(client_size "$wid")
+    if ! current=$(client_size "$wid"); then
+        exit 1
+    fi
     [[ $current == "$expected" ]]
 }
 
-# frame_size <"width height" of the client> <"left right top bottom">: prints
-# "width height" of the frame, title bar and borders included.
-frame_size() {
-    local client_width client_height left right top bottom
-    read -r client_width client_height <<<"$1"
-    read -r left right top bottom <<<"$2"
-    echo "$((client_width + left + right)) $((client_height + top + bottom))"
-}
-
-# Prints the offset that centers a span of $1 in a span of $2, never negative:
-# a window larger than the monitor starts at the monitor's edge.
-centered_offset() {
-    local size=$1 available=$2
-    if ((size >= available)); then
-        echo 0
-        return 0
-    fi
-    echo $(((available - size) / 2))
-}
-
-# centered_position <"width height x y" of the monitor> <"width height" of
-# the frame>: prints the "x y" that windowmove takes. windowmove places the
-# frame's top-left corner, on a managed window and on a withdrawn one with
-# the position hint alike.
+# centered_position <"width height x y" of the monitor> <"width height">
+# [<"left right top bottom" frame extents>]: prints the "x y" that centers the
+# frame, title bar and borders included; without extents the size is the
+# frame's. windowmove places the frame's top-left corner, on a managed window
+# and on a withdrawn one with the position hint alike. A frame larger than
+# the monitor starts at the monitor's edge.
 centered_position() {
-    local monitor_width monitor_height monitor_x monitor_y frame_width frame_height
+    local monitor_width monitor_height monitor_x monitor_y width height left right top bottom
     read -r monitor_width monitor_height monitor_x monitor_y <<<"$1"
-    read -r frame_width frame_height <<<"$2"
-    echo "$((monitor_x + $(centered_offset "$frame_width" "$monitor_width"))) $((monitor_y + $(centered_offset "$frame_height" "$monitor_height")))"
+    read -r width height <<<"$2"
+    read -r left right top bottom <<<"${3:-0 0 0 0}"
+    width=$((width + left + right))
+    height=$((height + top + bottom))
+    echo "$((monitor_x + (width < monitor_width ? (monitor_width - width) / 2 : 0))) $((monitor_y + (height < monitor_height ? (monitor_height - height) / 2 : 0)))"
 }
 
 # The percentages apply to the frame, so the title bar counts in the height.
 default_frame_size() {
-    local monitor_width=$1 monitor_height=$2
+    local monitor_width monitor_height
+    read -r monitor_width monitor_height _ <<<"$1"
     echo "$((monitor_width * WIDTH_PERCENT / 100)) $((monitor_height * HEIGHT_PERCENT / 100))"
 }
 
+# resize_frame <wid> <"width height" of the frame> <"left right top bottom">
 resize_frame() {
-    local wid=$1 frame_width=$2 frame_height=$3 extents=$4 left right top bottom
-    read -r left right top bottom <<<"$extents"
+    local wid=$1 frame_width frame_height left right top bottom
+    read -r frame_width frame_height <<<"$2"
+    read -r left right top bottom <<<"$3"
     if ! xdotool windowsize "$wid" $((frame_width - left - right)) $((frame_height - top - bottom)); then
         die "could not resize window $wid"
+    fi
+}
+
+# xdotool runs chained commands in one process. Only the realistic failure
+# is relied on: a window that is gone raises an X error, and Xlib's default
+# error handler ends the process with status 1, so the rest of the chain
+# does not run.
+# place_on_workspace <wid> <workspace> <"x y">
+place_on_workspace() {
+    local wid=$1 desktop=$2 x y
+    read -r x y <<<"$3"
+    if ! xdotool set_desktop_for_window "$wid" "$desktop" windowmove "$wid" "$x" "$y" windowactivate "$wid"; then
+        die "could not move window $wid to workspace $desktop, to $x,$y and activate it"
     fi
 }
 
@@ -655,9 +671,14 @@ EOF
 # A maximized window cannot be moved or resized, so it is unmaximized first.
 # The WM may drop the maximized state before the size changes; a restored
 # size equal to the maximized one never changes, so that wait is not fatal.
-restore_maximized_window() {
+restore_if_maximized() {
     local wid=$1 maximized_size
-    maximized_size=$(client_size "$wid")
+    if ! has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
+        return 0
+    fi
+    if ! maximized_size=$(client_size "$wid"); then
+        exit 1
+    fi
     unmaximize_window "$wid"
     if ! wait_while client_size_is "$wid" "$maximized_size"; then
         return 0
@@ -680,31 +701,47 @@ withdraw_window() {
     fi
 }
 
+# Centers a mapped window with its current size.
+center_mapped_window() {
+    local wid=$1 desktop=$2 monitor=$3 extents client position
+    restore_if_maximized "$wid"
+    extents=$(mapped_frame_extents "$wid")
+    if ! client=$(client_size "$wid"); then
+        exit 1
+    fi
+    position=$(centered_position "$monitor" "$client" "$extents")
+    place_on_workspace "$wid" "$desktop" "$position"
+}
+
 # show_dropdown <wid> <window properties> <xwininfo output> <root properties>
 # <current workspace>. A window that is minimized or on another workspace is
 # withdrawn first, so it is shown again through the same path as a hidden
 # one. Muffin keeps the frame extents and the hints of a withdrawn window;
 # without them the window is moved once it is mapped. Only what places the
-# window runs before the map request. xdotool runs chained commands in one
-# process and stops at the first one that fails, with a non-zero status.
+# window runs before the map request.
 show_dropdown() {
     local wid=$1 properties=$2 info=$3 root=$4 desktop=$5
-    local monitor extents frame x y placed=false
-    if contains_line "$(client_ids "$root")" "$wid"; then
+    local ids monitor extents client position="" x y
+    ids=$(client_ids "$root")
+    if contains_line "$ids" "$wid"; then
         withdraw_window "$wid"
+        trace show-withdrawn
     fi
-    trace show-withdrawn
-    monitor=$(pointer_monitor_geometry "$(layout_key_from "$root")")
+    if ! monitor=$(pointer_monitor_geometry "$root"); then
+        exit 1
+    fi
     trace show-monitor
     if ! ensure_user_position_hint "$wid" "$properties"; then
         warn "window $wid will be moved after it is mapped"
     elif extents=$(frame_extents_from "$properties"); then
-        frame=$(frame_size "$(client_size_from "$info" "$wid")" "$extents")
-        read -r x y <<<"$(centered_position "$monitor" "$frame")"
-        placed=true
+        if ! client=$(client_size_from "$info" "$wid"); then
+            exit 1
+        fi
+        position=$(centered_position "$monitor" "$client" "$extents")
     fi
     trace show-placed
-    if [[ $placed == true ]]; then
+    if [[ -n $position ]]; then
+        read -r x y <<<"$position"
         if ! xdotool windowmove "$wid" "$x" "$y" windowmap "$wid"; then
             die "could not move window $wid to $x,$y and map it"
         fi
@@ -716,28 +753,22 @@ show_dropdown() {
         die "window $wid is not managed ${TIMEOUT_SECONDS}s after mapping it"
     fi
     trace show-managed
-    if has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
-        restore_maximized_window "$wid"
-        placed=false
-    fi
-    if [[ $placed == true ]]; then
+    if [[ -n $position ]] && ! has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
         if ! xdotool set_desktop_for_window "$wid" "$desktop" windowactivate "$wid"; then
             die "could not move window $wid to workspace $desktop and activate it"
         fi
         return 0
     fi
-    extents=$(mapped_frame_extents "$wid")
-    frame=$(frame_size "$(client_size "$wid")" "$extents")
-    read -r x y <<<"$(centered_position "$monitor" "$frame")"
-    if ! xdotool set_desktop_for_window "$wid" "$desktop" windowmove "$wid" "$x" "$y" windowactivate "$wid"; then
-        die "could not move window $wid to workspace $desktop, to $x,$y and activate it"
-    fi
+    center_mapped_window "$wid" "$desktop" "$monitor"
 }
 
 # Prints the id of a normal, viewable Nemo window managed now but absent from $1.
 find_new_nemo_window() {
-    local known_ids=$1 wid
-    for wid in $(managed_window_ids); do
+    local known_ids=$1 ids wid
+    if ! ids=$(managed_window_ids); then
+        return 1
+    fi
+    for wid in $ids; do
         if contains_line "$known_ids" "$wid"; then
             continue
         fi
@@ -753,9 +784,10 @@ find_new_nemo_window() {
 }
 
 create_dropdown() {
-    local known_ids wid root desktop monitor monitor_width monitor_height extents frame
-    local frame_width frame_height x y
-    known_ids=$(managed_window_ids)
+    local known_ids wid hints extents root desktop monitor frame position
+    if ! known_ids=$(managed_window_ids); then
+        die "could not list the managed windows with xprop"
+    fi
     # The launched nemo can become the long-lived Nemo process: it must not
     # inherit the lock, or every later press would be skipped.
     setsid -f nemo "$HOME" 9>&- >/dev/null 2>&1 </dev/null
@@ -764,26 +796,22 @@ create_dropdown() {
     fi
     mark_dropdown_window "$wid"
     echo "$wid" >"$WID_FILE"
-    if ! ensure_user_position_hint "$wid" "$(window_property "$wid" WM_NORMAL_HINTS)"; then
+    if ! hints=$(window_property "$wid" WM_NORMAL_HINTS); then
+        die "could not read the size hints of window $wid"
+    fi
+    if ! ensure_user_position_hint "$wid" "$hints"; then
         warn "window $wid will be moved after it is mapped at each show"
     fi
-    if has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
-        restore_maximized_window "$wid"
-    fi
+    restore_if_maximized "$wid"
     extents=$(mapped_frame_extents "$wid")
-    if ! root=$(xprop -root "${ROOT_PROPERTIES[@]}"); then
-        die "could not read the root window properties with xprop"
+    read_root_state root desktop
+    if ! monitor=$(pointer_monitor_geometry "$root"); then
+        exit 1
     fi
-    desktop=$(current_desktop "$root")
-    monitor=$(pointer_monitor_geometry "$(layout_key_from "$root")")
-    read -r monitor_width monitor_height _ <<<"$monitor"
-    frame=$(default_frame_size "$monitor_width" "$monitor_height")
-    read -r frame_width frame_height <<<"$frame"
-    resize_frame "$wid" "$frame_width" "$frame_height" "$extents"
-    read -r x y <<<"$(centered_position "$monitor" "$frame")"
-    if ! xdotool set_desktop_for_window "$wid" "$desktop" windowmove "$wid" "$x" "$y" windowactivate "$wid"; then
-        die "could not move window $wid to workspace $desktop, to $x,$y and activate it"
-    fi
+    frame=$(default_frame_size "$monitor")
+    resize_frame "$wid" "$frame" "$extents"
+    position=$(centered_position "$monitor" "$frame")
+    place_on_workspace "$wid" "$desktop" "$position"
 }
 
 # The /tmp fallback is shared by all users: refuse a directory someone else
@@ -807,7 +835,7 @@ ensure_state_dir() {
 }
 
 main() {
-    local wid="" properties info root desktop
+    local wid="" saved properties info root desktop
     require_valid_timeout
     require_commands
     ensure_state_dir
@@ -821,21 +849,21 @@ main() {
     fi
     trace lock
 
-    if [[ -f $WID_FILE ]]; then
-        IFS= read -r wid <"$WID_FILE" || true
+    # No saved id is the normal "no dropdown yet" case.
+    if [[ -e $WID_FILE ]]; then
+        if ! mapfile -t -n 1 saved 2>/dev/null <"$WID_FILE"; then
+            die "could not read the saved window id in $WID_FILE"
+        fi
+        wid=${saved[0]:-}
     fi
     if ! properties=$(dropdown_properties "$wid"); then
         create_dropdown
-        refresh_monitor_cache_in_background
         return 0
     fi
     if ! info=$(xwininfo -id "$wid"); then
         die "could not run xwininfo on window $wid"
     fi
-    if ! root=$(xprop -root "${ROOT_PROPERTIES[@]}"); then
-        die "could not read the root window properties with xprop"
-    fi
-    desktop=$(current_desktop "$root")
+    read_root_state root desktop
     trace validated
     if is_shown_here "$properties" "$info" "$desktop"; then
         trace decided-hide
@@ -846,7 +874,6 @@ main() {
     trace decided-show
     show_dropdown "$wid" "$properties" "$info" "$root" "$desktop"
     trace show-activated
-    refresh_monitor_cache_in_background
     if [[ -f $TRACE_SWITCH ]]; then
         if wait_until is_viewable "$wid"; then
             trace show-viewable

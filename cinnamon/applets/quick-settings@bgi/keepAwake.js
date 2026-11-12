@@ -1,9 +1,14 @@
 const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
 const Constants = require('./constants');
+const AsyncHelpers = require('./asyncHelpers');
 
-const NO_TIMEOUT = -1;
 const NO_TOPLEVEL_XID = 0;
+const SESSION_MANAGER = {
+    name: Constants.SESSION_MANAGER_NAME,
+    path: Constants.SESSION_MANAGER_PATH,
+    iface: Constants.SESSION_MANAGER_INTERFACE,
+};
 
 // Keep awake: an idle inhibit held on the session manager, as the stock inhibit applet takes
 // it. The tile shows whether idle is inhibited by anyone (this applet, the stock inhibit
@@ -24,8 +29,8 @@ class KeepAwake {
         this.available = false;
         this._cancellable = new Gio.Cancellable();
         this._signalIds = ['InhibitorAdded', 'InhibitorRemoved'].map(signal =>
-            this._bus.signal_subscribe(Constants.SESSION_MANAGER_NAME, Constants.SESSION_MANAGER_INTERFACE,
-                signal, Constants.SESSION_MANAGER_PATH, null, Gio.DBusSignalFlags.NONE, () => this.refresh()));
+            this._bus.signal_subscribe(SESSION_MANAGER.name, SESSION_MANAGER.iface,
+                signal, SESSION_MANAGER.path, null, Gio.DBusSignalFlags.NONE, () => this.refresh()));
         this.refresh();
     }
 
@@ -53,7 +58,6 @@ class KeepAwake {
         for (const id of this._signalIds)
             this._bus.signal_unsubscribe(id);
         this._signalIds = [];
-        // Sent without the cancellable: it must still go out while the applet goes away.
         if (this._cookie !== null)
             this._release(true);
         this._cancellable.cancel();
@@ -63,54 +67,35 @@ class KeepAwake {
     // an inhibit the applet no longer wants.
     _takeInhibit() {
         this._pending = true;
-        this._bus.call(Constants.SESSION_MANAGER_NAME, Constants.SESSION_MANAGER_PATH, Constants.SESSION_MANAGER_INTERFACE,
-            'Inhibit', new GLib.Variant('(susu)', [this._appId, NO_TOPLEVEL_XID, Constants.INHIBIT_REASON, Constants.INHIBIT_IDLE_FLAG]),
-            null, Gio.DBusCallFlags.NONE, NO_TIMEOUT, null, (connection, result) => {
-                this._pending = false;
-                try {
-                    [this._cookie] = connection.call_finish(result).deepUnpack();
-                } catch (e) {
-                    global.logError(`${Constants.LOG_PREFIX}: taking the idle inhibit failed`, e);
-                    return;
-                }
-                if (this._destroyed)
-                    this._release(true);
-                else
-                    this.refresh();
-            });
+        const parameters = new GLib.Variant('(susu)', [this._appId, NO_TOPLEVEL_XID, Constants.INHIBIT_REASON, Constants.INHIBIT_IDLE_FLAG]);
+        AsyncHelpers.callDbus(this._bus, SESSION_MANAGER, 'Inhibit', parameters, null, 'taking the idle inhibit', reply => {
+            this._pending = false;
+            [this._cookie] = reply.deepUnpack();
+            if (this._destroyed)
+                this._release(true);
+            else
+                this.refresh();
+        }, () => {
+            this._pending = false;
+        });
     }
 
+    // Also sent without the cancellable: it must still go out while the applet goes away.
     _release(leaving = false) {
         const cookie = this._cookie;
         this._cookie = null;
         this._pending = !leaving;
-        this._bus.call(Constants.SESSION_MANAGER_NAME, Constants.SESSION_MANAGER_PATH, Constants.SESSION_MANAGER_INTERFACE,
-            'Uninhibit', new GLib.Variant('(u)', [cookie]), null, Gio.DBusCallFlags.NONE, NO_TIMEOUT, null,
-            (connection, result) => {
-                try {
-                    connection.call_finish(result);
-                } catch (e) {
-                    global.logError(`${Constants.LOG_PREFIX}: releasing the idle inhibit ${cookie} failed`, e);
-                }
-                if (!leaving) {
-                    this._pending = false;
-                    this.refresh();
-                }
-            });
+        const done = () => {
+            if (!leaving) {
+                this._pending = false;
+                this.refresh();
+            }
+        };
+        AsyncHelpers.callDbus(this._bus, SESSION_MANAGER, 'Uninhibit', new GLib.Variant('(u)', [cookie]), null,
+            `releasing the idle inhibit ${cookie}`, done, done);
     }
 
     _call(method, parameters, onResult, what) {
-        this._bus.call(Constants.SESSION_MANAGER_NAME, Constants.SESSION_MANAGER_PATH, Constants.SESSION_MANAGER_INTERFACE,
-            method, parameters, null, Gio.DBusCallFlags.NONE, NO_TIMEOUT, this._cancellable, (connection, result) => {
-                let reply;
-                try {
-                    reply = connection.call_finish(result);
-                } catch (e) {
-                    if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                        global.logError(`${Constants.LOG_PREFIX}: ${what} failed`, e);
-                    return;
-                }
-                onResult(reply);
-            });
+        AsyncHelpers.callDbus(this._bus, SESSION_MANAGER, method, parameters, this._cancellable, what, onResult);
     }
 }

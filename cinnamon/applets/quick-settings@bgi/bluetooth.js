@@ -2,8 +2,22 @@ const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
 const Constants = require('./constants');
 const BluetoothModel = require('./bluetoothModel');
+const AsyncHelpers = require('./asyncHelpers');
 
-const NO_TIMEOUT = -1;
+// The real system bus. The tests pass a fake with the same two members.
+const SYSTEM_BUS = {
+    bus: Gio.DBus.system,
+    newManager(cancellable, onReady) {
+        Gio.DBusObjectManagerClient.new_for_bus(Gio.BusType.SYSTEM, Gio.DBusObjectManagerClientFlags.NONE,
+            Constants.BLUEZ_NAME, '/', null, cancellable, (source, result) => {
+                try {
+                    onReady(Gio.DBusObjectManagerClient.new_for_bus_finish(result), null);
+                } catch (e) {
+                    onReady(null, e);
+                }
+            });
+    },
+};
 
 function cachedValue(proxy, property, fallback) {
     const value = proxy.get_cached_property(property);
@@ -13,14 +27,14 @@ function cachedValue(proxy, property, fallback) {
 // The Bluetooth adapter and its paired devices, from BlueZ on the system bus (ObjectManager).
 // @onChange runs on every change: adapter power, device connected, device added or removed.
 class Bluetooth {
-    constructor(onChange) {
+    constructor(onChange, system = SYSTEM_BUS) {
         this._onChange = onChange;
+        this._system = system;
         this._manager = null;
         this._signalIds = [];
         this._cancellable = new Gio.Cancellable();
         this.summary = BluetoothModel.summarize([], []);
-        Gio.DBusObjectManagerClient.new_for_bus(Gio.BusType.SYSTEM, Gio.DBusObjectManagerClientFlags.NONE,
-            Constants.BLUEZ_NAME, '/', null, this._cancellable, (source, result) => this._onManagerReady(result));
+        system.newManager(this._cancellable, (manager, error) => this._onManagerReady(manager, error));
     }
 
     toggle() {
@@ -47,14 +61,12 @@ class Bluetooth {
         this._manager = null;
     }
 
-    _onManagerReady(result) {
-        try {
-            this._manager = Gio.DBusObjectManagerClient.new_for_bus_finish(result);
-        } catch (e) {
-            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                global.logError(`${Constants.LOG_PREFIX}: connecting to BlueZ failed`, e);
+    _onManagerReady(manager, error) {
+        if (error) {
+            AsyncHelpers.logUnlessCancelled(error, 'connecting to BlueZ');
             return;
         }
+        this._manager = manager;
         for (const signal of ['object-added', 'object-removed', 'interface-added', 'interface-removed',
             'interface-proxy-properties-changed'])
             this._signalIds.push(this._manager.connect(signal, () => this._update()));
@@ -87,14 +99,7 @@ class Bluetooth {
     }
 
     _call(path, iface, method, parameters, what) {
-        Gio.DBus.system.call(Constants.BLUEZ_NAME, path, iface, method, parameters, null,
-            Gio.DBusCallFlags.NONE, NO_TIMEOUT, this._cancellable, (connection, result) => {
-                try {
-                    connection.call_finish(result);
-                } catch (e) {
-                    if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                        global.logError(`${Constants.LOG_PREFIX}: ${what} failed`, e);
-                }
-            });
+        AsyncHelpers.callDbus(this._system.bus, { name: Constants.BLUEZ_NAME, path, iface }, method, parameters,
+            this._cancellable, what, () => {});
     }
 }

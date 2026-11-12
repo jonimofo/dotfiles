@@ -1,7 +1,7 @@
 // Parsers for the nordvpn command line client (6.x). Pure functions: tested with output
 // captured on this machine.
 
-// `nordvpn status`: one "Key: value" per line. Returns { connected, country, fields }.
+// `nordvpn status`: one "Key: value" per line. Returns { connected, country }.
 // Lines without a colon (progress spinners, notices) are skipped.
 function parseStatus(text, connectedValue) {
     const fields = {};
@@ -13,7 +13,6 @@ function parseStatus(text, connectedValue) {
     return {
         connected: fields.Status === connectedValue,
         country: fields.Country || null,
-        fields,
     };
 }
 

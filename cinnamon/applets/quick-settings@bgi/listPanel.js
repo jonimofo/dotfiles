@@ -83,7 +83,7 @@ class ListPanel {
             can_focus: true,
         });
         if (item.active)
-            button.add_style_pseudo_class('checked');
+            button.add_style_pseudo_class(UiHelpers.CHECKED_PSEUDO_CLASS);
         button.connect('clicked', () => item.onActivate());
         return button;
     }

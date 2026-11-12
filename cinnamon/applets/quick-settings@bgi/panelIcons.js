@@ -3,6 +3,9 @@ const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
 const LayoutModel = require('./layoutModel');
 
+// The stock style of panel status icons (as IconApplet uses for symbolic icons).
+const PANEL_ICON_STYLE_CLASS = 'system-status-icon';
+
 // The status icons shown on the panel: Wi-Fi, Bluetooth, VPN, volume, in the order and with
 // the selection of applyLayout(). Bluetooth shows only while the adapter is on, VPN only
 // while a VPN is up: the settings can hide an icon, never force one on. With no icon left,
@@ -11,15 +14,15 @@ class PanelIcons {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-panel-icons' });
         this._icons = {
-            wifi: UiHelpers.symbolicIcon(Constants.WIFI_ON_ICON, 'system-status-icon'),
-            bluetooth: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.bluetooth, 'system-status-icon'),
-            vpn: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.vpn, 'system-status-icon'),
-            volume: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.volume, 'system-status-icon'),
+            wifi: UiHelpers.symbolicIcon(Constants.WIFI_ON_ICON, PANEL_ICON_STYLE_CLASS),
+            bluetooth: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.bluetooth, PANEL_ICON_STYLE_CLASS),
+            vpn: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.vpn, PANEL_ICON_STYLE_CLASS),
+            volume: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.volume, PANEL_ICON_STYLE_CLASS),
         };
         // Whether the state wants each icon shown.
         this._wanted = { wifi: true, bluetooth: false, vpn: false, volume: true };
         this._allowed = Object.keys(this._icons);
-        this._fallback = UiHelpers.symbolicIcon(Constants.PANEL_FALLBACK_ICON, 'system-status-icon');
+        this._fallback = UiHelpers.symbolicIcon(Constants.PANEL_FALLBACK_ICON, PANEL_ICON_STYLE_CLASS);
         this.applyLayout(Constants.PANEL_ICON_ITEMS.map(item => item.id));
     }
 
@@ -59,11 +62,6 @@ class PanelIcons {
 
     setVolumeIconName(iconName) {
         this._icons.volume.icon_name = iconName;
-    }
-
-    // True when the fallback icon stands in for the others.
-    get showsFallback() {
-        return this._fallback.visible;
     }
 
     _sync() {

@@ -8,14 +8,19 @@ const ByteArray = imports.byteArray;
 const INDENT = 4;
 const LIST_HEIGHT = 340;
 
-function loadConstants(appletDir) {
-    const source = ByteArray.toString(GLib.file_get_contents(`${appletDir}/constants.js`)[1]);
-    const names = [...source.matchAll(/^const ([A-Za-z0-9_]+)/gm)].map(match => match[1]);
+// A module of the applet without require() or imports: its top-level declarations.
+function loadPlainModule(appletDir, name) {
+    const source = ByteArray.toString(GLib.file_get_contents(`${appletDir}/${name}.js`)[1]);
+    const names = [...source.matchAll(/^(?:function|const) ([A-Za-z0-9_]+)/gm)].map(match => match[1]);
     return new Function(`${source}\nreturn { ${names.join(', ')} };`)();
 }
 
+function loadConstants(appletDir) {
+    return loadPlainModule(appletDir, 'constants');
+}
+
 // One tab: a page with one untitled section holding one list.
-function listSetting(declared, columnTitle) {
+function listSetting(declared, columnTitle, layoutModel) {
     return {
         type: 'list',
         description: columnTitle,
@@ -24,11 +29,11 @@ function listSetting(declared, columnTitle) {
             { id: 'show', title: 'Show', type: 'boolean' },
             { id: 'id', title: columnTitle, type: 'string', options: Object.fromEntries(declared.map(item => [item.name, item.id])) },
         ],
-        default: declared.map(item => ({ show: true, id: item.id })),
+        default: layoutModel.defaults(declared),
     };
 }
 
-function buildSchema(constants) {
+function buildSchema(constants, layoutModel) {
     const tabs = [
         { key: constants.LAYOUT_KEYS.tiles, title: 'Tiles', column: 'Tile', declared: constants.TILES },
         { key: constants.LAYOUT_KEYS.sliders, title: 'Sliders', column: 'Slider', declared: constants.SLIDERS },
@@ -42,12 +47,13 @@ function buildSchema(constants) {
     }
     const schema = { layout };
     for (const tab of tabs)
-        schema[tab.key] = listSetting(tab.declared, tab.column);
+        schema[tab.key] = listSetting(tab.declared, tab.column, layoutModel);
     return schema;
 }
 
 function schemaText(appletDir) {
-    return `${JSON.stringify(buildSchema(loadConstants(appletDir)), null, INDENT)}\n`;
+    const schema = buildSchema(loadConstants(appletDir), loadPlainModule(appletDir, 'layoutModel'));
+    return `${JSON.stringify(schema, null, INDENT)}\n`;
 }
 
 if (ARGV.length === 1 && !globalThis.QUICK_SETTINGS_SCHEMA_AS_MODULE)

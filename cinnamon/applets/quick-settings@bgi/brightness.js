@@ -1,6 +1,6 @@
 const Constants = require('./constants');
 
-// The Monitors slider's model. Uses the DDC monitors when there are any, else the laptop
+// The Brightness slider's model. Uses the DDC monitors when there are any, else the laptop
 // panel. @onValue(fraction) shows a value; @onAvailable(bool) dims the row when neither
 // backend answers. Results of an older read or write are dropped once a newer one started.
 class Brightness {
@@ -32,7 +32,7 @@ class Brightness {
                 await this._screen.read();
                 backend = this._screen;
             } catch (e) {
-                global.log(`${Constants.LOG_PREFIX}: no DDC monitor and no laptop panel backlight (${e.message}), Monitors slider dimmed`);
+                global.log(`${Constants.LOG_PREFIX}: no DDC monitor and no laptop panel backlight (${e.message}), Brightness slider dimmed`);
             }
         }
         if (this._destroyed)

@@ -35,10 +35,11 @@ const HEADER_BUTTONS = [
     { id: 'power', icon: 'system-shutdown-symbolic' },
 ];
 
+// Slider rows, top to bottom: this array is the only place that sets their order.
 const SLIDERS = [
-    { id: 'monitors', label: 'Monitors', icon: 'display-brightness-symbolic', hasMenu: false },
-    { id: 'output', label: 'Output', icon: 'audio-volume-high-symbolic', hasMenu: true },
-    { id: 'input', label: 'Input', icon: 'audio-input-microphone-symbolic', hasMenu: true },
+    { id: 'output', label: 'Sound', icon: 'audio-volume-high-symbolic', hasMenu: true },
+    { id: 'input', label: 'Microphone', icon: 'audio-input-microphone-symbolic', hasMenu: true },
+    { id: 'monitors', label: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
 ];
 
 // Grid order: left to right, then top to bottom, two per row.
@@ -105,8 +106,8 @@ const LIST_TITLES = {
     bluetooth: 'Bluetooth',
     vpn: 'VPN',
     nordvpn: 'NordVPN',
-    output: 'Output',
-    input: 'Input',
+    output: 'Sound',
+    input: 'Microphone',
 };
 const LIST_SETTINGS_LABELS = {
     wifi: 'All networks...',

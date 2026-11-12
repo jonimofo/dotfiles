@@ -37,6 +37,22 @@ Panel:  [ wifi bt vpn vol ]   one button
 VPN profiles, NordVPN countries, profiles.
 ```
 
+## Slider rows reordered and renamed (after step 3)
+
+Request: "first show Sound, second Microphone, 3rd brigthness". Answer: "Reorder and rename
+(Recommended)": the labels become Sound, Microphone, Brightness. The order is the `SLIDERS`
+array in `constants.js`, the only place that sets it.
+
+```
+| 100%     [shot] [settings] [lock] [power]|
+|                                          |
+| vol  Sound       =========o--   >        |
+| mic  Microphone  =====o------   >        |
+| sun  Brightness  ======o-----            |
+|                                          |
+| [ Wi-Fi     > ]   [ Bluetooth     > ]    |
+```
+
 ## Validated list mockup (step 3)
 
 Answer: "GNOME style, in place (Recommended)": the list opens as a panel inside the menu,

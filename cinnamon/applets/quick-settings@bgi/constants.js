@@ -15,8 +15,8 @@ const FULL_OPACITY = 255;
 const THEME_TILE_COLOR = '-slider-background-color';
 const THEME_TILE_CHECKED_COLOR = '-slider-active-background-color';
 
-// Placeholder position of the sliders until they are wired.
-const SLIDER_PLACEHOLDER_VALUE = 0.5;
+// Slider position before the first real value arrives.
+const SLIDER_INITIAL_VALUE = 0;
 
 // Wi-Fi on and off, on the panel and on its tile.
 const WIFI_ON_ICON = 'network-wireless-symbolic';
@@ -70,3 +70,28 @@ const BATTERY_ICON_STEP = 10;
 const BATTERY_ICON_PREFIX = 'battery-level-';
 const BATTERY_ICON_SUFFIX = '-symbolic';
 const BATTERY_LABEL_SUFFIX = '%';
+
+// Brightness of the external monitors, through DDC/CI. Buses are detected at runtime: they
+// change with the dock.
+const DDCUTIL = 'ddcutil';
+const DDC_BRIGHTNESS_FEATURE = '10';
+// A scroll on the slider has no release: the value is sent once the wheel stops this long.
+const BRIGHTNESS_SCROLL_COMMIT_MS = 400;
+
+// Laptop panel brightness, through cinnamon-settings-daemon like the stock power applet.
+const SCREEN_BRIGHTNESS_PROXY = 'org.cinnamon.SettingsDaemon.Power.Screen';
+const PERCENT = 100;
+
+// Volume, the stock sound applet's way (sound@cinnamon.org).
+const MIXER_NAME = 'Quick Settings Volume Control';
+const SOUND_SCHEMA = 'org.cinnamon.desktop.sound';
+const AMPLIFIED_VOLUME_KEY = 'allow-amplified-volume';
+const AMPLIFIED_VOLUME_FACTOR = 1.5;
+// Below this slider value the stream is muted at volume 0.
+const VOLUME_MUTE_THRESHOLD = 0.005;
+// Within half of this step around 100%, the volume snaps to 100%.
+const VOLUME_ADJUSTMENT_STEP = 0.05;
+const VOLUME_ICON_PREFIX = 'audio-volume-';
+const VOLUME_ICON_LEVELS = ['low', 'medium', 'high'];
+const VOLUME_ICON_MUTED = 'muted';
+const SYMBOLIC_SUFFIX = '-symbolic';

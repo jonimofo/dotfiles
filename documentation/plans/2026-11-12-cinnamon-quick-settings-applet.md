@@ -48,8 +48,13 @@ VPN profiles, NordVPN countries, profiles.
 
 ## Facts checked on the machine (2026-11-12)
 
-- `ddcutil detect` sees both monitors without sudo (`/dev/i2c-18`, `/dev/i2c-19`). Writing a
-  value is not tested yet: step 2 starts with that test.
+- `ddcutil detect` sees both monitors without sudo (`/dev/i2c-18`, `/dev/i2c-19`). Writing
+  works without sudo: the same value written back on bus 18 (step 2). One read or write takes
+  about 1.3 s, detection about 1.7 s.
+- The laptop panel brightness answers through cinnamon-settings-daemon
+  (`org.cinnamon.SettingsDaemon.Power.Screen GetPercentage`).
+- No PulseAudio source exists while the internal microphone is disabled: the Input slider is
+  dimmed, as the stock sound applet hides its input section.
 - `power-profiles-daemon` is active. `nordvpn`, `nmcli`, `bluetoothctl`, `flameshot` are installed.
 - NetworkManager has one VPN profile, `SEB`.
 - Night Light: `org.cinnamon.settings-daemon.plugins.color night-light-enabled`.

@@ -3,7 +3,7 @@ const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
 
 // The status icons shown on the panel, in the mockup's order: Wi-Fi, Bluetooth, VPN,
-// volume. Only Wi-Fi follows a real state for now.
+// volume. Wi-Fi and volume follow the real state; Bluetooth and VPN come in a later step.
 class PanelIcons {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-panel-icons' });
@@ -12,8 +12,9 @@ class PanelIcons {
             this._wifi,
             this._addIcon(Constants.PANEL_ICONS.bluetooth),
             this._addIcon(Constants.PANEL_ICONS.vpn),
-            this._addIcon(Constants.PANEL_ICONS.volume),
         ];
+        this._volume = this._addIcon(Constants.PANEL_ICONS.volume);
+        this._icons.push(this._volume);
     }
 
     setIconSize(size) {
@@ -25,6 +26,10 @@ class PanelIcons {
 
     setWifiEnabled(enabled) {
         this._wifi.icon_name = enabled ? Constants.WIFI_ON_ICON : Constants.WIFI_OFF_ICON;
+    }
+
+    setVolumeIconName(iconName) {
+        this._volume.icon_name = iconName;
     }
 
     _addIcon(iconName) {

@@ -14,11 +14,13 @@ class MenuContent {
         this.actor.add_child(this.header.actor);
 
         const sliders = new St.BoxLayout({ style_class: 'quick-settings-sliders', vertical: true });
-        this._sliderRows = Constants.SLIDERS.map(definition => {
+        // Slider rows by id, so the applet can wire them.
+        this.sliders = {};
+        for (const definition of Constants.SLIDERS) {
             const row = new SliderRow.SliderRow(definition);
             sliders.add_child(row.actor);
-            return row;
-        });
+            this.sliders[definition.id] = row;
+        }
         this.actor.add_child(sliders);
 
         // Tiles by id, so the applet can wire the working ones.
@@ -37,7 +39,7 @@ class MenuContent {
         this.actor.add_child(grid);
 
         // The first slider carries the theme's slider colours: a theme change restyles it.
-        this._colorSource = this._sliderRows[0].slider.actor;
+        this._colorSource = this.sliders[Constants.SLIDERS[0].id].slider.actor;
         this._colorSource.connect('style-changed', () => this.refreshColors());
     }
 
@@ -45,6 +47,11 @@ class MenuContent {
     refresh() {
         this.header.refreshBattery();
         this.refreshColors();
+    }
+
+    destroy() {
+        for (const row of Object.values(this.sliders))
+            row.destroy();
     }
 
     refreshColors() {

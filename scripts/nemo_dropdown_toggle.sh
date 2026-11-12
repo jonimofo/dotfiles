@@ -18,6 +18,9 @@
 # checked only then. Optional: notify-send, which shows errors as a
 # notification, since a keybinding's stderr is never seen.
 #
+# Timing: while the file trace exists in the state directory, each press
+# appends "microseconds-since-start stage" lines to timing.log there.
+#
 # Why not tdrop: Nemo is a single-instance application. A `nemo` command
 # hands its request to the running process and exits, so the new window never
 # belongs to the launched pid; tdrop waits for a window of that pid and times
@@ -38,6 +41,7 @@ set -euo pipefail
 # only reads and dies on failure, and every call that changes a window runs in
 # the caller's shell with an explicit check.
 
+readonly START_MICROSECONDS="${EPOCHREALTIME/[.,]/}"
 readonly WIDTH_PERCENT=80
 readonly HEIGHT_PERCENT=80
 readonly DEFAULT_TIMEOUT_SECONDS=10
@@ -48,21 +52,34 @@ readonly MICROSECONDS_PER_SECOND=1000000
 readonly NEMO_WM_CLASS='WM_CLASS(STRING) = "nemo", "Nemo"'
 readonly MARK_PROPERTY=NEMO_DROPDOWN
 readonly MARK_VALUE=1
+readonly MARK_LINE="$MARK_PROPERTY(STRING) = \"$MARK_VALUE\""
 readonly STICKY_DESKTOP=4294967295
+readonly HINTS_HEADER="WM_NORMAL_HINTS(WM_SIZE_HINTS):"
 readonly USER_POSITION_LINE="user specified location:"
 readonly LAYOUT_KEY_PROPERTY=_GTK_WORKAREAS_D0
 readonly NOTIFY_TITLE="Dropdown Nemo"
+# Everything the hot path needs from the dropdown and the root, one xprop each.
+readonly WINDOW_PROPERTIES=(WM_CLASS "$MARK_PROPERTY" _NET_WM_STATE _NET_WM_DESKTOP WM_NORMAL_HINTS _NET_FRAME_EXTENTS)
+readonly ROOT_PROPERTIES=(_NET_CLIENT_LIST "$LAYOUT_KEY_PROPERTY" _NET_CURRENT_DESKTOP)
 
+# XDG_RUNTIME_DIR is private to its user (mode 0700 by the XDG spec); the
+# /tmp fallback is shared, so only there is the mode enforced at each run.
 if [[ ${XDG_RUNTIME_DIR:-} == /* ]]; then
     readonly STATE_DIR="$XDG_RUNTIME_DIR/nemo-dropdown"
+    readonly STATE_DIR_IS_SHARED=false
 else
     readonly STATE_DIR="/tmp/nemo-dropdown-$UID"
+    readonly STATE_DIR_IS_SHARED=true
 fi
 readonly WID_FILE="$STATE_DIR/wid"
 readonly LOCK_FILE="$STATE_DIR/lock"
 readonly MONITOR_CACHE_FILE="$STATE_DIR/monitors"
+readonly TRACE_SWITCH="$STATE_DIR/trace"
+readonly TRACE_FILE="$STATE_DIR/timing.log"
 
 readonly SCRIPT_NAME="${0##*/}"
+
+trace_started=false
 
 notify_error() {
     local message=$1
@@ -82,6 +99,21 @@ die() {
 
 warn() {
     echo "$SCRIPT_NAME: $*" >&2
+}
+
+# trace <stage>: a diagnostic, so a failed write never fails the press.
+trace() {
+    local stage=$1
+    if [[ ! -f $TRACE_SWITCH ]]; then
+        return 0
+    fi
+    if [[ $trace_started == false ]]; then
+        stage="--- start $stage"
+        trace_started=true
+    fi
+    if ! { printf '%s %s\n' "$((${EPOCHREALTIME/[.,]/} - START_MICROSECONDS))" "$stage" >>"$TRACE_FILE"; } 2>/dev/null; then
+        return 0
+    fi
 }
 
 require_valid_timeout() {
@@ -110,28 +142,40 @@ require_python_gi() {
     fi
 }
 
-# Prints the decimal ids of the windows managed by the window manager.
-managed_window_ids() {
-    local list token
-    list=$(xprop -root _NET_CLIENT_LIST)
-    for token in $list; do
-        if [[ $token =~ ^(0x[0-9a-fA-F]+),?$ ]]; then
-            printf '%d\n' "${BASH_REMATCH[1]}"
-        fi
-    done
-}
-
 # contains_line <lines> <line>
 contains_line() {
     local lines=$1 line=$2
     [[ $'\n'$lines$'\n' == *$'\n'"$line"$'\n'* ]]
 }
 
-is_managed() {
-    contains_line "$(managed_window_ids)" "$1"
+# Prints the decimal ids of the managed windows listed in xprop's root output.
+client_ids() {
+    local root=$1 token
+    for token in $root; do
+        if [[ $token =~ ^(0x[0-9a-fA-F]+),?$ ]]; then
+            printf '%d\n' "${BASH_REMATCH[1]}"
+        fi
+    done
 }
 
-# window_property <wid> <property...>: xprop prints one line per property.
+managed_window_ids() {
+    local root
+    if ! root=$(xprop -root _NET_CLIENT_LIST); then
+        return 1
+    fi
+    client_ids "$root"
+}
+
+is_managed() {
+    local ids
+    if ! ids=$(managed_window_ids); then
+        return 1
+    fi
+    contains_line "$ids" "$1"
+}
+
+# window_property <wid> <property...>: xprop prints one line per property,
+# several for WM_NORMAL_HINTS, and "<property>:  not found." when unset.
 window_property() {
     local wid=$1
     shift
@@ -157,43 +201,66 @@ is_nemo_window() {
     property_matches "$1" WM_CLASS "$NEMO_WM_CLASS"
 }
 
-# X window ids are reused: a saved id counts only if the window still carries
-# the mark this script set on it.
-is_dropdown_window() {
+# Prints the WINDOW_PROPERTIES of the saved dropdown. X window ids are
+# reused: a saved id counts only if the window still carries the mark this
+# script set on it.
+dropdown_properties() {
     local wid=$1 properties
     if [[ ! $wid =~ ^[0-9]+$ ]]; then
         return 1
     fi
-    if ! properties=$(window_property "$wid" WM_CLASS "$MARK_PROPERTY"); then
+    if ! properties=$(window_property "$wid" "${WINDOW_PROPERTIES[@]}"); then
         return 1
     fi
     if ! contains_line "$properties" "$NEMO_WM_CLASS"; then
         return 1
     fi
-    contains_line "$properties" "$MARK_PROPERTY(STRING) = \"$MARK_VALUE\""
+    if ! contains_line "$properties" "$MARK_LINE"; then
+        return 1
+    fi
+    echo "$properties"
 }
 
 mark_dropdown_window() {
     local wid=$1
-    xprop -id "$wid" -f "$MARK_PROPERTY" 8s -set "$MARK_PROPERTY" "$MARK_VALUE"
+    if ! xprop -id "$wid" -f "$MARK_PROPERTY" 8s -set "$MARK_PROPERTY" "$MARK_VALUE"; then
+        die "could not mark window $wid"
+    fi
+}
+
+# xwininfo's header line holds the window title, so only whole lines count.
+info_is_viewable() {
+    [[ $1 == *$'\n'"  Map State: IsViewable"* ]]
 }
 
 is_viewable() {
-    local wid=$1 info
-    if ! info=$(xwininfo -id "$wid" 2>/dev/null); then
+    local info
+    if ! info=$(xwininfo -id "$1" 2>/dev/null); then
         return 1
     fi
-    [[ $info == *"Map State: IsViewable"* ]]
+    info_is_viewable "$info"
 }
 
+# Prints the current workspace from xprop's root output, or from xdotool when
+# the WM does not publish _NET_CURRENT_DESKTOP.
+current_desktop() {
+    local root=$1 desktop
+    if [[ $root =~ _NET_CURRENT_DESKTOP\(CARDINAL\)\ =\ ([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    if ! desktop=$(xdotool get_desktop); then
+        die "could not read the current workspace with xdotool"
+    fi
+    echo "$desktop"
+}
+
+# is_shown_here <window properties> <xwininfo output> <current workspace>
 # Muffin keeps the windows of other workspaces mapped (IsViewable), so
 # viewable alone does not mean the user can see the window.
 is_shown_here() {
-    local wid=$1 properties desktop
-    if ! is_viewable "$wid"; then
-        return 1
-    fi
-    if ! properties=$(window_property "$wid" _NET_WM_STATE _NET_WM_DESKTOP); then
+    local properties=$1 info=$2 desktop=$3
+    if ! info_is_viewable "$info"; then
         return 1
     fi
     if [[ $properties == *_NET_WM_STATE_HIDDEN* ]]; then
@@ -202,8 +269,7 @@ is_shown_here() {
     if [[ ! $properties =~ _NET_WM_DESKTOP\(CARDINAL\)\ =\ ([0-9]+) ]]; then
         return 1
     fi
-    desktop=${BASH_REMATCH[1]}
-    [[ $desktop == "$(xdotool get_desktop)" || $desktop == "$STICKY_DESKTOP" ]]
+    [[ ${BASH_REMATCH[1]} == "$desktop" || ${BASH_REMATCH[1]} == "$STICKY_DESKTOP" ]]
 }
 
 # EPOCHREALTIME uses the locale's decimal separator.
@@ -241,17 +307,22 @@ wait_while() {
     wait_for_status 1 "$@"
 }
 
-# Prints the root property that keys the monitor cache, empty when the WM
-# does not set it. _GTK_WORKAREAS_D0 holds one rectangle per monitor, so it
+# Prints the layout key line from xprop's root output, empty when the WM does
+# not set it. _GTK_WORKAREAS_D0 holds one rectangle per monitor, so it
 # changes when a monitor is added, removed, moved or resized.
+layout_key_from() {
+    local root=$1 pattern="($LAYOUT_KEY_PROPERTY\\(CARDINAL\\) = [0-9, ]+)"
+    if [[ $root =~ $pattern ]]; then
+        echo "${BASH_REMATCH[1]}"
+    fi
+}
+
 layout_key() {
-    local value
-    if ! value=$(xprop -root "$LAYOUT_KEY_PROPERTY" 2>/dev/null); then
+    local root
+    if ! root=$(xprop -root "$LAYOUT_KEY_PROPERTY" 2>/dev/null); then
         return 0
     fi
-    if [[ $value == "$LAYOUT_KEY_PROPERTY("*") = "* ]]; then
-        echo "$value"
-    fi
+    layout_key_from "$root"
 }
 
 # Prints the cached 'xrandr --listmonitors' output if it was saved under $1.
@@ -326,11 +397,11 @@ monitor_containing() {
     echo "$first"
 }
 
-# Prints "width height x y" of the monitor containing the pointer, or of the
-# first monitor when the pointer is outside every monitor. An unusable cache
-# falls back to xrandr.
+# pointer_monitor_geometry <layout key, may be empty>: prints "width height x
+# y" of the monitor containing the pointer, or of the first monitor when the
+# pointer is outside every monitor. An unusable cache falls back to xrandr.
 pointer_monitor_geometry() {
-    local location line pointer_x="" pointer_y="" key monitors
+    local key=$1 location line pointer_x="" pointer_y="" monitors
     if ! location=$(xdotool getmouselocation --shell); then
         die "could not read the pointer location with xdotool"
     fi
@@ -343,7 +414,6 @@ pointer_monitor_geometry() {
     if [[ ! $pointer_x =~ ^-?[0-9]+$ || ! $pointer_y =~ ^-?[0-9]+$ ]]; then
         die "unexpected pointer location from 'xdotool getmouselocation': $location"
     fi
-    key=$(layout_key)
     if [[ -n $key ]]; then
         if monitors=$(cached_monitors "$key"); then
             if monitor_containing "$pointer_x" "$pointer_y" "$monitors"; then
@@ -359,39 +429,44 @@ pointer_monitor_geometry() {
     fi
 }
 
-# Prints "left right top bottom" of the window frame; fails when the WM has
-# not set them.
-frame_extents() {
-    local wid=$1 extents
-    if ! extents=$(window_property "$wid" _NET_FRAME_EXTENTS); then
-        return 1
-    fi
-    if [[ ! $extents =~ =\ ([0-9]+),\ ([0-9]+),\ ([0-9]+),\ ([0-9]+)$ ]]; then
+# Prints "left right top bottom" from xprop output; fails when the WM has not
+# set the frame extents.
+frame_extents_from() {
+    local pattern='_NET_FRAME_EXTENTS\(CARDINAL\) = ([0-9]+), ([0-9]+), ([0-9]+), ([0-9]+)'
+    if [[ ! $1 =~ $pattern ]]; then
         return 1
     fi
     echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[4]}"
 }
 
+has_frame_extents() {
+    local extents
+    if ! extents=$(window_property "$1" _NET_FRAME_EXTENTS); then
+        return 1
+    fi
+    frame_extents_from "$extents" >/dev/null
+}
+
 # Right after a map the WM may not have set the frame extents yet; without
 # them the frame is taken as the client area alone.
 mapped_frame_extents() {
-    local wid=$1
-    if ! wait_until frame_extents "$wid" >/dev/null; then
-        warn "window $wid has no frame extents, assuming no frame"
-        echo "0 0 0 0"
-        return 0
+    local wid=$1 extents
+    if wait_until has_frame_extents "$wid"; then
+        if extents=$(window_property "$wid" _NET_FRAME_EXTENTS); then
+            if frame_extents_from "$extents"; then
+                return 0
+            fi
+        fi
     fi
-    frame_extents "$wid"
+    warn "window $wid has no frame extents, assuming no frame"
+    echo "0 0 0 0"
 }
 
-# Prints "width height" of the window's client area. xwininfo's header line
-# holds the window title, so only whole lines count and the last match wins:
-# the real Width and Height lines come after the header.
-client_size() {
-    local wid=$1 info line width="" height=""
-    if ! info=$(xwininfo -id "$wid"); then
-        die "could not run xwininfo on window $wid"
-    fi
+# client_size_from <xwininfo output> <wid>: prints "width height" of the
+# client area. The last whole Width and Height lines win: the header line
+# with the title comes first.
+client_size_from() {
+    local info=$1 wid=$2 line width="" height=""
     while read -r line; do
         if [[ $line =~ ^Width:\ ([0-9]+)$ ]]; then
             width=${BASH_REMATCH[1]}
@@ -406,21 +481,26 @@ client_size() {
     echo "$width $height"
 }
 
+client_size() {
+    local wid=$1 info
+    if ! info=$(xwininfo -id "$wid"); then
+        die "could not run xwininfo on window $wid"
+    fi
+    client_size_from "$info" "$wid"
+}
+
 client_size_is() {
     local wid=$1 expected=$2 current
     current=$(client_size "$wid")
     [[ $current == "$expected" ]]
 }
 
-# frame_size <wid> <"left right top bottom">: prints "width height" of the
-# window's frame, title bar and borders included.
+# frame_size <"width height" of the client> <"left right top bottom">: prints
+# "width height" of the frame, title bar and borders included.
 frame_size() {
-    local wid=$1 extents=$2 client client_width client_height left right top bottom
-    if ! client=$(client_size "$wid"); then
-        return 1
-    fi
-    read -r client_width client_height <<<"$client"
-    read -r left right top bottom <<<"$extents"
+    local client_width client_height left right top bottom
+    read -r client_width client_height <<<"$1"
+    read -r left right top bottom <<<"$2"
     echo "$((client_width + left + right)) $((client_height + top + bottom))"
 }
 
@@ -433,6 +513,17 @@ centered_offset() {
         return 0
     fi
     echo $(((available - size) / 2))
+}
+
+# centered_position <"width height x y" of the monitor> <"width height" of
+# the frame>: prints the "x y" that windowmove takes. windowmove places the
+# frame's top-left corner, on a managed window and on a withdrawn one with
+# the position hint alike.
+centered_position() {
+    local monitor_width monitor_height monitor_x monitor_y frame_width frame_height
+    read -r monitor_width monitor_height monitor_x monitor_y <<<"$1"
+    read -r frame_width frame_height <<<"$2"
+    echo "$((monitor_x + $(centered_offset "$frame_width" "$monitor_width"))) $((monitor_y + $(centered_offset "$frame_height" "$monitor_height")))"
 }
 
 # The percentages apply to the frame, so the title bar counts in the height.
@@ -449,34 +540,9 @@ resize_frame() {
     fi
 }
 
-# center_window <wid> <"width height x y" of the monitor> <"width height" of the frame>
-# The frame size is passed in: right after a resize the window still reports
-# its old size. windowmove places the frame's top-left corner, on a managed
-# window and on a withdrawn one with the position hint alike.
-center_window() {
-    local wid=$1 monitor=$2 frame=$3
-    local monitor_width monitor_height monitor_x monitor_y frame_width frame_height offset_x offset_y
-    read -r monitor_width monitor_height monitor_x monitor_y <<<"$monitor"
-    read -r frame_width frame_height <<<"$frame"
-    offset_x=$(centered_offset "$frame_width" "$monitor_width")
-    offset_y=$(centered_offset "$frame_height" "$monitor_height")
-    if ! xdotool windowmove "$wid" $((monitor_x + offset_x)) $((monitor_y + offset_y)); then
-        die "could not move window $wid"
-    fi
-}
-
-activate_window() {
-    if ! xdotool windowactivate "$1"; then
-        die "could not activate window $1"
-    fi
-}
-
 has_user_position_hint() {
-    local hints
-    if ! hints=$(window_property "$1" WM_NORMAL_HINTS); then
-        return 1
-    fi
-    [[ $hints == "WM_NORMAL_HINTS(WM_SIZE_HINTS):"* && $hints == *"$USER_POSITION_LINE"* ]]
+    local properties=$1
+    [[ $properties == *"$HINTS_HEADER"* && $properties == *"$USER_POSITION_LINE"* ]]
 }
 
 # Muffin places a newly mapped window itself and ignores its position unless
@@ -553,14 +619,14 @@ x11.XCloseDisplay(display)
 EOF
 }
 
-# Runs only when xprop does not show the hint; a hint that cannot be read is
-# written again.
+# ensure_user_position_hint <wid> <window properties>: Python runs only when
+# the properties do not show the hint; a hint that cannot be read is written
+# again.
 ensure_user_position_hint() {
-    local wid=$1
-    if has_user_position_hint "$wid"; then
+    if has_user_position_hint "$2"; then
         return 0
     fi
-    set_user_position_hint "$wid"
+    set_user_position_hint "$1"
 }
 
 # GTK maximizes the window again each time it is mapped, and the WM ignores
@@ -598,55 +664,74 @@ restore_maximized_window() {
     fi
 }
 
-move_to_current_desktop() {
-    local wid=$1 desktop
-    if ! desktop=$(xdotool get_desktop); then
-        die "could not read the current workspace with xdotool"
-    fi
-    if ! xdotool set_desktop_for_window "$wid" "$desktop"; then
-        die "could not move window $wid to workspace $desktop"
-    fi
-}
-
 hide_dropdown() {
-    xdotool windowunmap "$1"
+    if ! xdotool windowunmap "$1"; then
+        die "could not hide window $1"
+    fi
 }
 
-# A window that is minimized or on another workspace is withdrawn first, so
-# it is shown again through the same path as a hidden one. Muffin keeps the
-# frame extents of a withdrawn window; without them, or without the position
-# hint, the window is moved once it is mapped.
-show_dropdown() {
-    local wid=$1 monitor extents="" frame placed=false
-    if is_managed "$wid"; then
-        xdotool windowunmap "$wid"
-        if ! wait_while is_managed "$wid"; then
-            die "window $wid is still managed ${TIMEOUT_SECONDS}s after unmapping it"
-        fi
+withdraw_window() {
+    local wid=$1
+    if ! xdotool windowunmap "$wid"; then
+        die "could not withdraw window $wid"
     fi
-    monitor=$(pointer_monitor_geometry)
-    if ! ensure_user_position_hint "$wid"; then
+    if ! wait_while is_managed "$wid"; then
+        die "window $wid is still managed ${TIMEOUT_SECONDS}s after unmapping it"
+    fi
+}
+
+# show_dropdown <wid> <window properties> <xwininfo output> <root properties>
+# <current workspace>. A window that is minimized or on another workspace is
+# withdrawn first, so it is shown again through the same path as a hidden
+# one. Muffin keeps the frame extents and the hints of a withdrawn window;
+# without them the window is moved once it is mapped. Only what places the
+# window runs before the map request. xdotool runs chained commands in one
+# process and stops at the first one that fails, with a non-zero status.
+show_dropdown() {
+    local wid=$1 properties=$2 info=$3 root=$4 desktop=$5
+    local monitor extents frame x y placed=false
+    if contains_line "$(client_ids "$root")" "$wid"; then
+        withdraw_window "$wid"
+    fi
+    trace show-withdrawn
+    monitor=$(pointer_monitor_geometry "$(layout_key_from "$root")")
+    trace show-monitor
+    if ! ensure_user_position_hint "$wid" "$properties"; then
         warn "window $wid will be moved after it is mapped"
-    elif extents=$(frame_extents "$wid"); then
-        frame=$(frame_size "$wid" "$extents")
-        center_window "$wid" "$monitor" "$frame"
+    elif extents=$(frame_extents_from "$properties"); then
+        frame=$(frame_size "$(client_size_from "$info" "$wid")" "$extents")
+        read -r x y <<<"$(centered_position "$monitor" "$frame")"
         placed=true
     fi
-    xdotool windowmap "$wid"
+    trace show-placed
+    if [[ $placed == true ]]; then
+        if ! xdotool windowmove "$wid" "$x" "$y" windowmap "$wid"; then
+            die "could not move window $wid to $x,$y and map it"
+        fi
+    elif ! xdotool windowmap "$wid"; then
+        die "could not map window $wid"
+    fi
+    trace show-map-sent
     if ! wait_until is_managed "$wid"; then
         die "window $wid is not managed ${TIMEOUT_SECONDS}s after mapping it"
     fi
-    move_to_current_desktop "$wid"
+    trace show-managed
     if has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
         restore_maximized_window "$wid"
         placed=false
     fi
-    if [[ $placed == false ]]; then
-        extents=$(mapped_frame_extents "$wid")
-        frame=$(frame_size "$wid" "$extents")
-        center_window "$wid" "$monitor" "$frame"
+    if [[ $placed == true ]]; then
+        if ! xdotool set_desktop_for_window "$wid" "$desktop" windowactivate "$wid"; then
+            die "could not move window $wid to workspace $desktop and activate it"
+        fi
+        return 0
     fi
-    activate_window "$wid"
+    extents=$(mapped_frame_extents "$wid")
+    frame=$(frame_size "$(client_size "$wid")" "$extents")
+    read -r x y <<<"$(centered_position "$monitor" "$frame")"
+    if ! xdotool set_desktop_for_window "$wid" "$desktop" windowmove "$wid" "$x" "$y" windowactivate "$wid"; then
+        die "could not move window $wid to workspace $desktop, to $x,$y and activate it"
+    fi
 }
 
 # Prints the id of a normal, viewable Nemo window managed now but absent from $1.
@@ -668,7 +753,8 @@ find_new_nemo_window() {
 }
 
 create_dropdown() {
-    local known_ids wid monitor monitor_width monitor_height extents frame frame_width frame_height
+    local known_ids wid root desktop monitor monitor_width monitor_height extents frame
+    local frame_width frame_height x y
     known_ids=$(managed_window_ids)
     # The launched nemo can become the long-lived Nemo process: it must not
     # inherit the lock, or every later press would be skipped.
@@ -678,21 +764,26 @@ create_dropdown() {
     fi
     mark_dropdown_window "$wid"
     echo "$wid" >"$WID_FILE"
-    if ! ensure_user_position_hint "$wid"; then
+    if ! ensure_user_position_hint "$wid" "$(window_property "$wid" WM_NORMAL_HINTS)"; then
         warn "window $wid will be moved after it is mapped at each show"
     fi
-    move_to_current_desktop "$wid"
     if has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
         restore_maximized_window "$wid"
     fi
     extents=$(mapped_frame_extents "$wid")
-    monitor=$(pointer_monitor_geometry)
+    if ! root=$(xprop -root "${ROOT_PROPERTIES[@]}"); then
+        die "could not read the root window properties with xprop"
+    fi
+    desktop=$(current_desktop "$root")
+    monitor=$(pointer_monitor_geometry "$(layout_key_from "$root")")
     read -r monitor_width monitor_height _ <<<"$monitor"
     frame=$(default_frame_size "$monitor_width" "$monitor_height")
     read -r frame_width frame_height <<<"$frame"
     resize_frame "$wid" "$frame_width" "$frame_height" "$extents"
-    center_window "$wid" "$monitor" "$frame"
-    activate_window "$wid"
+    read -r x y <<<"$(centered_position "$monitor" "$frame")"
+    if ! xdotool set_desktop_for_window "$wid" "$desktop" windowmove "$wid" "$x" "$y" windowactivate "$wid"; then
+        die "could not move window $wid to workspace $desktop, to $x,$y and activate it"
+    fi
 }
 
 # The /tmp fallback is shared by all users: refuse a directory someone else
@@ -705,8 +796,10 @@ ensure_state_dir() {
     if [[ -L $STATE_DIR || ! -d $STATE_DIR || ! -O $STATE_DIR ]]; then
         die "state directory $STATE_DIR is a symlink, not a directory, or not owned by $(id -un)"
     fi
-    chmod 700 "$STATE_DIR"
-    for file in "$LOCK_FILE" "$WID_FILE" "$MONITOR_CACHE_FILE"; do
+    if [[ $STATE_DIR_IS_SHARED == true ]]; then
+        chmod 700 "$STATE_DIR"
+    fi
+    for file in "$LOCK_FILE" "$WID_FILE" "$MONITOR_CACHE_FILE" "$TRACE_FILE"; do
         if [[ -L $file ]]; then
             die "refusing to use $file: it is a symlink"
         fi
@@ -714,10 +807,11 @@ ensure_state_dir() {
 }
 
 main() {
-    local wid=""
+    local wid="" properties info root desktop
     require_valid_timeout
     require_commands
     ensure_state_dir
+    trace checks-done
 
     # A press while another run of this script is still working is ignored,
     # so a fast double press cannot create two dropdowns.
@@ -725,21 +819,39 @@ main() {
     if ! flock -n 9; then
         exit 0
     fi
+    trace lock
 
     if [[ -f $WID_FILE ]]; then
         IFS= read -r wid <"$WID_FILE" || true
     fi
-    if ! is_dropdown_window "$wid"; then
+    if ! properties=$(dropdown_properties "$wid"); then
         create_dropdown
         refresh_monitor_cache_in_background
         return 0
     fi
-    if is_shown_here "$wid"; then
+    if ! info=$(xwininfo -id "$wid"); then
+        die "could not run xwininfo on window $wid"
+    fi
+    if ! root=$(xprop -root "${ROOT_PROPERTIES[@]}"); then
+        die "could not read the root window properties with xprop"
+    fi
+    desktop=$(current_desktop "$root")
+    trace validated
+    if is_shown_here "$properties" "$info" "$desktop"; then
+        trace decided-hide
         hide_dropdown "$wid"
+        trace hide-done
         return 0
     fi
-    show_dropdown "$wid"
+    trace decided-show
+    show_dropdown "$wid" "$properties" "$info" "$root" "$desktop"
+    trace show-activated
     refresh_monitor_cache_in_background
+    if [[ -f $TRACE_SWITCH ]]; then
+        if wait_until is_viewable "$wid"; then
+            trace show-viewable
+        fi
+    fi
 }
 
 main "$@"

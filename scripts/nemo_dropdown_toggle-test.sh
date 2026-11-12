@@ -24,6 +24,9 @@ readonly STUB_MONITORS=" 0: +*TEST-1 1920/527x1080/296+0+0  TEST-1"
 readonly STUB_UNMAXIMIZED_SIZE="1400 700"
 readonly STUB_UNMAXIMIZE_DELAY_SECONDS=0.3
 readonly STUB_SLOW_XRANDR_SECONDS=1
+readonly STUB_PROGRAMS=" nemo xprop xwininfo xdotool xrandr notify-send python3 flock chmod "
+readonly SHOW_STARTS_BEFORE_MAP=6
+readonly HIDE_STARTS=5
 readonly STUB_LAYOUT_KEY="_GTK_WORKAREAS_D0(CARDINAL) = 0, 30, 1920, 1050"
 readonly STUB_HINTS_LINE="WM_NORMAL_HINTS(WM_SIZE_HINTS):"
 readonly STUB_USER_POSITION_LINE=$'\t\tuser specified location: 0, 0'
@@ -75,16 +78,15 @@ if [[ -e $STUB_ROOT/nemo-creates-window ]]; then
     echo "'"$NEMO_WID_HEX"'" >"$STUB_ROOT/managed"
 fi
 exec sleep 30'
+    # The root's _NET_CLIENT_LIST is computed from $STUB_ROOT/managed, every
+    # other property is a file, printed in the order asked as xprop does.
     write_stub xprop '
-if [[ $1 == -root && $2 == _NET_CLIENT_LIST ]]; then
+if [[ $1 == -root ]]; then
     ids="'"$FOREIGN_WID_HEX"'"
     if [[ -f $STUB_ROOT/managed ]]; then
         ids="$ids, $(cat "$STUB_ROOT/managed")"
     fi
-    echo "_NET_CLIENT_LIST(WINDOW): window id # $ids"
-    exit 0
-fi
-if [[ $1 == -root ]]; then
+    echo "_NET_CLIENT_LIST(WINDOW): window id # $ids" >"$STUB_ROOT/root/_NET_CLIENT_LIST"
     dir="$STUB_ROOT/root"
     shift 1
 else
@@ -127,27 +129,49 @@ if [[ -e $dir/unmapped ]]; then
 else
     echo "  Map State: IsViewable"
 fi'
+    # Runs a command chain as xdotool does: each command takes its arguments,
+    # the next word starts the next command, and the first failure ends the
+    # chain with status 1. Each command is logged as "xdo <command> <args>";
+    # $STUB_ROOT/xdo-fails-<command> makes that command fail.
     write_stub xdotool '
-case $1 in
-    get_desktop) echo 0 ;;
-    getmouselocation)
-        read -r x y <"$STUB_ROOT/pointer"
-        printf "X=%s\nY=%s\nSCREEN=0\nWINDOW=1\n" "$x" "$y"
-        ;;
-    windowsize)
-        if [[ -e $STUB_ROOT/windowsize-fails ]]; then
-            exit 1
-        fi
-        ;;
-    windowunmap)
-        touch "$STUB_ROOT/windows/$2/unmapped"
-        rm -f "$STUB_ROOT/managed"
-        ;;
-    windowmap)
-        rm -f "$STUB_ROOT/windows/$2/unmapped"
-        echo "'"$NEMO_WID_HEX"'" >"$STUB_ROOT/managed"
-        ;;
-esac'
+while (($# > 0)); do
+    command=$1
+    shift
+    case $command in
+        get_desktop) count=0 ;;
+        getmouselocation | windowmap | windowunmap | windowactivate) count=1 ;;
+        set_desktop_for_window) count=2 ;;
+        windowmove | windowsize) count=3 ;;
+        *)
+            echo "xdotool stub: unknown command $command" >&2
+            exit 2
+            ;;
+    esac
+    arguments=("${@:1:count}")
+    shift "$count"
+    echo "xdo $command ${arguments[*]}" >>"$STUB_ROOT/calls.log"
+    if [[ -e $STUB_ROOT/xdo-fails-$command ]]; then
+        exit 1
+    fi
+    case $command in
+        get_desktop) echo 0 ;;
+        getmouselocation)
+            read -r x y <"$STUB_ROOT/pointer"
+            printf "X=%s\nY=%s\nSCREEN=0\nWINDOW=1\n" "$x" "$y"
+            ;;
+        set_desktop_for_window)
+            echo "_NET_WM_DESKTOP(CARDINAL) = ${arguments[1]}" >"$STUB_ROOT/windows/${arguments[0]}/_NET_WM_DESKTOP"
+            ;;
+        windowunmap)
+            touch "$STUB_ROOT/windows/${arguments[0]}/unmapped"
+            rm -f "$STUB_ROOT/managed"
+            ;;
+        windowmap)
+            rm -f "$STUB_ROOT/windows/${arguments[0]}/unmapped"
+            echo "'"$NEMO_WID_HEX"'" >"$STUB_ROOT/managed"
+            ;;
+    esac
+done'
     # Records the file on its fd 9: the lock during a press, "closed" in the
     # background refresh.
     write_stub xrandr '
@@ -158,6 +182,9 @@ fi
 echo "Monitors: 1"
 cat "$STUB_ROOT/monitors"'
     write_stub notify-send ''
+    # Pass-through stubs, so that their process starts are counted too.
+    write_stub flock 'exec '"$(command -v flock)"' "$@"'
+    write_stub chmod 'exec '"$(command -v chmod)"' "$@"'
     # Answers the GdkX11 probe, writes the position hint, or unmaximizes: an
     # unmaximize request clears the maximized state at once but changes the
     # size only later, as a WM may.
@@ -199,11 +226,12 @@ add_window() {
 reset_world() {
     rm -rf "$tmp_root/windows" "$tmp_root/runtime" "$tmp_root/managed" \
         "$tmp_root/calls.log" "$tmp_root/nemo-creates-window" "$tmp_root"/nemo-fds.* \
-        "$tmp_root/windowsize-fails" "$tmp_root/root" "$tmp_root/hint-fails" \
+        "$tmp_root"/xdo-fails-* "$tmp_root/root" "$tmp_root/hint-fails" \
         "$tmp_root/gi-missing" "$tmp_root/xrandr-slow"
     echo "$STUB_POINTER" >"$tmp_root/pointer"
     mkdir -p "$tmp_root/root"
     echo "$STUB_LAYOUT_KEY" >"$tmp_root/root/_GTK_WORKAREAS_D0"
+    echo "_NET_CURRENT_DESKTOP(CARDINAL) = 0" >"$tmp_root/root/_NET_CURRENT_DESKTOP"
     echo "$STUB_MONITORS" >"$tmp_root/monitors"
     mkdir -p "$tmp_root/runtime"
     chmod 700 "$tmp_root/runtime"
@@ -302,7 +330,7 @@ check_rejected() {
         fail "$name" "saved wid '$saved' was not replaced by a new dropdown (rc=$rc err='$err')"
         return 0
     fi
-    if calls_contain "xdotool windowunmap $saved" || calls_contain "xprop -id $saved -f"; then
+    if calls_contain "xdo windowunmap $saved" || calls_contain "xprop -id $saved -f"; then
         fail "$name" "the script acted on window '$saved'"
         return 0
     fi
@@ -328,7 +356,7 @@ case_create_then_hide() {
         return 0
     fi
     run_toggle
-    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowunmap $NEMO_WID"; then
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo windowunmap $NEMO_WID"; then
         fail "$name" "second run did not hide it (rc=$rc err='$err')"
         return 0
     fi
@@ -343,15 +371,15 @@ case_size_is_set_once_and_always_centered() {
     reset_world
     touch "$tmp_root/nemo-creates-window"
     run_toggle
-    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowsize $NEMO_WID 1536 828" \
-        || ! calls_contain "xdotool windowmove $NEMO_WID 192 108"; then
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo windowsize $NEMO_WID 1536 828" \
+        || ! calls_contain "xdo windowmove $NEMO_WID 192 108"; then
         fail "$name" "create did not size and center (rc=$rc err='$err')"
         return 0
     fi
     run_toggle
     run_toggle
-    resizes=$(count_calls "xdotool windowsize")
-    if [[ $rc -ne 0 || $resizes -ne 1 ]] || ! calls_contain "xdotool windowmove $NEMO_WID 560 222"; then
+    resizes=$(count_calls "xdo windowsize")
+    if [[ $rc -ne 0 || $resizes -ne 1 ]] || ! calls_contain "xdo windowmove $NEMO_WID 560 222"; then
         fail "$name" "show resized $resizes time(s) or did not center (rc=$rc err='$err')"
         return 0
     fi
@@ -361,13 +389,13 @@ case_size_is_set_once_and_always_centered() {
 case_failed_resize_stops_the_run() {
     local name="a failed resize exits 1 with a notification, no centering"
     reset_world
-    touch "$tmp_root/nemo-creates-window" "$tmp_root/windowsize-fails"
+    touch "$tmp_root/nemo-creates-window" "$tmp_root/xdo-fails-windowsize"
     run_toggle
     if [[ $rc -ne 1 || $err != *"could not resize window $NEMO_WID"* ]]; then
         fail "$name" "rc=$rc err='$err'"
         return 0
     fi
-    if ! calls_contain "notify-send " || calls_contain "xdotool windowmove"; then
+    if ! calls_contain "notify-send " || calls_contain "xdo windowmove"; then
         fail "$name" "no notification, or the window was centered anyway"
         return 0
     fi
@@ -388,7 +416,7 @@ prepare_hidden_dropdown() {
 check_show_moves_to() {
     local name=$1 position=$2
     run_toggle
-    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowmove $NEMO_WID $position"; then
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo windowmove $NEMO_WID $position"; then
         fail "$name" "not moved to $position (rc=$rc err='$err')"
         return 0
     fi
@@ -430,7 +458,7 @@ case_maximized_dropdown_is_unmaximized_first() {
         fail "$name" "no GdkX11 probe or no unmaximize request (rc=$rc err='$err')"
         return 0
     fi
-    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowmove $NEMO_WID 260 172"; then
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo windowmove $NEMO_WID 260 172"; then
         fail "$name" "not centered with the restored size (rc=$rc err='$err')"
         return 0
     fi
@@ -488,12 +516,12 @@ case_show_moves_before_mapping() {
     prepare_hidden_dropdown
     set_user_position_hint
     run_toggle
-    if [[ $rc -ne 0 ]] || ! is_before "xdotool windowmove $NEMO_WID 560 222" "xdotool windowmap $NEMO_WID"; then
+    if [[ $rc -ne 0 ]] || ! is_before "xdo windowmove $NEMO_WID 560 222" "xdo windowmap $NEMO_WID"; then
         fail "$name" "windowmove not before windowmap (rc=$rc err='$err')"
         return 0
     fi
-    if [[ $(count_calls "xdotool windowmove") -ne 1 ]]; then
-        fail "$name" "moved $(count_calls "xdotool windowmove") times"
+    if [[ $(count_calls "xdo windowmove") -ne 1 ]]; then
+        fail "$name" "moved $(count_calls "xdo windowmove") times"
         return 0
     fi
     pass "$name"
@@ -505,7 +533,7 @@ case_plain_hide_and_show_run_no_python() {
     set_user_position_hint
     run_toggle
     run_toggle
-    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowunmap $NEMO_WID"; then
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo windowunmap $NEMO_WID"; then
         fail "$name" "show then hide failed (rc=$rc err='$err')"
         return 0
     fi
@@ -545,7 +573,7 @@ case_hint_failure_falls_back_to_moving_after_map() {
         fail "$name" "rc=$rc err='$err'"
         return 0
     fi
-    if ! is_before "xdotool windowmap $NEMO_WID" "xdotool windowmove $NEMO_WID 560 222" || calls_contain "notify-send "; then
+    if ! is_before "xdo windowmap $NEMO_WID" "xdo windowmove $NEMO_WID 560 222" || calls_contain "notify-send "; then
         fail "$name" "not mapped then moved, or a notification was sent"
         return 0
     fi
@@ -564,7 +592,7 @@ case_missing_extents_fall_back_to_moving_after_map() {
         fail "$name" "rc=$rc err='$err'"
         return 0
     fi
-    if ! is_before "xdotool windowmap $NEMO_WID" "xdotool windowmove $NEMO_WID 560 240"; then
+    if ! is_before "xdo windowmap $NEMO_WID" "xdo windowmove $NEMO_WID 560 240"; then
         fail "$name" "not mapped then moved to 560 240"
         return 0
     fi
@@ -596,7 +624,7 @@ case_cache_hit_skips_xrandr() {
     prepare_cache_case
     write_monitor_cache "$STUB_LAYOUT_KEY"
     run_toggle
-    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowmove $NEMO_WID 2480 222"; then
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo windowmove $NEMO_WID 2480 222"; then
         fail "$name" "not centered on the cached monitor (rc=$rc err='$err')"
         return 0
     fi
@@ -612,7 +640,7 @@ case_cache_hit_skips_xrandr() {
 check_cache_fallback() {
     local name=$1 cache
     run_toggle
-    if [[ $rc -ne 0 || $(synchronous_xrandr_calls) -ne 1 ]] || ! calls_contain "xdotool windowmove $NEMO_WID 560 222"; then
+    if [[ $rc -ne 0 || $(synchronous_xrandr_calls) -ne 1 ]] || ! calls_contain "xdo windowmove $NEMO_WID 560 222"; then
         fail "$name" "no synchronous xrandr or wrong place (rc=$rc err='$err')"
         return 0
     fi
@@ -666,12 +694,147 @@ case_background_refresh_does_not_hold_lock() {
     toggle_with_stubs 2>"$tmp_root/stderr" >/dev/null || rc=$?
     run_toggle
     sleep "$STUB_SLOW_XRANDR_SECONDS"
-    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowunmap $NEMO_WID"; then
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo windowunmap $NEMO_WID"; then
         fail "$name" "the press during the refresh did not hide (rc=$rc err='$err')"
         return 0
     fi
     if ! calls_contain "xrandr-fd9 closed"; then
         fail "$name" "the refresh did not run with fd 9 closed"
+        return 0
+    fi
+    pass "$name"
+}
+
+# process_starts [command]: prints how many stub programs started before the
+# first logged command starting with $1, or in the whole run without $1.
+process_starts() {
+    local stop=${1:-} log count=0 line
+    log=$(cat "$tmp_root/calls.log")
+    while read -r line; do
+        if [[ -n $stop && $line == "$stop"* ]]; then
+            break
+        fi
+        if [[ $STUB_PROGRAMS == *" ${line%% *} "* ]]; then
+            count=$((count + 1))
+        fi
+    done <<<"$log"
+    echo "$count"
+}
+
+case_show_starts_few_programs_before_map() {
+    local name="a plain show starts $SHOW_STARTS_BEFORE_MAP programs up to the map request" starts
+    prepare_hidden_dropdown
+    set_user_position_hint
+    mkdir -p "$tmp_root/runtime/nemo-dropdown"
+    printf '%s\n%s\n' "$STUB_LAYOUT_KEY" "$STUB_MONITORS" >"$tmp_root/runtime/nemo-dropdown/monitors"
+    run_toggle
+    starts=$(process_starts "xdo windowmap")
+    if [[ $rc -ne 0 || $starts -ne $SHOW_STARTS_BEFORE_MAP ]]; then
+        fail "$name" "$starts programs before the map (rc=$rc err='$err'): $(cat "$tmp_root/calls.log")"
+        return 0
+    fi
+    pass "$name"
+}
+
+case_hide_starts_few_programs() {
+    local name="a plain hide starts $HIDE_STARTS programs" starts
+    prepare_hidden_dropdown
+    set_user_position_hint
+    run_toggle
+    : >"$tmp_root/calls.log"
+    run_toggle
+    starts=$(process_starts)
+    if [[ $rc -ne 0 || $starts -ne $HIDE_STARTS ]] || ! calls_contain "xdo windowunmap $NEMO_WID"; then
+        fail "$name" "$starts programs (rc=$rc err='$err'): $(cat "$tmp_root/calls.log")"
+        return 0
+    fi
+    pass "$name"
+}
+
+case_no_trace_file_without_switch() {
+    local name="no timing log without the trace switch"
+    prepare_hidden_dropdown
+    run_toggle
+    run_toggle
+    if [[ $rc -ne 0 || -e $tmp_root/runtime/nemo-dropdown/timing.log ]]; then
+        fail "$name" "rc=$rc, timing.log exists"
+        return 0
+    fi
+    pass "$name"
+}
+
+readonly SHOW_STAGES="--- start checks-done lock validated decided-show show-withdrawn show-monitor show-placed show-map-sent show-managed show-activated show-viewable"
+readonly HIDE_STAGES="--- start checks-done lock validated decided-hide hide-done"
+
+# Prints the stages of timing.log, one run after the other, and fails when a
+# line is not "<microseconds> <stage>".
+logged_stages() {
+    local line stages=""
+    while read -r line; do
+        if [[ ! $line =~ ^[0-9]+\ (.+)$ ]]; then
+            return 1
+        fi
+        stages="$stages ${BASH_REMATCH[1]}"
+    done <"$tmp_root/runtime/nemo-dropdown/timing.log"
+    echo "${stages# }"
+}
+
+case_trace_switch_logs_stages() {
+    local name="with the trace switch, a show then a hide log their stages in order" stages
+    prepare_hidden_dropdown
+    set_user_position_hint
+    touch "$tmp_root/runtime/nemo-dropdown/trace"
+    run_toggle
+    run_toggle
+    if ! stages=$(logged_stages); then
+        fail "$name" "malformed timing.log: $(cat "$tmp_root/runtime/nemo-dropdown/timing.log")"
+        return 0
+    fi
+    if [[ $rc -ne 0 || $stages != "$SHOW_STAGES $HIDE_STAGES" ]]; then
+        fail "$name" "rc=$rc stages='$stages'"
+        return 0
+    fi
+    pass "$name"
+}
+
+case_trace_write_error_does_not_fail() {
+    local name="a timing log that cannot be written does not fail the press"
+    prepare_hidden_dropdown
+    touch "$tmp_root/runtime/nemo-dropdown/trace"
+    mkdir "$tmp_root/runtime/nemo-dropdown/timing.log"
+    run_toggle
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo windowmap $NEMO_WID"; then
+        fail "$name" "rc=$rc err='$err'"
+        return 0
+    fi
+    pass "$name"
+}
+
+case_missing_current_desktop_asks_xdotool() {
+    local name="no _NET_CURRENT_DESKTOP on the root: the workspace comes from xdotool"
+    prepare_hidden_dropdown
+    set_user_position_hint
+    rm "$tmp_root/root/_NET_CURRENT_DESKTOP"
+    run_toggle
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdo get_desktop" || ! calls_contain "xdo set_desktop_for_window $NEMO_WID 0"; then
+        fail "$name" "rc=$rc err='$err'"
+        return 0
+    fi
+    pass "$name"
+}
+
+case_failed_chained_command_stops_the_run() {
+    local name="a failed command in an xdotool chain exits 1 with context"
+    prepare_hidden_dropdown
+    set_user_position_hint
+    touch "$tmp_root/xdo-fails-windowmap"
+    run_toggle
+    if [[ $rc -ne 1 || $err != *"could not move window $NEMO_WID to 560,222 and map it"* ]]; then
+        fail "$name" "rc=$rc err='$err'"
+        return 0
+    fi
+    if ! calls_contain "notify-send " || calls_contain "xdo windowactivate"; then
+        fail "$name" "no notification, or the run went on"
         return 0
     fi
     pass "$name"
@@ -716,6 +879,13 @@ case_changed_key_calls_xrandr
 case_garbage_cache_calls_xrandr
 case_no_layout_key_always_calls_xrandr
 case_background_refresh_does_not_hold_lock
+case_show_starts_few_programs_before_map
+case_hide_starts_few_programs
+case_no_trace_file_without_switch
+case_trace_switch_logs_stages
+case_trace_write_error_does_not_fail
+case_missing_current_desktop_asks_xdotool
+case_failed_chained_command_stops_the_run
 
 if [[ $failures -gt 0 ]]; then
     say "$failures failure(s)."

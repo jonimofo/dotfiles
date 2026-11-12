@@ -3,29 +3,20 @@
 # Usage: extension.sh enable|disable|reload <uuid>
 set -euo pipefail
 
+# shellcheck source=cinnamon/xlet-common.sh
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/xlet-common.sh"
+
 readonly SCHEMA="org.cinnamon"
 readonly KEY="enabled-extensions"
-readonly EMPTY_LIST="@as []"
-# The uuid is pasted into a GVariant list: nothing but a plain name@domain gets through.
-readonly UUID_PATTERN='^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$'
 # Where Cinnamon looks for extensions, user folder first.
 readonly EXTENSION_DIRS=(
     "${XDG_DATA_HOME:-$HOME/.local/share}/cinnamon/extensions"
     "/usr/share/cinnamon/extensions"
 )
 
-say() {
-    printf '%s\n' "$*"
-}
-
 usage() {
     say "Usage: $(basename "$0") enable|disable|reload <uuid>" >&2
     exit 2
-}
-
-fail() {
-    say "error: $*" >&2
-    exit 1
 }
 
 # Cinnamon also accepts '!uuid': the same extension, loaded without the version check.
@@ -36,13 +27,7 @@ is_enabled() {
 }
 
 is_installed() {
-    local dir
-    for dir in "${EXTENSION_DIRS[@]}"; do
-        if [[ -f "$dir/$uuid/metadata.json" ]]; then
-            return 0
-        fi
-    done
-    return 1
+    is_installed_in "${EXTENSION_DIRS[@]}"
 }
 
 enable_extension() {
@@ -81,14 +66,12 @@ disable_extension() {
     say "disabled: $uuid"
 }
 
-# Cinnamon unloads and loads the extension itself, in one call: no wait to guess.
 reload_extension() {
     if ! is_enabled; then
         enable_extension
         return
     fi
-    gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon \
-        --method org.Cinnamon.ReloadXlet "$uuid" EXTENSION > /dev/null
+    reload_xlet EXTENSION
     say "reloaded: $uuid"
 }
 
@@ -97,9 +80,7 @@ if [[ $# -ne 2 ]]; then
 fi
 action="$1"
 uuid="$2"
-if [[ ! "$uuid" =~ $UUID_PATTERN ]]; then
-    fail "not an extension uuid: $uuid"
-fi
+require_valid_uuid extension
 
 case "$action" in
     enable) enable_extension ;;

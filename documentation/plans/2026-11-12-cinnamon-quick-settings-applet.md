@@ -1,0 +1,67 @@
+Status: VALIDATED
+
+# Cinnamon Quick Settings applet
+
+Applet `cinnamon/applets/quick-settings@bgi`, Cinnamon 6.4, X11.
+Install and usage: [`cinnamon/README.md`](../../cinnamon/README.md).
+
+## Goal
+
+One panel button that opens a GNOME-style Quick Settings menu: status icons on the panel,
+then sliders and toggle tiles in one popup, in place of the separate network, sound and
+power applets.
+
+Out of scope: patching Cinnamon internals, any file under `/usr/share/cinnamon`, new
+packages, removing the stock network, sound and power applets (the user removes them once
+the applet is validated), per-monitor brightness sliders.
+
+## Validated mockup
+
+```
+Panel:  [ wifi bt vpn vol ]   one button
+
++------------------------------------------+
+| 87%      [shot] [settings] [lock] [power]|
+|                                          |
+| sun  Monitors   ======o----              |
+| vol  Output     =========o--   >         |
+| mic  Input      =====o------   >         |
+|                                          |
+| [ Wi-Fi     > ]   [ Bluetooth     > ]    |
+| [ VPN SEB   > ]   [ NordVPN       > ]    |
+| [ Power: Bal > ]  [ Night Light     ]    |
+| [ Dark style  ]   [ Do Not Disturb  ]    |
+| [ Keep awake  ]   [ Mic mute        ]    |
++------------------------------------------+
+'>' opens a submenu: networks, devices,
+VPN profiles, NordVPN countries, profiles.
+```
+
+## Decisions
+
+| Question | Answer |
+|---|---|
+| Tiles | GNOME parity plus NordVPN, Do Not Disturb, Keep awake, Mic mute, screenshot button |
+| Brightness | One linked slider for both Acer CB241HY monitors (DDC/CI through `ddcutil`), value sent on release. The laptop panel uses `intel_backlight` when it is the active screen |
+| Stock applets | Kept on the panel until the user validates the new applet |
+| Preview | Live on the panel: layout first with two working tiles, the rest after the look is validated |
+
+## Facts checked on the machine (2026-11-12)
+
+- `ddcutil detect` sees both monitors without sudo (`/dev/i2c-18`, `/dev/i2c-19`). Writing a
+  value is not tested yet: step 2 starts with that test.
+- `power-profiles-daemon` is active. `nordvpn`, `nmcli`, `bluetoothctl`, `flameshot` are installed.
+- NetworkManager has one VPN profile, `SEB`.
+- Night Light: `org.cinnamon.settings-daemon.plugins.color night-light-enabled`.
+- Dark style: `org.x.apps.portal color-scheme` (`prefer-dark` today).
+- Do Not Disturb and Keep awake: mechanism to read from the stock `notifications@cinnamon.org`
+  and `inhibit@cinnamon.org` applets, not guessed.
+
+## Steps
+
+1. Layout with every tile visible, Wi-Fi and Dark style working. Look validated live on the panel.
+2. Sliders: monitor brightness, output volume, microphone.
+3. Network tiles and submenus: Wi-Fi, Bluetooth, VPN SEB, NordVPN.
+4. System tiles and header buttons: power profile, Night Light, Do Not Disturb, Keep awake,
+   Mic mute, screenshot, settings, lock, power.
+5. README, install script, checks on the panel, PR ready for review.

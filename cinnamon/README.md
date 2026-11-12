@@ -8,6 +8,10 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 - `extensions/scale-wheel-switch@bgi/`: turns Scale into a GNOME-style overview.
   Tested on Cinnamon 6.4 (X11).
 - `extension.sh`: enable, disable or reload one extension, keeping the others enabled.
+- `applets/quick-settings@bgi/`: GNOME-style Quick Settings menu, work in progress
+  (plan: [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md)).
+- `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
+  Enable adds it at the right end of panel1's right zone.
 
 ## Custom shortcut: dropdown Nemo
 
@@ -130,7 +134,7 @@ then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
 `scripts/cinnamon-extension-check.sh` checks the syntax, `metadata.json` and the references
-between the extension's files; it does not check Cinnamon's private parts.
+between the files of each extension and applet; it does not check Cinnamon's private parts.
 
 Prototype patches (3):
 

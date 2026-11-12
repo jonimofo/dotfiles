@@ -1,11 +1,13 @@
 #!/bin/bash
-# Static checks of the Cinnamon extensions under cinnamon/extensions/: JavaScript syntax,
-# metadata.json validity, and every module reference between the files of one extension.
+# Static checks of the Cinnamon extensions and applets under cinnamon/extensions/ and
+# cinnamon/applets/: JavaScript syntax, metadata.json validity, and every module reference
+# between the files of one extension or applet.
 # Usage: scripts/cinnamon-extension-check.sh (from any directory). Needs node and jq.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-extensions_dir="$(cd "$script_dir/../cinnamon/extensions" && pwd)"
+cinnamon_dir="$(cd "$script_dir/../cinnamon" && pwd)"
+readonly XLET_KINDS=(extensions applets)
 failures=0
 checked_files=0
 
@@ -100,21 +102,23 @@ check_extension() {
 }
 
 main() {
-    local extension_dir extension_count=0
+    local kind extension_dir extension_count=0
     require_commands node jq grep sed sort
-    for extension_dir in "$extensions_dir"/*/; do
-        if [[ ! -d "$extension_dir" ]]; then
-            continue
-        fi
-        check_extension "${extension_dir%/}"
-        extension_count=$((extension_count + 1))
+    for kind in "${XLET_KINDS[@]}"; do
+        for extension_dir in "$cinnamon_dir/$kind"/*/; do
+            if [[ ! -d "$extension_dir" ]]; then
+                continue
+            fi
+            check_extension "${extension_dir%/}"
+            extension_count=$((extension_count + 1))
+        done
     done
 
     if [[ "$failures" -gt 0 ]]; then
         printf '%d failure(s)\n' "$failures" >&2
         exit 1
     fi
-    printf 'ok: %d extension(s), %d JavaScript file(s) checked\n' "$extension_count" "$checked_files"
+    printf 'ok: %d extension(s) and applet(s), %d JavaScript file(s) checked\n' "$extension_count" "$checked_files"
 }
 
 main "$@"

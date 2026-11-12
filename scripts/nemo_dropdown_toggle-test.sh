@@ -17,6 +17,8 @@ readonly NEMO_WID_HEX=0x100
 readonly FOREIGN_WID=113246211
 readonly FOREIGN_WID_HEX=0x6c00003
 readonly TEST_TIMEOUT_SECONDS=1
+readonly STUB_CLIENT_WIDTH=800
+readonly STUB_CLIENT_HEIGHT=600
 
 cleanup() {
     local pid_file pid
@@ -93,11 +95,25 @@ if [[ ! -d $dir ]]; then
     echo "xwininfo: error: No such window" >&2
     exit 1
 fi
-echo "  Map State: IsViewable"'
+echo "  Width: '"$STUB_CLIENT_WIDTH"'"
+echo "  Height: '"$STUB_CLIENT_HEIGHT"'"
+if [[ -e $dir/unmapped ]]; then
+    echo "  Map State: IsUnMapped"
+else
+    echo "  Map State: IsViewable"
+fi'
     write_stub xdotool '
 case $1 in
     get_desktop) echo 0 ;;
     getmouselocation) printf "X=100\nY=100\nSCREEN=0\nWINDOW=1\n" ;;
+    windowunmap)
+        touch "$STUB_ROOT/windows/$2/unmapped"
+        rm -f "$STUB_ROOT/managed"
+        ;;
+    windowmap)
+        rm -f "$STUB_ROOT/windows/$2/unmapped"
+        echo "'"$NEMO_WID_HEX"'" >"$STUB_ROOT/managed"
+        ;;
 esac'
     write_stub xrandr '
 echo "Monitors: 1"
@@ -235,6 +251,40 @@ case_create_then_hide() {
     pass "$name"
 }
 
+count_calls() {
+    local log count=0 line
+    log=$(cat "$tmp_root/calls.log")
+    while read -r line; do
+        if [[ $line == "$1"* ]]; then
+            count=$((count + 1))
+        fi
+    done <<<"$log"
+    echo "$count"
+}
+
+# Monitor 1920x1080, frame extents 0 0 36 0. A new dropdown is 80% x 80%:
+# frame 1536x864 at 192,108. Shown again, the stub window reports a client of
+# STUB_CLIENT_WIDTH x STUB_CLIENT_HEIGHT: frame 800x636 at 560,222, not resized.
+case_size_is_set_once_and_always_centered() {
+    local name="new dropdown is sized once, every show centers it" resizes
+    reset_world
+    touch "$tmp_root/nemo-creates-window"
+    run_toggle
+    if [[ $rc -ne 0 ]] || ! calls_contain "xdotool windowsize $NEMO_WID 1536 828" \
+        || ! calls_contain "xdotool windowmove $NEMO_WID 192 108"; then
+        fail "$name" "create did not size and center (rc=$rc err='$err')"
+        return 0
+    fi
+    run_toggle
+    run_toggle
+    resizes=$(count_calls "xdotool windowsize")
+    if [[ $rc -ne 0 || $resizes -ne 1 ]] || ! calls_contain "xdotool windowmove $NEMO_WID 560 222"; then
+        fail "$name" "show resized $resizes time(s) or did not center (rc=$rc err='$err')"
+        return 0
+    fi
+    pass "$name"
+}
+
 case_symlinked_lock_is_refused() {
     local name="symlinked lock file is refused"
     reset_world
@@ -255,6 +305,7 @@ case_timeout_exits_with_message
 check_rejected "non-numeric saved wid is rejected" "abc"
 check_rejected "foreign saved wid is rejected" "$FOREIGN_WID"
 case_create_then_hide
+case_size_is_set_once_and_always_centered
 case_symlinked_lock_is_refused
 
 if [[ $failures -gt 0 ]]; then

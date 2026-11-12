@@ -2,8 +2,10 @@
 #
 # Toggle one dropdown Nemo window.
 # First run opens a Nemo window on $HOME, next run hides it, next run shows
-# the same window again on the current workspace. The window is placed at the
-# top of the monitor under the pointer, centered horizontally.
+# the same window again on the current workspace, centered on the monitor
+# under the pointer. A new dropdown opens at WIDTH_PERCENT x HEIGHT_PERCENT of
+# that monitor; afterwards its size is never changed, so it keeps the size the
+# user gives it.
 #
 # Keybinding: Cinnamon custom shortcut "Dropdown Nemo", binding Super+E,
 # command /home/bgi/Repos/dotfiles/scripts/nemo_dropdown_toggle.sh
@@ -28,7 +30,7 @@
 set -euo pipefail
 
 readonly WIDTH_PERCENT=80
-readonly HEIGHT_PERCENT=60
+readonly HEIGHT_PERCENT=80
 readonly DEFAULT_TIMEOUT_SECONDS=10
 readonly TIMEOUT_SECONDS="${NEMO_DROPDOWN_TIMEOUT_SECONDS:-$DEFAULT_TIMEOUT_SECONDS}"
 readonly POLL_SECONDS=0.1
@@ -258,19 +260,57 @@ frame_extents() {
     echo "0 0 0 0"
 }
 
+# Prints "width height" of the window's frame, title bar and borders included.
+frame_size() {
+    local wid=$1 info client_width client_height left right top bottom extents
+    info=$(xwininfo -id "$wid")
+    if [[ ! $info =~ Width:\ ([0-9]+).*Height:\ ([0-9]+) ]]; then
+        die "could not read the size of window $wid from xwininfo"
+    fi
+    client_width=${BASH_REMATCH[1]}
+    client_height=${BASH_REMATCH[2]}
+    extents=$(frame_extents "$wid")
+    read -r left right top bottom <<<"$extents"
+    echo "$((client_width + left + right)) $((client_height + top + bottom))"
+}
+
+# Prints the offset that centers a span of $1 in a span of $2, never negative:
+# a window larger than the monitor starts at the monitor's edge.
+centered_offset() {
+    local size=$1 available=$2
+    if ((size >= available)); then
+        echo 0
+        return 0
+    fi
+    echo $(((available - size) / 2))
+}
+
+# Centers a frame of $2 x $3 on the monitor under the pointer. The size is
+# passed in: right after a resize the window still reports its old size.
+center_on_pointer_monitor() {
+    local wid=$1 frame_width=$2 frame_height=$3
+    local monitor monitor_width monitor_height monitor_x monitor_y offset_x offset_y
+    monitor=$(pointer_monitor_geometry)
+    read -r monitor_width monitor_height monitor_x monitor_y <<<"$monitor"
+    offset_x=$(centered_offset "$frame_width" "$monitor_width")
+    offset_y=$(centered_offset "$frame_height" "$monitor_height")
+    xdotool windowmove "$wid" $((monitor_x + offset_x)) $((monitor_y + offset_y))
+}
+
 # The percentages apply to the frame, so the title bar counts in the height.
-place_on_pointer_monitor() {
+# Prints the "width height" of the frame it asked for.
+resize_to_default_size() {
     local wid=$1
-    local monitor_width monitor_height monitor_x monitor_y
-    local left right top bottom outer_width outer_height monitor extents
+    local monitor monitor_width monitor_height monitor_x monitor_y
+    local extents left right top bottom frame_width frame_height
     monitor=$(pointer_monitor_geometry)
     extents=$(frame_extents "$wid")
     read -r monitor_width monitor_height monitor_x monitor_y <<<"$monitor"
     read -r left right top bottom <<<"$extents"
-    outer_width=$((monitor_width * WIDTH_PERCENT / 100))
-    outer_height=$((monitor_height * HEIGHT_PERCENT / 100))
-    xdotool windowsize "$wid" $((outer_width - left - right)) $((outer_height - top - bottom))
-    xdotool windowmove "$wid" $((monitor_x + (monitor_width - outer_width) / 2)) "$monitor_y"
+    frame_width=$((monitor_width * WIDTH_PERCENT / 100))
+    frame_height=$((monitor_height * HEIGHT_PERCENT / 100))
+    xdotool windowsize "$wid" $((frame_width - left - right)) $((frame_height - top - bottom))
+    echo "$frame_width $frame_height"
 }
 
 # GTK maximizes the window again each time it is mapped, and the WM ignores
@@ -295,13 +335,18 @@ EOF
     fi
 }
 
-bring_here() {
+# A maximized window cannot be moved or resized, so it is unmaximized first.
+bring_to_current_desktop() {
     local wid=$1
     xdotool set_desktop_for_window "$wid" "$(xdotool get_desktop)"
     if has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
         unmaximize_window "$wid"
     fi
-    place_on_pointer_monitor "$wid"
+}
+
+center_and_activate() {
+    local wid=$1 frame_width=$2 frame_height=$3
+    center_on_pointer_monitor "$wid" "$frame_width" "$frame_height"
     xdotool windowactivate "$wid"
 }
 
@@ -312,7 +357,7 @@ hide_dropdown() {
 # A window that is minimized or on another workspace is withdrawn first, so
 # it is shown again through the same path as a hidden one.
 show_dropdown() {
-    local wid=$1
+    local wid=$1 size frame_width frame_height
     if is_managed "$wid"; then
         xdotool windowunmap "$wid"
         if ! wait_while is_managed "$wid"; then
@@ -323,7 +368,10 @@ show_dropdown() {
     if ! wait_until is_managed "$wid"; then
         die "window $wid is not managed ${TIMEOUT_SECONDS}s after mapping it"
     fi
-    bring_here "$wid"
+    bring_to_current_desktop "$wid"
+    size=$(frame_size "$wid")
+    read -r frame_width frame_height <<<"$size"
+    center_and_activate "$wid" "$frame_width" "$frame_height"
 }
 
 # Prints the id of a normal, viewable Nemo window managed now but absent from $1.
@@ -345,7 +393,7 @@ find_new_nemo_window() {
 }
 
 create_dropdown() {
-    local known_ids wid
+    local known_ids wid size frame_width frame_height
     known_ids=$(managed_window_ids)
     # The launched nemo can become the long-lived Nemo process: it must not
     # inherit the lock, or every later press would be skipped.
@@ -355,7 +403,10 @@ create_dropdown() {
     fi
     mark_dropdown_window "$wid"
     echo "$wid" >"$WID_FILE"
-    bring_here "$wid"
+    bring_to_current_desktop "$wid"
+    size=$(resize_to_default_size "$wid")
+    read -r frame_width frame_height <<<"$size"
+    center_and_activate "$wid" "$frame_width" "$frame_height"
 }
 
 # The /tmp fallback is shared by all users: refuse a directory someone else

@@ -1,12 +1,13 @@
 #!/bin/bash
-# Regression tests for cinnamon/applet.sh, with a stub gsettings on PATH and a temporary
-# applet folder: the real org.cinnamon keys are never read or written.
+# Regression tests for cinnamon/applet.sh, with stub gsettings and gdbus on PATH and a
+# temporary applet folder: the real org.cinnamon keys and the running Cinnamon are never
+# touched.
 # Usage: scripts/cinnamon-applet-test.sh [script to test]
-# The stub body is single-quoted on purpose: it expands when the stub runs.
-# shellcheck disable=SC2016
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/cinnamon-test-stubs.sh
+source "$script_dir/cinnamon-test-stubs.sh"
 applet_script="${1:-$script_dir/../cinnamon/applet.sh}"
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/cinnamon-applet-test.XXXXXX")"
 stub_bin="$tmp_root/bin"
@@ -32,19 +33,6 @@ pass() {
 fail() {
     say "FAIL $1: $2"
     failures=$((failures + 1))
-}
-
-# gsettings get|set org.cinnamon <key> [value]: one file per key.
-write_stub() {
-    mkdir -p "$stub_bin"
-    printf '#!/bin/bash\nset -euo pipefail\nSTUB_ROOT=%q\n%s\n' "$tmp_root" '
-file="$STUB_ROOT/keys/$3"
-case "$1" in
-    get) cat "$file" ;;
-    set) printf "%s\n" "$4" >"$file" ;;
-    *) exit 1 ;;
-esac' >"$stub_bin/gsettings"
-    chmod +x "$stub_bin/gsettings"
 }
 
 set_keys() {
@@ -125,13 +113,37 @@ test_refusals_change_nothing() {
     expect_equal "enable of an applet not installed fails" 1 "$status"
     expect_equal "a refused enable leaves the list" "$OTHERS" "$(key enabled-applets)"
     expect_equal "a refused enable leaves next-applet-id" "$NEXT_ID" "$(key next-applet-id)"
+    local output
     status=0
-    run enable "bad'uuid@test" >/dev/null || status=$?
-    expect_equal "a uuid with a quote is refused" 1 "$status"
+    output=$(run enable "bad'uuid@test") || status=$?
+    expect_equal "a uuid with a quote is refused" "1 error: not an applet uuid: bad'uuid@test" "$status $output"
+    expect_equal "a refused uuid leaves the list" "$OTHERS" "$(key enabled-applets)"
+}
+
+# An entry holding a quote or a backslash cannot be parsed safely: nothing is written.
+test_unexpected_entry_is_refused() {
+    local output status=0
+    set_keys "['panel1:right:0:odd\\'name@x:3']" 4
+    output=$(run enable "$UUID") || status=$?
+    expect_equal "a list with a quote or backslash in an entry is refused" 1 "$status"
+    expect_equal "the refusal says why" "error: unexpected character in enabled-applets, nothing changed" "$output"
+    expect_equal "a refused list is left as it was" "['panel1:right:0:odd\\'name@x:3']" "$(key enabled-applets)"
+}
+
+test_reload_calls_cinnamon() {
+    local output
+    set_keys "$OTHERS" "$NEXT_ID"
+    run enable "$UUID" >/dev/null
+    rm -f "$tmp_root/gdbus.log"
+    output=$(run reload "$UUID")
+    expect_equal "reload prints" "reloaded: $UUID" "$output"
+    expect_equal "reload asks Cinnamon to reload the applet" \
+        "call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ReloadXlet $UUID APPLET" \
+        "$(cat "$tmp_root/gdbus.log")"
 }
 
 main() {
-    write_stub
+    write_cinnamon_stubs "$tmp_root"
     install_applet
     test_enable_appends_at_zone_end
     test_enable_twice_is_unchanged
@@ -139,6 +151,8 @@ main() {
     test_enable_on_empty_list
     test_bang_uuid_counts_as_enabled
     test_refusals_change_nothing
+    test_unexpected_entry_is_refused
+    test_reload_calls_cinnamon
     if [[ "$failures" -gt 0 ]]; then
         say "$failures failure(s)"
         exit 1

@@ -106,5 +106,22 @@
 
 .scale-dock-icon {
     padding: 6px;
+    spacing: 4px;
     border-radius: 8px;
+}
+
+.scale-dock-separator {
+    width: 1px;
+    margin: 4px 2px;
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.scale-dock-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+}
+
+.scale-dock-dot-running {
+    background-color: #ffffff;
 }

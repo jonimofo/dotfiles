@@ -100,11 +100,12 @@ function showHeader() {
     }
 }
 
-// No apps to show: no dock, and the windows keep the bottom of the monitor.
+// No apps to show at opening: no dock until the next opening, and the windows keep the
+// bottom of the monitor. A dock that becomes empty keeps its place until Scale closes.
 function showDock() {
-    const apps = AppDock.getDockApps();
-    if (apps.length > 0)
-        dock = new AppDock.AppDock(apps);
+    const dockApps = AppDock.getDockApps();
+    if (AppDock.countDockApps(dockApps) > 0)
+        dock = new AppDock.AppDock(dockApps);
 }
 
 // Each part is torn down on its own: some may exist without the others after a failure.

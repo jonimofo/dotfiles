@@ -1,7 +1,8 @@
 #!/bin/bash
 # Static checks of the Cinnamon extensions and applets under cinnamon/extensions/ and
 # cinnamon/applets/: JavaScript syntax, metadata.json and settings-schema.json validity,
-# and every module reference between the files of one extension or applet.
+# every module reference between the files of one extension or applet, and no libnm object
+# disconnect() call.
 # Usage: scripts/cinnamon-extension-check.sh (from any directory). Needs node and jq.
 set -euo pipefail
 
@@ -57,6 +58,23 @@ check_settings_schema() {
     fi
 }
 
+# NM.Device has its own disconnect(), which takes the network device offline, and it hides
+# GObject's signal disconnect(). In a file that imports libnm, handlers are removed with
+# GObject.signal_handler_disconnect() only: any `.disconnect(` call fails the check.
+check_nm_disconnect() {
+    local js_file="$1"
+    local uses_nm calls
+    uses_nm="$(grep -n 'imports\.gi\.NM\b' "$js_file" || true)"
+    if [[ -z "$uses_nm" ]]; then
+        return
+    fi
+    calls="$(grep -n '\.disconnect(' "$js_file" || true)"
+    if [[ -n "$calls" ]]; then
+        fail "$js_file: imports libnm and calls .disconnect(, use GObject.signal_handler_disconnect"
+        printf '%s\n' "$calls" >&2
+    fi
+}
+
 # Cinnamon's require() exports the top-level function, const, let, var and class bindings.
 is_top_level_declaration() {
     local module_file="$1" name="$2"
@@ -109,6 +127,7 @@ check_extension() {
         fi
         check_syntax "$js_file"
         check_requires "$js_file"
+        check_nm_disconnect "$js_file"
         checked_files=$((checked_files + 1))
     done
 }

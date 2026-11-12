@@ -1,6 +1,6 @@
 // Logic tests of the quick-settings@bgi applet modules, run by cinnamon-quick-settings-test.sh.
-// Dark style runs on the memory GSettings backend; Wi-Fi reads the real NetworkManager state
-// and never writes it (the D-Bus write is intercepted); brightness runs against fake ddcutil
+// Dark style runs on the memory GSettings backend; Wi-Fi runs on fake NetworkManager objects
+// (no test touches the real NetworkManager); brightness runs against fake ddcutil
 // and laptop backends fed with captured ddcutil output; NordVPN runs against a fake client
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
 // models run on plain data; Night Light and Do Not Disturb run on the memory GSettings backend.
@@ -8,6 +8,7 @@
 // Usage: GSETTINGS_BACKEND=memory gjs cinnamon-quick-settings-test.js <applet folder> <fixtures folder>
 const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
+const GObject = imports.gi.GObject;
 const ByteArray = imports.byteArray;
 const Signals = imports.signals;
 
@@ -99,29 +100,83 @@ async function testDarkStyle() {
     dark.destroy();
 }
 
+// NetworkManager stand-ins. Like NM.Device, they define their own disconnect(), which on a
+// real device takes it offline: the applet must only ever remove its handlers with
+// GObject.signal_handler_disconnect(). Each fake records any call to its disconnect().
+const FakeNmDevice = GObject.registerClass({
+    Signals: { 'access-point-added': {}, 'access-point-removed': {} },
+}, class FakeNmDevice extends GObject.Object {
+    _init() {
+        super._init();
+        this.disconnectCalls = 0;
+    }
+
+    disconnect() {
+        this.disconnectCalls++;
+    }
+
+    get_device_type() {
+        return imports.gi.NM.DeviceType.WIFI;
+    }
+
+    get_active_access_point() {
+        return null;
+    }
+
+    get_access_points() {
+        return [];
+    }
+});
+
+const FakeNmClient = GObject.registerClass({
+    Signals: { 'device-added': {}, 'device-removed': {} },
+}, class FakeNmClient extends GObject.Object {
+    _init(device) {
+        super._init();
+        this.device = device;
+        this.wireless_enabled = true;
+        this.wireless_hardware_enabled = true;
+        this.disconnectCalls = 0;
+        this.writes = [];
+    }
+
+    disconnect() {
+        this.disconnectCalls++;
+    }
+
+    get_devices() {
+        return [this.device];
+    }
+
+    dbus_set_property(path, iface, property, value, timeout, cancellable, callback) {
+        this.writes.push(`${property}=${value.unpack()}`);
+        callback(this, null);
+    }
+
+    dbus_set_property_finish() {
+        return true;
+    }
+});
+
 function testWifi() {
     const Wifi = load('./wifiState');
-    return new Promise(resolve => {
-        let calls = 0;
-        const wifi = new Wifi.WifiState(() => {
-            if (++calls > 1)
-                return;
-            const nm = imports.gi.NM.Client.new(null);
-            check('wifi: enabled matches NetworkManager', wifi.enabled === (nm.wireless_enabled && nm.wireless_hardware_enabled));
-            let target = null;
-            wifi._setWirelessEnabled = value => {
-                target = value;
-            };
-            wifi.toggle();
-            check(`wifi: toggle asks for ${!nm.wireless_enabled}`, target === !nm.wireless_enabled);
-            const device = nm.get_devices().find(candidate => candidate instanceof imports.gi.NM.DeviceWifi);
-            const stateBefore = device ? device.get_state() : null;
-            // Regression: NM.Device.disconnect() shadows GObject's and takes the device offline.
-            wifi.destroy();
-            check('wifi: destroy leaves the Wi-Fi device as it was', !device || device.get_state() === stateBefore);
-            resolve();
-        });
-    });
+    const device = new FakeNmDevice();
+    const client = new FakeNmClient(device);
+    let changes = 0;
+    const wifi = new Wifi.WifiState(() => changes++, (cancellable, onReady) => onReady(client, null));
+    check('wifi: on while both switches are on', wifi.enabled && changes > 0);
+    wifi.toggle();
+    check(`wifi: toggle writes WirelessEnabled=false through D-Bus (${client.writes})`, `${client.writes}` === 'WirelessEnabled=false');
+    const deviceIds = [...wifi._deviceSignalIds];
+    const clientIds = [...wifi._clientSignalIds];
+    wifi.destroy();
+    // Regression: NM.Device.disconnect() shadows GObject's and takes the device offline.
+    check('wifi: destroy never calls the device\'s or the client\'s own disconnect()',
+        device.disconnectCalls === 0 && client.disconnectCalls === 0);
+    check(`wifi: destroy removes its ${deviceIds.length} device and ${clientIds.length} client handlers`,
+        deviceIds.length === 4 && clientIds.length === 4
+        && deviceIds.every(id => !GObject.signal_handler_is_connected(device, id))
+        && clientIds.every(id => !GObject.signal_handler_is_connected(client, id)));
 }
 
 function testVolumeMapping() {
@@ -573,7 +628,7 @@ function testLayoutModel() {
 
 async function main() {
     await testDarkStyle();
-    await testWifi();
+    testWifi();
     testVolumeMapping();
     testDdcutilParser();
     await testReleaseCommit();
@@ -593,7 +648,15 @@ async function main() {
     testLayoutModel();
 }
 
+// No test may hang: a stuck promise fails the run instead.
+const TEST_TIMEOUT_SECONDS = 60;
 const loop = GLib.MainLoop.new(null, false);
+GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, TEST_TIMEOUT_SECONDS, () => {
+    print(`FAIL timeout: the tests did not finish within ${TEST_TIMEOUT_SECONDS} s`);
+    failures++;
+    loop.quit();
+    return GLib.SOURCE_REMOVE;
+});
 main().catch(e => {
     print(`FAIL unexpected error: ${e}\n${e.stack}`);
     failures++;

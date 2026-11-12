@@ -66,17 +66,29 @@ function automaticConnection(client, accessPoint, ssid) {
     return connection;
 }
 
+// Asks libnm for a client; @onReady(client, error). The tests pass a fake instead.
+function newNmClient(cancellable, onReady) {
+    NM.Client.new_async(cancellable, (source, result) => {
+        try {
+            onReady(NM.Client.new_finish(result), null);
+        } catch (e) {
+            onReady(null, e);
+        }
+    });
+}
+
 // Wireless on or off and the visible networks, through NetworkManager. @onChange runs once
 // the client is ready and on every change, made here or anywhere else.
+// @requestClient(cancellable, onReady): where the client comes from (newNmClient by default).
 class WifiState {
-    constructor(onChange) {
+    constructor(onChange, requestClient = newNmClient) {
         this._onChange = onChange;
         this._client = null;
         this._device = null;
         this._clientSignalIds = [];
         this._deviceSignalIds = [];
         this._cancellable = new Gio.Cancellable();
-        NM.Client.new_async(this._cancellable, (source, result) => this._onClientReady(result));
+        requestClient(this._cancellable, (client, error) => this._onClientReady(client, error));
     }
 
     // On only when both the software switch and the hardware switch are on.
@@ -166,14 +178,13 @@ class WifiState {
         this._onChange();
     }
 
-    _onClientReady(result) {
-        try {
-            this._client = NM.Client.new_finish(result);
-        } catch (e) {
-            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                global.logError(`${Constants.LOG_PREFIX}: connecting to NetworkManager failed`, e);
+    _onClientReady(client, error) {
+        if (error) {
+            if (!error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                global.logError(`${Constants.LOG_PREFIX}: connecting to NetworkManager failed`, error);
             return;
         }
+        this._client = client;
         for (const property of ['wireless-enabled', 'wireless-hardware-enabled'])
             this._clientSignalIds.push(this._client.connect(`notify::${property}`, () => this._onChange()));
         for (const signal of ['device-added', 'device-removed'])
@@ -182,7 +193,7 @@ class WifiState {
     }
 
     _findDevice() {
-        const device = this._client.get_devices().find(candidate => candidate instanceof NM.DeviceWifi) || null;
+        const device = this._client.get_devices().find(candidate => candidate.get_device_type() === NM.DeviceType.WIFI) || null;
         if (device !== this._device) {
             this._disconnectDevice();
             this._device = device;

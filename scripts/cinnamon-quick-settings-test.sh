@@ -1,8 +1,8 @@
 #!/bin/bash
 # Logic tests of the quick-settings@bgi applet: Dark style, Wi-Fi, volume mapping, ddcutil
 # and nordvpn parsing (captured output in fixtures/), send-on-release, brightness backends,
-# in-place lists, Bluetooth, VPN and NordVPN logic.
-# No real setting is changed.
+# in-place lists, Bluetooth, VPN and NordVPN logic. Wi-Fi runs on fake NetworkManager
+# objects. No real setting is changed and no real device is touched.
 # Usage: scripts/cinnamon-quick-settings-test.sh (from any directory). Needs gjs and libnm.
 set -euo pipefail
 

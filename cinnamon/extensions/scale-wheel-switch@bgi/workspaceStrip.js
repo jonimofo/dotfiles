@@ -106,6 +106,7 @@ class WorkspaceThumbnail {
         this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
         this.actor._delegate = this;
         this._dropHover = new UiHelpers.DragHover(
+            this.actor,
             () => this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS),
             () => this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS));
         this.actor.connect('destroy', () => this._dropHover.leave());
@@ -229,10 +230,10 @@ class WorkspaceThumbnail {
 
     // A window already on this workspace and this monitor has nowhere to go.
     _canDrop(source) {
-        const metaWindow = source && source.metaWindow;
-        if (!metaWindow)
+        if (!UiHelpers.isScaleWindow(source))
             return false;
 
+        const metaWindow = source.metaWindow;
         return this._changesWorkspace(metaWindow) || this._changesMonitor(metaWindow);
     }
 

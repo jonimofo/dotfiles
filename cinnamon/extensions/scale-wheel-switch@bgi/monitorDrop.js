@@ -1,17 +1,11 @@
 const St = imports.gi.St;
 const DND = imports.ui.dnd;
 const Main = imports.ui.main;
-const Workspace = imports.ui.workspace;
 const UiHelpers = require('./uiHelpers');
 
 const DROP_TARGET_STYLE_CLASS = 'scale-monitor-drop-target';
 
 let dropTarget = null;
-
-// Only Scale's window clones made draggable by windowDrag.js: a drag monitor sees every drag.
-function isScaleWindow(source) {
-    return source instanceof Workspace.WindowClone && Boolean(source._draggable);
-}
 
 // Scale lays a monitor's windows out in this rectangle: below the strip on the primary monitor.
 function containsPoint(workspaceMonitor, x, y) {
@@ -34,7 +28,7 @@ function findDropMonitor(source, x, y) {
 }
 
 function canDrop(source, workspaceMonitor) {
-    return isScaleWindow(source) && source.metaWindow.get_monitor() !== workspaceMonitor.monitorIndex;
+    return UiHelpers.isScaleWindow(source) && source.metaWindow.get_monitor() !== workspaceMonitor.monitorIndex;
 }
 
 // Scale's per-monitor objects take no drop, and dnd looks for a drop target among the
@@ -47,10 +41,13 @@ class MonitorDropTarget {
         this._workspaceMonitor = null;
         this.actor = new St.Widget({ style_class: DROP_TARGET_STYLE_CLASS, visible: false });
         this.actor._delegate = this;
-        this._hover = new UiHelpers.DragHover(() => this.actor.show(), () => this._onLeave());
+        this._hover = new UiHelpers.DragHover(this.actor, () => this.actor.show(), () => this._onLeave());
         global.overlay_group.add_actor(this.actor);
 
-        this._dragMonitor = { dragMotion: this._onDragMotion.bind(this) };
+        this._dragMonitor = {
+            dragMotion: this._onDragMotion.bind(this),
+            dragDrop: this._onDragDrop.bind(this),
+        };
         DND.addDragMonitor(this._dragMonitor);
     }
 
@@ -63,6 +60,12 @@ class MonitorDropTarget {
 
         this._enter(dragEvent.source, workspaceMonitor);
         return DND.DragMotionResult.MOVE_DROP;
+    }
+
+    // Any other result than CONTINUE ends the drop before the targets and 'drag-end'.
+    _onDragDrop(dropEvent) {
+        UiHelpers.leaveDragHoversOutside(dropEvent.targetActor);
+        return DND.DragDropResult.CONTINUE;
     }
 
     _enter(source, workspaceMonitor) {

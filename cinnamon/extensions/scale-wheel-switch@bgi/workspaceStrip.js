@@ -216,17 +216,31 @@ class WorkspaceThumbnail {
             return false;
 
         this._dropHover.leave();
-        source.metaWindow.change_workspace(this.metaWorkspace);
+        const metaWindow = source.metaWindow;
+        const changesWorkspace = this._changesWorkspace(metaWindow);
+        if (this._changesMonitor(metaWindow))
+            metaWindow.move_to_monitor(this._monitorIndex);
+        if (changesWorkspace)
+            metaWindow.change_workspace(this.metaWorkspace);
         return true;
     }
 
-    // A sticky window is on every workspace already; a window on this workspace has nowhere to go.
+    // A window already on this workspace and this monitor has nowhere to go.
     _canDrop(source) {
         const metaWindow = source && source.metaWindow;
-        if (!metaWindow || metaWindow.is_on_all_workspaces())
+        if (!metaWindow)
             return false;
 
-        return metaWindow.get_workspace() !== this.metaWorkspace;
+        return this._changesWorkspace(metaWindow) || this._changesMonitor(metaWindow);
+    }
+
+    // A sticky window is on every workspace already: it can only change monitor.
+    _changesWorkspace(metaWindow) {
+        return !metaWindow.is_on_all_workspaces() && metaWindow.get_workspace() !== this.metaWorkspace;
+    }
+
+    _changesMonitor(metaWindow) {
+        return metaWindow.get_monitor() !== this._monitorIndex;
     }
 
     setActive(isActive) {

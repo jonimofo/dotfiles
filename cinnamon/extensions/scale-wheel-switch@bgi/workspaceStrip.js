@@ -8,7 +8,7 @@ const SignalManager = imports.misc.signalManager;
 const WindowUtils = imports.misc.windowUtils;
 const UiHelpers = require('./uiHelpers');
 
-// Thumbnail size as a fraction of the primary monitor, reduced when the workspaces do not
+// Thumbnail size as a fraction of the strip's own monitor, reduced when the workspaces do not
 // fit in the monitor's width. Colors and spacing are in stylesheet.css.
 const THUMBNAIL_SCALE = 0.12;
 const DROP_TARGET_STYLE_CLASS = 'scale-strip-thumbnail-drop-target';
@@ -60,13 +60,16 @@ function computeGridCells(count, width, height) {
     return cells;
 }
 
-// The strip of the Scale view currently open, if any.
-let activeStrip = null;
+// The strips of the Scale view currently open, one per monitor.
+const activeStrips = new Set();
 
-// Height of a strip thumbnail, for the modules that size things after it.
+// Height of the smallest strip thumbnail, for the modules that size things after it:
+// what fits in it fits in every strip.
 function getThumbnailHeight() {
-    const scale = activeStrip ? activeStrip.thumbnailScale : THUMBNAIL_SCALE;
-    return Math.round(Main.layoutManager.primaryMonitor.height * scale);
+    if (activeStrips.size === 0)
+        return Math.round(Main.layoutManager.primaryMonitor.height * THUMBNAIL_SCALE);
+
+    return Math.min(...[...activeStrips].map(strip => strip.getThumbnailHeight()));
 }
 
 // One workspace: wallpaper, live window clones and the workspace name.
@@ -100,9 +103,10 @@ class WorkspaceThumbnail {
 
         this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
         this.actor._delegate = this;
-        this._dragSource = null;
-        this._dragEndId = 0;
-        this.actor.connect('destroy', () => this._clearDropTarget());
+        this._dropHover = new UiHelpers.DragHover(
+            () => this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS),
+            () => this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS));
+        this.actor.connect('destroy', () => this._dropHover.leave());
         this._pressed = false;
         this.actor.connect('button-press-event', this._onButtonPress.bind(this));
         this.actor.connect('button-release-event', this._onButtonRelease.bind(this));
@@ -199,51 +203,44 @@ class WorkspaceThumbnail {
         if (!this._canDrop(source))
             return DND.DragMotionResult.CONTINUE;
 
-        this._markDropTarget(source);
+        this._dropHover.enter(source._draggable);
         return DND.DragMotionResult.MOVE_DROP;
     }
 
     handleDragOut() {
-        this._clearDropTarget();
+        this._dropHover.leave();
     }
 
     acceptDrop(source) {
         if (!this._canDrop(source))
             return false;
 
-        this._clearDropTarget();
-        source.metaWindow.change_workspace(this.metaWorkspace);
+        this._dropHover.leave();
+        const metaWindow = source.metaWindow;
+        const changesWorkspace = this._changesWorkspace(metaWindow);
+        if (this._changesMonitor(metaWindow))
+            metaWindow.move_to_monitor(this._monitorIndex);
+        if (changesWorkspace)
+            metaWindow.change_workspace(this.metaWorkspace);
         return true;
     }
 
-    // A sticky window is on every workspace already; a window on this workspace has nowhere to go.
+    // A window already on this workspace and this monitor has nowhere to go.
     _canDrop(source) {
         const metaWindow = source && source.metaWindow;
-        if (!metaWindow || metaWindow.is_on_all_workspaces())
+        if (!metaWindow)
             return false;
 
-        return metaWindow.get_workspace() !== this.metaWorkspace;
+        return this._changesWorkspace(metaWindow) || this._changesMonitor(metaWindow);
     }
 
-    // dnd only reports a drag leaving when the pointer moves out: a drag cancelled
-    // with Escape over the thumbnail is caught through the draggable's 'drag-end'.
-    _markDropTarget(source) {
-        if (this._dragSource)
-            return;
-
-        this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS);
-        this._dragSource = source._draggable;
-        this._dragEndId = this._dragSource.connect('drag-end', () => this._clearDropTarget());
+    // A sticky window is on every workspace already: it can only change monitor.
+    _changesWorkspace(metaWindow) {
+        return !metaWindow.is_on_all_workspaces() && metaWindow.get_workspace() !== this.metaWorkspace;
     }
 
-    _clearDropTarget() {
-        if (!this._dragSource)
-            return;
-
-        this._dragSource.disconnect(this._dragEndId);
-        this._dragSource = null;
-        this._dragEndId = 0;
-        this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS);
+    _changesMonitor(metaWindow) {
+        return metaWindow.get_monitor() !== this._monitorIndex;
     }
 
     setActive(isActive) {
@@ -254,14 +251,14 @@ class WorkspaceThumbnail {
     }
 }
 
-// Strip of workspace thumbnails, shown on the primary monitor while Scale is open, @topOffset
+// Strip of workspace thumbnails, shown on monitor @monitorIndex while Scale is open, @topOffset
 // pixels below the top of the monitor. The big Scale view is pushed below it for as long
 // as the strip exists.
 var WorkspaceStrip = class WorkspaceStrip {
-    constructor(topOffset = 0) {
+    constructor(monitorIndex, topOffset = 0) {
         this._topOffset = topOffset;
-        this._monitorIndex = Main.layoutManager.primaryIndex;
-        this._monitor = Main.layoutManager.primaryMonitor;
+        this._monitorIndex = monitorIndex;
+        this._monitor = Main.layoutManager.monitors[monitorIndex];
         this._signals = new SignalManager.SignalManager(null);
         this._workspaceSignals = new SignalManager.SignalManager(null);
         this._refreshIdleId = 0;
@@ -282,7 +279,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
         this._buildThumbnails();
         this._insetBigView(this._getInset());
-        activeStrip = this;
+        activeStrips.add(this);
 
         const display = global.display;
         this._signals.connect(display, 'restacked', this._queueRefresh, this);
@@ -290,6 +287,10 @@ var WorkspaceStrip = class WorkspaceStrip {
         this._signals.connect(display, 'window-left-monitor', this._queueRefresh, this);
         this._signals.connect(global.window_manager, 'switch-workspace', this._syncActive, this);
         this._signals.connect(global.workspace_manager, 'notify::n-workspaces', this._onWorkspacesChanged, this);
+    }
+
+    getThumbnailHeight() {
+        return Math.round(this._monitor.height * this.thumbnailScale);
     }
 
     // Height taken at the top of the monitor, down to the bottom edge of the strip.
@@ -408,8 +409,7 @@ var WorkspaceStrip = class WorkspaceStrip {
     }
 
     destroy() {
-        if (activeStrip === this)
-            activeStrip = null;
+        activeStrips.delete(this);
         this._signals.disconnectAllSignals();
         this._workspaceSignals.disconnectAllSignals();
         if (this._refreshIdleId) {

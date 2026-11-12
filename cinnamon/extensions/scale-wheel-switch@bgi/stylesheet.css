@@ -8,8 +8,13 @@
     spacing: 16px;
 }
 
+.scale-strip-thumbnail,
+.scale-monitor-drop-target {
+    border-width: 3px;
+}
+
 .scale-strip-thumbnail {
-    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.3);
     -scale-window-gap: 6px;
 }
 
@@ -18,7 +23,8 @@
 }
 
 .scale-strip-thumbnail-drop-target,
-.scale-strip-thumbnail-drop-target:selected {
+.scale-strip-thumbnail-drop-target:selected,
+.scale-monitor-drop-target {
     border-color: #ffffff;
 }
 

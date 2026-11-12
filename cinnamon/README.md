@@ -12,13 +12,17 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 ## What scale-wheel-switch does
 
 In Scale (hot corner or Super), from top to bottom: a search field, a strip with one
-thumbnail per workspace, both centered, then Scale's windows.
+thumbnail per workspace, both centered, then Scale's windows. The search field is on the
+primary screen only; every other screen has its own strip at its very top.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
   Escape clears the field, then closes Scale.
+- Each thumbnail shows the windows that workspace has on that strip's screen.
 - A click on a thumbnail switches workspace. Scale stays open.
-- Dropping a window on a thumbnail moves it to that workspace.
+- Dropping a window on a thumbnail moves it to that workspace and that screen.
+- Dropping a window anywhere on another screen's window area moves it to that screen,
+  same workspace. The area is highlighted while the drop is possible.
 - The mouse wheel switches workspace.
 - A middle click on a window does nothing (stock Scale closes the application).
 - A right click on a window opens it, like a left click (stock Scale shows the window menu).
@@ -77,7 +81,10 @@ Then give Super back to the Menu (see above).
 
 - The search field is not a real text entry: no caret, no paste, no dead keys or input method.
   Backspace removes the last character.
-- Primary monitor only: the field, the strip and the application grid are drawn there.
+- The search field and the application grid are drawn on the primary monitor only.
+- With Cinnamon's "workspaces only on primary" setting on, the other screens still show one
+  thumbnail per workspace. Untested: the setting is off here.
+- Tested on two monitors side by side. Three or more are untested.
 - Thumbnails follow windows opening, closing and changing workspace, not a window being
   moved or resized while Scale is open. Workspace renames show at the next opening.
 - Cinnamon hides hot corners over a fullscreen window. Super still works there.
@@ -85,7 +92,8 @@ Then give Super back to the Menu (see above).
 
 ## How it is built
 
-Design record: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../documentation/plans/2026-11-11-cinnamon-scale-overview.md).
+Design records: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../documentation/plans/2026-11-11-cinnamon-scale-overview.md),
+then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../documentation/plans/2026-11-12-cinnamon-scale-second-screen.md) for several screens.
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
@@ -101,11 +109,14 @@ Private fields and methods read, called or written:
 | Object | Members | Used for |
 |---|---|---|
 | `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the header is inserted, close animation in progress |
-| `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written) | reach each workspace, hide the windows during a search |
-| `Workspace` | `_monitors` | the per-monitor object of the primary monitor |
+| `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written), `getActiveWorkspace()` | reach each workspace, hide the windows during a search, the workspace a drag happens on |
+| `Workspace` | `_monitors` | the per-monitor objects, one per screen |
 | `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
+| `WorkspaceMonitor` | `_x`, `_y`, `_width`, `_height`, `monitorIndex` | each screen's window area, as a drop target |
+| `imports.ui.workspace` | `WindowClone` (exported constructor, checked with `instanceof`) | telling Scale's windows from other drags |
 | `WindowClone` | `getDragActor`, `getDragActorSource`, `_draggable` (added to each instance) | the drag picture |
 | dnd `Draggable` | `buttonPressEventId`, `destroyEventId` | removing the drag handlers on disable |
+| `imports.ui.dnd` | `addDragMonitor`, `removeDragMonitor`, a monitor's `dragMotion(event)` with `event.x`, `event.y`, `event.source` | seeing every drag motion, to highlight a screen's window area |
 | `Main` | `modalCount` | is Scale the only modal |
 
 Assumptions about behaviour:
@@ -113,4 +124,12 @@ Assumptions about behaviour:
 - Handlers of the overview's `showing` signal run in connection order, so the header shrinks
   the big view before Scale lays its windows out.
 - `WorkspacesView.updateWindowPositions()` is broken in 6.4, so it is not used.
+- Scale's view actor is added to `global.overlay_group` each time Scale opens, so the screen
+  drop highlight raises itself in that group to stay above the windows.
+- dnd looks for a drop target among the parents of the actor under the pointer, never its
+  siblings: over a window clone, the screen's `WorkspaceMonitor` is out of reach. Its
+  `_dropRect` has no size and no drop handlers. The highlight is therefore its own actor,
+  shown on top, which then takes the drop.
+- Returning `SUCCESS` from a drag monitor's `dragDrop` ends the drop without `drag-end` or
+  cleanup, so drag monitors here only implement `dragMotion`.
 - `extension.sh reload` calls the D-Bus method `org.Cinnamon.ReloadXlet(uuid, "EXTENSION")`.

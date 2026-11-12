@@ -5,8 +5,7 @@ const NM = imports.gi.NM;
 const Util = imports.misc.util;
 const Constants = require('./constants');
 const WifiNetworks = require('./wifiNetworks');
-
-const NO_TIMEOUT = -1;
+const AsyncHelpers = require('./asyncHelpers');
 const ApFlags = NM['80211ApFlags'];
 const ApSecurityFlags = NM['80211ApSecurityFlags'];
 
@@ -66,22 +65,12 @@ function automaticConnection(client, accessPoint, ssid) {
     return connection;
 }
 
-// Asks libnm for a client; @onReady(client, error). The tests pass a fake instead.
-function newNmClient(cancellable, onReady) {
-    NM.Client.new_async(cancellable, (source, result) => {
-        try {
-            onReady(NM.Client.new_finish(result), null);
-        } catch (e) {
-            onReady(null, e);
-        }
-    });
-}
-
 // Wireless on or off and the visible networks, through NetworkManager. @onChange runs once
 // the client is ready and on every change, made here or anywhere else.
-// @requestClient(cancellable, onReady): where the client comes from (newNmClient by default).
+// @requestClient(cancellable, onReady): the applet's shared client (SharedNmClient.request),
+// or a fake in the tests.
 class WifiState {
-    constructor(onChange, requestClient = newNmClient) {
+    constructor(onChange, requestClient) {
         this._onChange = onChange;
         this._client = null;
         this._device = null;
@@ -96,6 +85,11 @@ class WifiState {
         return this._client !== null
             && this._client.wireless_enabled
             && this._client.wireless_hardware_enabled;
+    }
+
+    // True once NetworkManager reports the hardware switch (rfkill) off.
+    get hardwareBlocked() {
+        return this._client !== null && !this._client.wireless_hardware_enabled;
     }
 
     // SSID of the network in use, or null.
@@ -131,7 +125,7 @@ class WifiState {
                 device.request_scan_finish(result);
             } catch (e) {
                 // NetworkManager refuses a scan asked too soon after the last one: not a fault.
-                if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                if (!AsyncHelpers.isCancelled(e))
                     global.log(`${Constants.LOG_PREFIX}: Wi-Fi scan not started: ${e.message}`);
             }
         });
@@ -173,17 +167,15 @@ class WifiState {
         try {
             finishCall();
         } catch (e) {
-            if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+            if (AsyncHelpers.logUnlessCancelled(e, `connecting to Wi-Fi network ${ssid}`))
                 return;
-            global.logError(`${Constants.LOG_PREFIX}: connecting to Wi-Fi network ${ssid} failed`, e);
         }
         this._onChange();
     }
 
     _onClientReady(client, error) {
         if (error) {
-            if (!error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                global.logError(`${Constants.LOG_PREFIX}: connecting to NetworkManager failed`, error);
+            AsyncHelpers.logUnlessCancelled(error, 'connecting to NetworkManager');
             return;
         }
         this._client = client;
@@ -219,12 +211,11 @@ class WifiState {
     // reports a refusal (polkit, NetworkManager stopped) instead of failing silently.
     _setWirelessEnabled(enabled) {
         this._client.dbus_set_property(NM.DBUS_PATH, NM.DBUS_INTERFACE, 'WirelessEnabled',
-            GLib.Variant.new_boolean(enabled), NO_TIMEOUT, this._cancellable, (client, result) => {
+            GLib.Variant.new_boolean(enabled), AsyncHelpers.NO_TIMEOUT, this._cancellable, (client, result) => {
                 try {
                     client.dbus_set_property_finish(result);
                 } catch (e) {
-                    if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                        global.logError(`${Constants.LOG_PREFIX}: setting WirelessEnabled to ${enabled} failed`, e);
+                    AsyncHelpers.logUnlessCancelled(e, `setting WirelessEnabled to ${enabled}`);
                 }
             });
     }

@@ -72,10 +72,15 @@ class MenuContent {
         this.refreshColors();
     }
 
+    // Hidden tiles and rows are off the stage: the menu's own destroy would not reach them.
     destroy() {
+        this.lists.close();
         this.header.destroy();
         for (const row of Object.values(this.sliders))
             row.destroy();
+        for (const tile of Object.values(this.tiles))
+            tile.destroy();
+        this.listPanel.actor.destroy();
     }
 
     // Read from the first slider on screen; with every slider hidden, the stylesheet's.

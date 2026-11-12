@@ -4,17 +4,16 @@ const Slider = imports.ui.slider;
 const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
 const ReleaseCommit = require('./releaseCommit');
+const ExpandArrow = require('./expandArrow');
 
-// One slider line: icon, label, slider, and an arrow when the line opens a submenu. A row
-// without a submenu keeps an empty space of the arrow's size, so every slider has the same
-// length. The row stays dimmed and inert until setAvailable(true); the arrow works once
-// setOnArrow() gives it an action and the row is available.
+// One slider line: icon, label, slider, and an arrow when the line opens a list. A row
+// without a list keeps an empty space of the arrow's size, so every slider has the same
+// length. Until setAvailable(true) the row is inert, its icon and slider dimmed; the label
+// stays readable.
 class SliderRow {
     constructor(definition) {
-        this._dragging = false;
         this._releaseCommit = null;
         this._available = false;
-        this._hasArrowAction = false;
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-slider-row' });
 
         this._defaultIconName = definition.icon;
@@ -29,25 +28,13 @@ class SliderRow {
         this.slider = new Slider.Slider(Constants.SLIDER_INITIAL_VALUE);
         this.slider.actor.add_style_class_name('quick-settings-slider');
         this.slider.actor.x_expand = true;
-        this.slider.connect('drag-begin', () => {
-            this._dragging = true;
-        });
-        this.slider.connect('drag-end', () => {
-            this._dragging = false;
-        });
+        this._drag = new ReleaseCommit.DragTracker(this.slider);
         this.actor.add_child(this.slider.actor);
 
         this._arrow = null;
-        this._arrowIcon = null;
         if (definition.hasMenu) {
-            this._arrowIcon = UiHelpers.symbolicIcon(Constants.SUBMENU_ICON, 'quick-settings-slider-icon');
-            this._arrow = new St.Button({
-                child: this._arrowIcon,
-                style_class: 'quick-settings-slider-arrow',
-            });
-            UiHelpers.setButtonInactive(this._arrow, true);
-            UiHelpers.setDimmed(this._arrow, true);
-            this.actor.add_child(this._arrow);
+            this._arrow = new ExpandArrow.ExpandArrow('quick-settings-slider-arrow', 'quick-settings-slider-icon');
+            this.actor.add_child(this._arrow.actor);
         } else {
             this.actor.add_child(new St.Bin({ style_class: 'quick-settings-slider-arrow' }));
         }
@@ -58,8 +45,10 @@ class SliderRow {
     setAvailable(available) {
         this._available = available;
         this.slider.actor.reactive = available;
-        UiHelpers.setDimmed(this.actor, !available);
-        this._syncArrow();
+        UiHelpers.setDimmed(this._icon, !available);
+        UiHelpers.setDimmed(this.slider.actor, !available);
+        if (this._arrow)
+            this._arrow.sync(available);
     }
 
     // @iconName null puts back the row's own icon.
@@ -68,29 +57,22 @@ class SliderRow {
     }
 
     setOnArrow(onArrow) {
-        this._hasArrowAction = true;
-        this._arrow.connect('clicked', () => onArrow());
-        this._syncArrow();
+        this._arrow.setOnClick(onArrow);
+        this._arrow.sync(this._available);
     }
 
     // The arrow points down while the row's list is open.
     setExpanded(expanded) {
-        if (this._arrowIcon)
-            this._arrowIcon.icon_name = expanded ? Constants.LIST_EXPANDED_ICON : Constants.SUBMENU_ICON;
+        if (this._arrow)
+            this._arrow.setExpanded(expanded);
     }
 
-    _syncArrow() {
-        if (!this._arrow)
-            return;
-        const works = this._available && this._hasArrowAction;
-        UiHelpers.setButtonInactive(this._arrow, !works);
-        UiHelpers.setDimmed(this._arrow, this._available && !works);
-    }
-
-    // Shows a value read from the system. Ignored while the user drags the handle.
+    // Shows a value read from the system. Ignored while the user drags the handle or while
+    // a scrolled value waits to be sent.
     showValue(value) {
-        if (!this._dragging)
-            this.slider.setValue(value);
+        if (this._drag.dragging || (this._releaseCommit && this._releaseCommit.pending))
+            return;
+        this.slider.setValue(value);
     }
 
     // @onChange(value) on every move: for a setting that follows the handle live.
@@ -100,11 +82,12 @@ class SliderRow {
 
     // @onCommit(value) once per user change: for a setting that is slow to apply.
     onRelease(scrollDelayMs, onCommit) {
-        this._releaseCommit = new ReleaseCommit.ReleaseCommit(this.slider, scrollDelayMs, onCommit);
+        this._releaseCommit = new ReleaseCommit.ReleaseCommit(this.slider, this._drag, scrollDelayMs, onCommit);
     }
 
     destroy() {
         if (this._releaseCommit)
             this._releaseCommit.destroy();
+        this.actor.destroy();
     }
 }

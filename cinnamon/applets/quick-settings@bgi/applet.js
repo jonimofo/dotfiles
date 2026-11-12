@@ -10,6 +10,7 @@ const Constants = require('./constants');
 const PanelIcons = require('./panelIcons');
 const MenuContent = require('./menuContent');
 const WifiState = require('./wifiState');
+const NmClient = require('./nmClient');
 const DarkStyleState = require('./darkStyleState');
 const Brightness = require('./brightness');
 const DdcBrightness = require('./ddcBrightness');
@@ -57,6 +58,9 @@ class QuickSettingsApplet extends Applet.Applet {
             }
         });
 
+        // Wi-Fi and VPN share one NetworkManager client.
+        this._nmClient = new NmClient.SharedNmClient();
+        this._requestNmClient = (cancellable, onReady) => this._nmClient.request(cancellable, onReady);
         this._setUpWifi();
 
         this._darkStyleTile = this._content.tiles['dark-style'];
@@ -102,9 +106,10 @@ class QuickSettingsApplet extends Applet.Applet {
         this._doNotDisturb.destroy();
         this._keepAwake.destroy();
         this._battery.destroy();
-        this._content.destroy();
         this._wifi.destroy();
+        this._nmClient.destroy();
         this._darkStyle.destroy();
+        this._content.destroy();
         this.menu.destroy();
     }
 
@@ -126,7 +131,7 @@ class QuickSettingsApplet extends Applet.Applet {
 
     _setUpWifi() {
         const tile = this._content.tiles.wifi;
-        this._wifi = new WifiState.WifiState(() => this._syncWifi());
+        this._wifi = new WifiState.WifiState(() => this._syncWifi(), this._requestNmClient);
         tile.setOnToggle(() => this._wifi.toggle());
         this._registerList('wifi', tile, () => this._tileAnchor('wifi'),
             () => ListSpecs.wifiSpec(this._wifi.networks, {
@@ -142,6 +147,8 @@ class QuickSettingsApplet extends Applet.Applet {
         const tile = this._content.tiles.wifi;
         const enabled = this._wifi.enabled;
         const ssid = enabled ? this._wifi.activeSsid : null;
+        // With the hardware switch off, a click could not turn Wi-Fi on: the tile says so.
+        tile.setAvailable(!this._wifi.hardwareBlocked);
         tile.setChecked(enabled);
         tile.setIconName(enabled ? Constants.WIFI_ON_ICON : Constants.WIFI_OFF_ICON);
         tile.setLabel(ssid || tile.defaultLabel);
@@ -174,7 +181,7 @@ class QuickSettingsApplet extends Applet.Applet {
 
     _setUpVpn() {
         const tile = this._content.tiles.vpn;
-        this._vpn = new VpnState.VpnState(() => this._syncVpn());
+        this._vpn = new VpnState.VpnState(() => this._syncVpn(), this._requestNmClient);
         tile.setOnToggle(() => this._vpn.toggle());
         this._registerList('vpn', tile, () => this._tileAnchor('vpn'),
             () => ListSpecs.vpnSpec(this._vpn.summary, {
@@ -204,13 +211,15 @@ class QuickSettingsApplet extends Applet.Applet {
                 connectTo: country => this._nordvpn.connectTo(country),
             }),
             () => this._nordvpn.loadCountries());
+        // The first status read comes from _applyLayout(), only when the tile shows.
         tile.setAvailable(false);
-        this._nordvpn.refresh();
     }
 
+    // While a connect or disconnect runs (about 10 s), the tile takes the unavailable look,
+    // label unchanged, and takes no click.
     _syncNordvpn() {
         const tile = this._content.tiles.nordvpn;
-        tile.setAvailable(this._nordvpn.available);
+        tile.setAvailable(this._nordvpn.available && !this._nordvpn.busy);
         tile.setChecked(this._nordvpn.status.connected);
         tile.setLabel(this._nordvpn.connectedCountry || tile.defaultLabel);
         this._syncVpnPanelIcon();
@@ -307,6 +316,8 @@ class QuickSettingsApplet extends Applet.Applet {
     // applied live on every change.
     _setUpLayoutSettings(uuid, instanceId) {
         this._layout = {};
+        this._brightnessShown = false;
+        this._nordvpnShown = false;
         this.settings = new Settings.AppletSettings(this._layout, uuid, instanceId);
         for (const key of Object.values(Constants.LAYOUT_KEYS))
             this.settings.bind(key, key, () => this._applyLayout());
@@ -330,10 +341,23 @@ class QuickSettingsApplet extends Applet.Applet {
         return this._visible(key).includes(id);
     }
 
+    // A hidden Brightness row runs no ddcutil and a hidden NordVPN tile no nordvpn call:
+    // each reads once when it shows (at start, or when the dialog shows it again).
     _applyLayout() {
-        this._content.applyLayout(this._visible(Constants.LAYOUT_KEYS.sliders), this._visible(Constants.LAYOUT_KEYS.tiles));
+        const sliders = this._visible(Constants.LAYOUT_KEYS.sliders);
+        const tiles = this._visible(Constants.LAYOUT_KEYS.tiles);
+        this._content.applyLayout(sliders, tiles);
         this._content.header.applyLayout(this._visible(Constants.LAYOUT_KEYS.header));
         this._panelIcons.applyLayout(this._visible(Constants.LAYOUT_KEYS.panelIcons));
+
+        const brightnessShown = sliders.includes('monitors');
+        if (brightnessShown && !this._brightnessShown)
+            this._brightness.detect();
+        this._brightnessShown = brightnessShown;
+        const nordvpnShown = tiles.includes('nordvpn');
+        if (nordvpnShown && !this._nordvpnShown)
+            this._nordvpn.refresh();
+        this._nordvpnShown = nordvpnShown;
     }
 
     _closeThen(action) {
@@ -371,8 +395,11 @@ class QuickSettingsApplet extends Applet.Applet {
             onAvailable: available => row.setAvailable(available),
         });
         row.onRelease(Constants.BRIGHTNESS_SCROLL_COMMIT_MS, value => this._brightness.set(value));
-        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => this._brightness.detectSoon());
-        this._brightness.detect();
+        // The first detection comes from _applyLayout(), only when the row shows.
+        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => {
+            if (this._isShown(Constants.LAYOUT_KEYS.sliders, 'monitors'))
+                this._brightness.detectSoon();
+        });
     }
 
     // Volumes follow the handle live, like the stock sound applet.

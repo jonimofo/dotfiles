@@ -94,6 +94,10 @@
     background-color: rgba(255, 255, 255, 0.1);
 }
 
+.quick-settings-tile:insensitive {
+    background-color: rgba(255, 255, 255, 0.063);
+}
+
 .quick-settings-tile:checked {
     background-color: rgba(120, 174, 237, 0.6);
 }

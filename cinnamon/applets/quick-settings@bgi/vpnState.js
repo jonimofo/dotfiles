@@ -1,20 +1,24 @@
 const Gio = imports.gi.Gio;
 const GObject = imports.gi.GObject;
 const NM = imports.gi.NM;
-const Constants = require('./constants');
 const VpnModel = require('./vpnModel');
+const AsyncHelpers = require('./asyncHelpers');
 
 // The VPN profiles of NetworkManager and which one is up. @onChange runs on every change:
 // profile added or removed, connection going up or down, here or anywhere else.
+// @requestClient(cancellable, onReady): the applet's shared client (SharedNmClient.request),
+// or a fake in the tests.
 class VpnState {
-    constructor(onChange) {
+    constructor(onChange, requestClient) {
         this._onChange = onChange;
         this._client = null;
         this._clientSignalIds = [];
         this._activeSignals = new Map();
+        // Profiles with an activation or deactivation on its way: a second click waits.
+        this._inFlight = new Set();
         this._cancellable = new Gio.Cancellable();
         this.summary = VpnModel.summarize([], []);
-        NM.Client.new_async(this._cancellable, (source, result) => this._onClientReady(result));
+        requestClient(this._cancellable, (client, error) => this._onClientReady(client, error));
     }
 
     // Brings the target profile down when it is up, up otherwise.
@@ -25,17 +29,21 @@ class VpnState {
     }
 
     toggleProfile(profile) {
+        if (!this._client || this._inFlight.has(profile.uuid))
+            return;
         const activeConnection = this._activeConnectionOf(profile.uuid);
         if (activeConnection) {
+            this._inFlight.add(profile.uuid);
             this._client.deactivate_connection_async(activeConnection, this._cancellable,
-                (client, result) => this._finish(() => client.deactivate_connection_finish(result), `disconnecting VPN ${profile.id}`));
+                (client, result) => this._finish(profile, () => client.deactivate_connection_finish(result), `disconnecting VPN ${profile.id}`));
             return;
         }
         const connection = this._client.get_connection_by_uuid(profile.uuid);
         if (!connection)
             return;
+        this._inFlight.add(profile.uuid);
         this._client.activate_connection_async(connection, null, null, this._cancellable,
-            (client, result) => this._finish(() => client.activate_connection_finish(result), `connecting VPN ${profile.id}`));
+            (client, result) => this._finish(profile, () => client.activate_connection_finish(result), `connecting VPN ${profile.id}`));
     }
 
     destroy() {
@@ -47,24 +55,23 @@ class VpnState {
         this._client = null;
     }
 
-    _finish(finishCall, what) {
+    _finish(profile, finishCall, what) {
+        this._inFlight.delete(profile.uuid);
         try {
             finishCall();
         } catch (e) {
-            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                global.logError(`${Constants.LOG_PREFIX}: ${what} failed`, e);
+            if (AsyncHelpers.logUnlessCancelled(e, what))
+                return;
         }
         this._update();
     }
 
-    _onClientReady(result) {
-        try {
-            this._client = NM.Client.new_finish(result);
-        } catch (e) {
-            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                global.logError(`${Constants.LOG_PREFIX}: connecting to NetworkManager failed`, e);
+    _onClientReady(client, error) {
+        if (error) {
+            AsyncHelpers.logUnlessCancelled(error, 'connecting to NetworkManager');
             return;
         }
+        this._client = client;
         for (const signal of ['connection-added', 'connection-removed', 'active-connection-added', 'active-connection-removed'])
             this._clientSignalIds.push(this._client.connect(signal, () => this._update()));
         this._update();

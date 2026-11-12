@@ -1,9 +1,7 @@
 const Clutter = imports.gi.Clutter;
 const St = imports.gi.St;
-const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
-
-const CHECKED_PSEUDO_CLASS = 'checked';
+const ExpandArrow = require('./expandArrow');
 
 // The background of a tile, as inline CSS: the stylesheet only holds the fallback, the
 // real colours come from the theme (see ThemeColors).
@@ -14,7 +12,8 @@ function backgroundStyle(color) {
 }
 
 // A pill-shaped toggle: icon and label on the left, an arrow on the right when the tile
-// opens an in-place list. A tile does nothing until setOnToggle() gives it an action.
+// opens an in-place list. A tile does nothing until setOnToggle() gives it an action. An
+// inactive or unavailable tile has its icon and background dimmed; the label stays readable.
 class Tile {
     constructor(definition) {
         this._checked = false;
@@ -45,19 +44,14 @@ class Tile {
         this.actor.add_child(this._toggle);
 
         this._arrow = null;
-        this._arrowIcon = null;
         if (definition.hasMenu) {
-            this._arrowIcon = UiHelpers.symbolicIcon(Constants.SUBMENU_ICON, 'quick-settings-tile-icon');
-            this._arrow = new St.Button({
-                child: this._arrowIcon,
-                style_class: 'quick-settings-tile-arrow',
-            });
-            this.actor.add_child(this._arrow);
+            this._arrow = new ExpandArrow.ExpandArrow('quick-settings-tile-arrow', 'quick-settings-tile-icon');
+            this.actor.add_child(this._arrow.actor);
         }
 
         this._hasToggle = false;
-        this._hasArrowAction = false;
         this._available = true;
+        this._dimmed = false;
         this._sync();
     }
 
@@ -68,8 +62,7 @@ class Tile {
     }
 
     setOnArrow(onArrow) {
-        this._hasArrowAction = true;
-        this._arrow.connect('clicked', () => onArrow());
+        this._arrow.setOnClick(onArrow);
         this._sync();
     }
 
@@ -85,30 +78,27 @@ class Tile {
 
     // The arrow points down while the tile's list is open.
     setExpanded(expanded) {
-        if (this._arrowIcon)
-            this._arrowIcon.icon_name = expanded ? Constants.LIST_EXPANDED_ICON : Constants.SUBMENU_ICON;
+        if (this._arrow)
+            this._arrow.setExpanded(expanded);
     }
 
-    // A part without an action stays visibly inactive: the whole tile when the toggle has
-    // none, only the arrow when the list is not wired.
+    // A part without an action stays visibly inactive: the icon and background when the
+    // toggle has none, the arrow when the list is not wired.
     _sync() {
         const toggleWorks = this._available && this._hasToggle;
         UiHelpers.setButtonInactive(this._toggle, !toggleWorks);
-        UiHelpers.setDimmed(this.actor, !toggleWorks);
-        if (!this._arrow)
-            return;
-        const arrowWorks = this._available && this._hasArrowAction;
-        UiHelpers.setButtonInactive(this._arrow, !arrowWorks);
-        UiHelpers.setDimmed(this._arrow, toggleWorks && !arrowWorks);
+        UiHelpers.setDimmed(this._icon, !toggleWorks);
+        UiHelpers.setPseudoClass(this.actor, UiHelpers.INSENSITIVE_PSEUDO_CLASS, !toggleWorks);
+        this._dimmed = !toggleWorks;
+        this._applyColors();
+        if (this._arrow)
+            this._arrow.sync(this._available);
     }
 
     setChecked(checked) {
         this._checked = checked;
         this._toggle.checked = checked;
-        if (checked)
-            this.actor.add_style_pseudo_class(CHECKED_PSEUDO_CLASS);
-        else
-            this.actor.remove_style_pseudo_class(CHECKED_PSEUDO_CLASS);
+        UiHelpers.setPseudoClass(this.actor, UiHelpers.CHECKED_PSEUDO_CLASS, checked);
         this._applyColors();
     }
 
@@ -116,10 +106,14 @@ class Tile {
         this._icon.icon_name = iconName;
     }
 
-    // @colors: { tile, checked } as CSS colours, or null to use the stylesheet's.
+    // @colors: from ThemeColors.readTileColors(), or null to use the stylesheet's.
     setColors(colors) {
         this._colors = colors;
         this._applyColors();
+    }
+
+    destroy() {
+        this.actor.destroy();
     }
 
     _applyColors() {
@@ -127,6 +121,7 @@ class Tile {
             this.actor.set_style(null);
             return;
         }
-        this.actor.set_style(backgroundStyle(this._checked ? this._colors.checked : this._colors.tile));
+        const pair = this._dimmed ? this._colors.dimmed : this._colors.normal;
+        this.actor.set_style(backgroundStyle(this._checked ? pair.checked : pair.tile));
     }
 }

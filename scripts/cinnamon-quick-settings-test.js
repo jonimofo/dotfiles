@@ -211,7 +211,8 @@ async function testReleaseCommit() {
     const ReleaseCommit = load('./releaseCommit');
     const slider = new FakeSlider();
     const commits = [];
-    const commit = new ReleaseCommit.ReleaseCommit(slider, SCROLL_DELAY_MS, value => commits.push(value));
+    const drag = new ReleaseCommit.DragTracker(slider);
+    const commit = new ReleaseCommit.ReleaseCommit(slider, drag, SCROLL_DELAY_MS, value => commits.push(value));
 
     slider.emit('drag-begin');
     slider.move(0.2);
@@ -226,8 +227,9 @@ async function testReleaseCommit() {
     slider.move(0.65);
     slider.move(0.7);
     check('release: a scroll sends nothing at once', commits.length === 0);
+    check('release: a scrolled value waits as pending, so a value read meanwhile is not shown', commit.pending);
     await wait(SCROLL_DELAY_MS * 3);
-    check('release: a scroll sends its last value once it stops', `${commits}` === '0.7');
+    check('release: a scroll sends its last value once it stops', `${commits}` === '0.7' && !commit.pending);
 
     commits.length = 0;
     slider.move(0.8);

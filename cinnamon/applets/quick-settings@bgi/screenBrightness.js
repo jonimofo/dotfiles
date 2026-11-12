@@ -5,7 +5,6 @@ const Constants = require('./constants');
 // it: never through sysfs directly.
 class ScreenBrightness {
     constructor() {
-        this._proxy = null;
         this._proxyPromise = null;
     }
 
@@ -35,14 +34,18 @@ class ScreenBrightness {
         });
     }
 
+    // A failed connection is not kept: the next read tries again, so a settings daemon
+    // that starts late is still found.
     _getProxy() {
         if (!this._proxyPromise) {
             this._proxyPromise = new Promise((resolve, reject) => {
                 Interfaces.getDBusProxyAsync(Constants.SCREEN_BRIGHTNESS_PROXY, (proxy, error) => {
-                    if (error)
+                    if (error) {
+                        this._proxyPromise = null;
                         reject(error);
-                    else
+                    } else {
                         resolve(proxy);
+                    }
                 });
             });
         }

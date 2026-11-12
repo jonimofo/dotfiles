@@ -1,20 +1,40 @@
 const GLib = imports.gi.GLib;
 
-// Calls @onCommit(value) once per user change of @slider (an imports.ui.slider.Slider), not on
-// every motion: at the end of a drag or click, after an arrow key, or @scrollDelayMs after
-// the last wheel step (a scroll has no release).
+// Whether the user is dragging @slider's handle (an imports.ui.slider.Slider). One per
+// slider, shared by the row and its ReleaseCommit.
+class DragTracker {
+    constructor(slider) {
+        this.dragging = false;
+        slider.connect('drag-begin', () => {
+            this.dragging = true;
+        });
+        slider.connect('drag-end', () => {
+            this.dragging = false;
+        });
+    }
+}
+
+// Calls @onCommit(value) once per user change of @slider, not on every motion: at the end
+// of a drag or click, after an arrow key, or @scrollDelayMs after the last wheel step (a
+// scroll has no release). @drag: the slider's DragTracker, connected before this.
 class ReleaseCommit {
-    constructor(slider, scrollDelayMs, onCommit) {
+    constructor(slider, drag, scrollDelayMs, onCommit) {
         this._slider = slider;
+        this._drag = drag;
         this._scrollDelayMs = scrollDelayMs;
         this._onCommit = onCommit;
         this._timeoutId = 0;
-        this.dragging = false;
         this._signalIds = [
-            slider.connect('drag-begin', () => this._onDragBegin()),
+            slider.connect('drag-begin', () => this._cancelTimeout()),
             slider.connect('drag-end', () => this._commitNow()),
             slider.connect('value-changed', () => this._onValueChanged()),
         ];
+    }
+
+    // True while a scrolled value waits to be sent: a value read meanwhile must not
+    // replace it on the slider.
+    get pending() {
+        return this._timeoutId !== 0;
     }
 
     destroy() {
@@ -24,13 +44,8 @@ class ReleaseCommit {
         this._signalIds = [];
     }
 
-    _onDragBegin() {
-        this._cancelTimeout();
-        this.dragging = true;
-    }
-
     _onValueChanged() {
-        if (this.dragging)
+        if (this._drag.dragging)
             return;
         this._cancelTimeout();
         this._timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._scrollDelayMs, () => {
@@ -42,7 +57,6 @@ class ReleaseCommit {
 
     _commitNow() {
         this._cancelTimeout();
-        this.dragging = false;
         this._onCommit(this._slider.value);
     }
 

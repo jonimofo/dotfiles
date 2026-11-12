@@ -28,6 +28,9 @@
 # Tests: scripts/nemo_dropdown_toggle-test.sh
 
 set -euo pipefail
+# set -e does not apply inside $(...): a function whose output is captured
+# only reads and dies on failure, and every call that changes a window runs in
+# the caller's shell with an explicit check.
 
 readonly WIDTH_PERCENT=80
 readonly HEIGHT_PERCENT=80
@@ -220,13 +223,17 @@ wait_while() {
 pointer_monitor_geometry() {
     local location pointer_x pointer_y monitors line first=""
     local width height x y
-    location=$(xdotool getmouselocation --shell)
+    if ! location=$(xdotool getmouselocation --shell); then
+        die "could not read the pointer location with xdotool"
+    fi
     pointer_x=$(sed -n 's/^X=//p' <<<"$location")
     pointer_y=$(sed -n 's/^Y=//p' <<<"$location")
     if [[ ! $pointer_x =~ ^-?[0-9]+$ || ! $pointer_y =~ ^-?[0-9]+$ ]]; then
         die "unexpected pointer location from 'xdotool getmouselocation': $location"
     fi
-    monitors=$(xrandr --listmonitors)
+    if ! monitors=$(xrandr --listmonitors); then
+        die "could not list the monitors with xrandr"
+    fi
     while read -r line; do
         if [[ ! $line =~ ([0-9]+)/[0-9]+x([0-9]+)/[0-9]+\+(-?[0-9]+)\+(-?[0-9]+) ]]; then
             continue
@@ -260,16 +267,51 @@ frame_extents() {
     echo "0 0 0 0"
 }
 
-# Prints "width height" of the window's frame, title bar and borders included.
-frame_size() {
-    local wid=$1 info client_width client_height left right top bottom extents
-    info=$(xwininfo -id "$wid")
-    if [[ ! $info =~ Width:\ ([0-9]+).*Height:\ ([0-9]+) ]]; then
+# Right after a map the WM may not have set the frame extents yet; without
+# them the frame is taken as the client area alone.
+wait_for_frame_extents() {
+    local wid=$1
+    if ! wait_until property_matches "$wid" _NET_FRAME_EXTENTS "*=*"; then
+        echo "$SCRIPT_NAME: window $wid has no frame extents, assuming no frame" >&2
+    fi
+}
+
+# Prints "width height" of the window's client area. xwininfo's header line
+# holds the window title, so only whole lines count and the last match wins:
+# the real Width and Height lines come after the header.
+client_size() {
+    local wid=$1 info line width="" height=""
+    if ! info=$(xwininfo -id "$wid"); then
+        die "could not run xwininfo on window $wid"
+    fi
+    while read -r line; do
+        if [[ $line =~ ^Width:\ ([0-9]+)$ ]]; then
+            width=${BASH_REMATCH[1]}
+        fi
+        if [[ $line =~ ^Height:\ ([0-9]+)$ ]]; then
+            height=${BASH_REMATCH[1]}
+        fi
+    done <<<"$info"
+    if [[ -z $width || -z $height ]]; then
         die "could not read the size of window $wid from xwininfo"
     fi
-    client_width=${BASH_REMATCH[1]}
-    client_height=${BASH_REMATCH[2]}
+    echo "$width $height"
+}
+
+client_size_is() {
+    local wid=$1 expected=$2 current
+    current=$(client_size "$wid")
+    [[ $current == "$expected" ]]
+}
+
+# Prints "width height" of the window's frame, title bar and borders included.
+frame_size() {
+    local wid=$1 client client_width client_height extents left right top bottom
+    if ! client=$(client_size "$wid"); then
+        return 1
+    fi
     extents=$(frame_extents "$wid")
+    read -r client_width client_height <<<"$client"
     read -r left right top bottom <<<"$extents"
     echo "$((client_width + left + right)) $((client_height + top + bottom))"
 }
@@ -285,32 +327,36 @@ centered_offset() {
     echo $(((available - size) / 2))
 }
 
-# Centers a frame of $2 x $3 on the monitor under the pointer. The size is
-# passed in: right after a resize the window still reports its old size.
-center_on_pointer_monitor() {
-    local wid=$1 frame_width=$2 frame_height=$3
-    local monitor monitor_width monitor_height monitor_x monitor_y offset_x offset_y
-    monitor=$(pointer_monitor_geometry)
+# The percentages apply to the frame, so the title bar counts in the height.
+default_frame_size() {
+    local monitor_width=$1 monitor_height=$2
+    echo "$((monitor_width * WIDTH_PERCENT / 100)) $((monitor_height * HEIGHT_PERCENT / 100))"
+}
+
+resize_frame() {
+    local wid=$1 frame_width=$2 frame_height=$3 extents left right top bottom
+    extents=$(frame_extents "$wid")
+    read -r left right top bottom <<<"$extents"
+    if ! xdotool windowsize "$wid" $((frame_width - left - right)) $((frame_height - top - bottom)); then
+        die "could not resize window $wid"
+    fi
+}
+
+# center_and_activate <wid> <"width height x y" of the monitor> <frame width> <frame height>
+# The frame size is passed in: right after a resize the window still reports
+# its old size.
+center_and_activate() {
+    local wid=$1 monitor=$2 frame_width=$3 frame_height=$4
+    local monitor_width monitor_height monitor_x monitor_y offset_x offset_y
     read -r monitor_width monitor_height monitor_x monitor_y <<<"$monitor"
     offset_x=$(centered_offset "$frame_width" "$monitor_width")
     offset_y=$(centered_offset "$frame_height" "$monitor_height")
-    xdotool windowmove "$wid" $((monitor_x + offset_x)) $((monitor_y + offset_y))
-}
-
-# The percentages apply to the frame, so the title bar counts in the height.
-# Prints the "width height" of the frame it asked for.
-resize_to_default_size() {
-    local wid=$1
-    local monitor monitor_width monitor_height monitor_x monitor_y
-    local extents left right top bottom frame_width frame_height
-    monitor=$(pointer_monitor_geometry)
-    extents=$(frame_extents "$wid")
-    read -r monitor_width monitor_height monitor_x monitor_y <<<"$monitor"
-    read -r left right top bottom <<<"$extents"
-    frame_width=$((monitor_width * WIDTH_PERCENT / 100))
-    frame_height=$((monitor_height * HEIGHT_PERCENT / 100))
-    xdotool windowsize "$wid" $((frame_width - left - right)) $((frame_height - top - bottom))
-    echo "$frame_width $frame_height"
+    if ! xdotool windowmove "$wid" $((monitor_x + offset_x)) $((monitor_y + offset_y)); then
+        die "could not move window $wid"
+    fi
+    if ! xdotool windowactivate "$wid"; then
+        die "could not activate window $wid"
+    fi
 }
 
 # GTK maximizes the window again each time it is mapped, and the WM ignores
@@ -336,18 +382,19 @@ EOF
 }
 
 # A maximized window cannot be moved or resized, so it is unmaximized first.
+# The WM may drop the maximized state before the size changes; a restored
+# size equal to the maximized one never changes, so that wait is not fatal.
 bring_to_current_desktop() {
-    local wid=$1
+    local wid=$1 maximized_size
     xdotool set_desktop_for_window "$wid" "$(xdotool get_desktop)"
-    if has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
-        unmaximize_window "$wid"
+    if ! has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
+        return 0
     fi
-}
-
-center_and_activate() {
-    local wid=$1 frame_width=$2 frame_height=$3
-    center_on_pointer_monitor "$wid" "$frame_width" "$frame_height"
-    xdotool windowactivate "$wid"
+    maximized_size=$(client_size "$wid")
+    unmaximize_window "$wid"
+    if ! wait_while client_size_is "$wid" "$maximized_size"; then
+        return 0
+    fi
 }
 
 hide_dropdown() {
@@ -357,7 +404,7 @@ hide_dropdown() {
 # A window that is minimized or on another workspace is withdrawn first, so
 # it is shown again through the same path as a hidden one.
 show_dropdown() {
-    local wid=$1 size frame_width frame_height
+    local wid=$1 monitor size frame_width frame_height
     if is_managed "$wid"; then
         xdotool windowunmap "$wid"
         if ! wait_while is_managed "$wid"; then
@@ -369,9 +416,11 @@ show_dropdown() {
         die "window $wid is not managed ${TIMEOUT_SECONDS}s after mapping it"
     fi
     bring_to_current_desktop "$wid"
+    wait_for_frame_extents "$wid"
+    monitor=$(pointer_monitor_geometry)
     size=$(frame_size "$wid")
     read -r frame_width frame_height <<<"$size"
-    center_and_activate "$wid" "$frame_width" "$frame_height"
+    center_and_activate "$wid" "$monitor" "$frame_width" "$frame_height"
 }
 
 # Prints the id of a normal, viewable Nemo window managed now but absent from $1.
@@ -393,7 +442,7 @@ find_new_nemo_window() {
 }
 
 create_dropdown() {
-    local known_ids wid size frame_width frame_height
+    local known_ids wid monitor monitor_width monitor_height size frame_width frame_height
     known_ids=$(managed_window_ids)
     # The launched nemo can become the long-lived Nemo process: it must not
     # inherit the lock, or every later press would be skipped.
@@ -404,9 +453,13 @@ create_dropdown() {
     mark_dropdown_window "$wid"
     echo "$wid" >"$WID_FILE"
     bring_to_current_desktop "$wid"
-    size=$(resize_to_default_size "$wid")
+    wait_for_frame_extents "$wid"
+    monitor=$(pointer_monitor_geometry)
+    read -r monitor_width monitor_height _ <<<"$monitor"
+    size=$(default_frame_size "$monitor_width" "$monitor_height")
     read -r frame_width frame_height <<<"$size"
-    center_and_activate "$wid" "$frame_width" "$frame_height"
+    resize_frame "$wid" "$frame_width" "$frame_height"
+    center_and_activate "$wid" "$monitor" "$frame_width" "$frame_height"
 }
 
 # The /tmp fallback is shared by all users: refuse a directory someone else

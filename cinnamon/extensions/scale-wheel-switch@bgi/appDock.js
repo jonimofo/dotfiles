@@ -14,6 +14,8 @@ const PINNED_APPS_KEY = 'pinned-apps';
 // It is reduced when the icons do not fit in the monitor's width.
 const ICON_SIZE_PROPERTY = '-scale-dock-icon-size';
 const RUNNING_DOT_STYLE_CLASS = 'scale-dock-dot-running';
+// The buttons a dock icon answers (see onIconClicked): side buttons do nothing.
+const CLICK_BUTTONS = [Clutter.BUTTON_PRIMARY, Clutter.BUTTON_MIDDLE, Clutter.BUTTON_SECONDARY];
 
 // The pinned apps of the first window list applet on the panels, in its order. An id that
 // no longer resolves (application removed) is left out.
@@ -36,28 +38,35 @@ function getAppWindows(app) {
         .sort((a, b) => b.get_user_time() - a.get_user_time());
 }
 
-function isRunning(app) {
-    return getAppWindows(app).length > 0;
-}
-
-// Sequence number of the app's oldest window: muffin numbers windows in creation order, so
+// Sequence number of the oldest of @windows: muffin numbers windows in creation order, so
 // sorting on it keeps the apps in the order they opened, whatever gets the focus.
-function getOldestWindowSequence(app) {
-    return Math.min(...getAppWindows(app).map(metaWindow => metaWindow.get_stable_sequence()));
+function getOldestWindowSequence(windows) {
+    return Math.min(...windows.map(metaWindow => metaWindow.get_stable_sequence()));
 }
 
-// Running apps that are not pinned, in the order they opened. Window-backed apps (a window
-// with no .desktop file) are left out: they cannot open a new window.
-function getOtherRunningApps(pinnedApps) {
-    return Cinnamon.AppSystem.get_default().get_running()
-        .filter(app => !pinnedApps.includes(app) && !app.is_window_backed() && isRunning(app))
-        .sort((a, b) => getOldestWindowSequence(a) - getOldestWindowSequence(b));
+// app -> sequence number of its oldest window, for the apps of @apps that are running.
+function mapOldestWindowSequences(apps) {
+    const sequences = new Map();
+    for (const app of apps) {
+        const windows = getAppWindows(app);
+        if (windows.length > 0)
+            sequences.set(app, getOldestWindowSequence(windows));
+    }
+    return sequences;
 }
 
-// The apps the dock shows: the panel's pinned apps, then the other running ones.
+// The apps the dock shows: the panel's pinned apps, then the other running ones in the
+// order they opened, and which of them are running. Window-backed apps (a window with no
+// .desktop file) are left out: they cannot open a new window.
 function getDockApps() {
     const pinned = getPinnedApps();
-    return { pinned, others: getOtherRunningApps(pinned) };
+    const candidates = Cinnamon.AppSystem.get_default().get_running()
+        .filter(app => !pinned.includes(app) && !app.is_window_backed());
+    const sequences = mapOldestWindowSequences([...pinned, ...candidates]);
+    const others = candidates
+        .filter(app => sequences.has(app))
+        .sort((a, b) => sequences.get(a) - sequences.get(b));
+    return { pinned, others, running: new Set(sequences.keys()) };
 }
 
 function countDockApps({ pinned, others }) {
@@ -74,8 +83,8 @@ function activateWindow(metaWindow) {
     Main.activateWindow(metaWindow, time);
 }
 
-// GNOME dash behaviour: a middle click always opens a new window, any other click goes to
-// the app's most recent window, or launches the app when it has none.
+// GNOME dash behaviour: a middle click always opens a new window, a left or right click
+// goes to the app's most recent window, or launches the app when it has none.
 function onIconClicked(app, button) {
     if (button === Clutter.BUTTON_MIDDLE) {
         UiHelpers.openNewWindow(app);
@@ -92,8 +101,8 @@ function onIconClicked(app, button) {
 
 // Dock of application icons, centered at the bottom of the primary monitor while Scale is
 // open. The full-width band around it swallows clicks, like the strip. The icons follow
-// apps opening their first window and closing their last one; the dock keeps the height it
-// had at opening, so Scale's windows never move.
+// apps starting and stopping; the dock keeps the height it had at opening, so Scale's
+// windows never move.
 var AppDock = class AppDock {
     constructor(dockApps) {
         this._monitor = Main.layoutManager.primaryMonitor;
@@ -113,7 +122,7 @@ var AppDock = class AppDock {
         Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
 
         // Measured at the full icon size: a reduced size later never changes the height.
-        this._defaultIconSize = Math.round(this._box.get_theme_node().get_length(ICON_SIZE_PROPERTY));
+        this._defaultIconSize = UiHelpers.getIconSize(this._box, ICON_SIZE_PROPERTY);
         this._buildIcons(dockApps, this._defaultIconSize);
         this._height = UiHelpers.getNaturalHeight(this.actor);
         this.actor.set_height(this._height);
@@ -142,35 +151,35 @@ var AppDock = class AppDock {
     }
 
     // Built at the full size first; when that is wider than the monitor, built again at the
-    // size that fits. Only the icons shrink, what the stylesheet adds around them does not.
+    // size that fits. Measured in icon size units: icons are that size times the display scale.
     _fitIcons(dockApps) {
-        const count = countDockApps(dockApps);
-        const naturalWidth = UiHelpers.getNaturalWidth(this._box);
-        if (count === 0 || naturalWidth <= this._monitor.width)
-            return;
-
-        const fixedWidth = naturalWidth - count * this._defaultIconSize;
-        const fittingSize = Math.max(1, Math.floor((this._monitor.width - fixedWidth) / count));
-        this._buildIcons(dockApps, fittingSize);
+        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const fittingSize = UiHelpers.getFittingItemWidth(
+            UiHelpers.getNaturalWidth(this._box) / scaleFactor,
+            this._monitor.width / scaleFactor,
+            countDockApps(dockApps),
+            this._defaultIconSize);
+        if (fittingSize !== null)
+            this._buildIcons(dockApps, fittingSize);
     }
 
     // Call once the dock is on the stage. The separator only splits two non-empty parts.
-    _buildIcons({ pinned, others }, iconSize) {
+    _buildIcons({ pinned, others, running }, iconSize) {
         this._box.destroy_all_children();
         for (const app of pinned)
-            this._box.add_actor(this._createIcon(app, iconSize));
+            this._box.add_actor(this._createIcon(app, iconSize, running.has(app)));
         if (pinned.length > 0 && others.length > 0)
             this._box.add_actor(new St.Widget({ style_class: 'scale-dock-separator' }));
         for (const app of others)
-            this._box.add_actor(this._createIcon(app, iconSize));
+            this._box.add_actor(this._createIcon(app, iconSize, true));
         this._box.visible = pinned.length + others.length > 0;
     }
 
     // The dot is always there, transparent when the app is not running, so icons never
     // shift when an app starts or stops.
-    _createIcon(app, iconSize) {
+    _createIcon(app, iconSize, isRunning) {
         const dot = new St.Widget({ style_class: 'scale-dock-dot', x_align: Clutter.ActorAlign.CENTER });
-        if (isRunning(app))
+        if (isRunning)
             dot.add_style_class_name(RUNNING_DOT_STYLE_CLASS);
 
         const icon = new St.BoxLayout({
@@ -183,9 +192,7 @@ var AppDock = class AppDock {
         icon.add_actor(dot);
         // Destroyed with the icon.
         new Tooltips.Tooltip(icon, app.get_name());
-        // Connected before swallowClicks, whose handlers stop the event.
-        icon.connect('button-release-event', (actor, event) => onIconClicked(app, event.get_button()));
-        UiHelpers.swallowClicks(icon);
+        UiHelpers.connectClick(icon, CLICK_BUTTONS, button => onIconClicked(app, button));
         return icon;
     }
 

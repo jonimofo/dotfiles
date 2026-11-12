@@ -1,16 +1,43 @@
 const Clutter = imports.gi.Clutter;
+const St = imports.gi.St;
 const Main = imports.ui.main;
 const Workspace = imports.ui.workspace;
 
 const OPAQUE = 255;
 const TRANSPARENT = 0;
 const SELECTED_PSEUDO_CLASS = 'selected';
+// Smallest width, in pixels, an item shrunk to fit a row keeps.
+const MIN_FITTING_ITEM_WIDTH = 1;
+// Clutter numbers mouse buttons from 1.
+const NO_BUTTON = 0;
 
 // A click that reaches Scale's background starts its swipe, and closes Scale when the
 // workspace is empty: the extension's own surfaces keep their clicks.
 function swallowClicks(actor) {
     actor.connect('button-press-event', () => Clutter.EVENT_STOP);
     actor.connect('button-release-event', () => Clutter.EVENT_STOP);
+}
+
+// A click on @actor: press and release of one of @buttons, both on @actor. @onClick gets
+// the button. Every click on @actor is swallowed, as with swallowClicks.
+function connectClick(actor, buttons, onClick) {
+    let pressedButton = NO_BUTTON;
+    actor.connect('button-press-event', (source, event) => {
+        const button = event.get_button();
+        pressedButton = buttons.includes(button) ? button : NO_BUTTON;
+        return Clutter.EVENT_STOP;
+    });
+    actor.connect('button-release-event', (source, event) => {
+        const isClick = event.get_button() === pressedButton;
+        pressedButton = NO_BUTTON;
+        if (isClick)
+            onClick(event.get_button());
+        return Clutter.EVENT_STOP;
+    });
+    actor.connect('leave-event', () => {
+        pressedButton = NO_BUTTON;
+        return Clutter.EVENT_PROPAGATE;
+    });
 }
 
 // A constructor that puts @object's actors on screen calls this for that part: when it
@@ -33,6 +60,24 @@ function getNaturalHeight(actor) {
 function getNaturalWidth(actor) {
     const [, naturalWidth] = actor.get_preferred_width(-1);
     return Math.round(naturalWidth);
+}
+
+// A row of @count items that shrink, whose @naturalWidth has each item at @itemWidth:
+// the width each item can have so the row fits in @availableWidth, or null when it fits
+// already. Only the items shrink, what the stylesheet adds around them does not.
+function getFittingItemWidth(naturalWidth, availableWidth, count, itemWidth) {
+    if (count === 0 || naturalWidth <= availableWidth)
+        return null;
+
+    const fixedWidth = naturalWidth - count * itemWidth;
+    return Math.max(MIN_FITTING_ITEM_WIDTH, Math.floor((availableWidth - fixedWidth) / count));
+}
+
+// An icon size read from the stylesheet, for create_icon_texture. St gives lengths already
+// multiplied by the display scale, and icons multiply their size by it again.
+function getIconSize(widget, property) {
+    const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+    return Math.round(widget.get_theme_node().get_length(property) / scaleFactor);
 }
 
 // Only Scale's window clones made draggable by windowDrag.js: drop targets and drag

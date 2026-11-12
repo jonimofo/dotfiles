@@ -60,6 +60,7 @@
     padding: 32px;
     spacing: 16px;
     background-color: rgba(0, 0, 0, 0.6);
+    -scale-search-icon-size: 64px;
 }
 
 .scale-search-row {

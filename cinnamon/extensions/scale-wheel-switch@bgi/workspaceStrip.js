@@ -110,25 +110,7 @@ class WorkspaceThumbnail {
             () => this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS),
             () => this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS));
         this.actor.connect('destroy', () => this._dropHover.leave());
-        this._pressed = false;
-        this.actor.connect('button-press-event', this._onButtonPress.bind(this));
-        this.actor.connect('button-release-event', this._onButtonRelease.bind(this));
-        this.actor.connect('leave-event', () => { this._pressed = false; });
-    }
-
-    // Stopped here on purpose: a press that reaches Scale's background starts its swipe,
-    // and a click there closes Scale when the workspace is empty.
-    _onButtonPress(actor, event) {
-        this._pressed = event.get_button() === Clutter.BUTTON_PRIMARY;
-        return Clutter.EVENT_STOP;
-    }
-
-    _onButtonRelease(actor, event) {
-        const isClick = this._pressed && event.get_button() === Clutter.BUTTON_PRIMARY;
-        this._pressed = false;
-        if (isClick)
-            this._activateWorkspace();
-        return Clutter.EVENT_STOP;
+        UiHelpers.connectClick(this.actor, [Clutter.BUTTON_PRIMARY], () => this._activateWorkspace());
     }
 
     _activateWorkspace() {
@@ -336,17 +318,13 @@ var WorkspaceStrip = class WorkspaceStrip {
         }
     }
 
-    // The strip's natural width is its thumbnails plus what the stylesheet adds (padding,
-    // spacing, borders): only the thumbnails can shrink.
     _getFittingScale() {
-        const count = this._thumbnails.length;
-        const naturalWidth = UiHelpers.getNaturalWidth(this.actor);
-        if (count === 0 || naturalWidth <= this._monitor.width)
-            return this.thumbnailScale;
-
-        const thumbnailsWidth = count * Math.round(this._monitor.width * this.thumbnailScale);
-        const fixedWidth = naturalWidth - thumbnailsWidth;
-        return Math.floor((this._monitor.width - fixedWidth) / count) / this._monitor.width;
+        const fittingWidth = UiHelpers.getFittingItemWidth(
+            UiHelpers.getNaturalWidth(this.actor),
+            this._monitor.width,
+            this._thumbnails.length,
+            Math.round(this._monitor.width * this.thumbnailScale));
+        return fittingWidth === null ? this.thumbnailScale : fittingWidth / this._monitor.width;
     }
 
     _buildThumbnailsAtScale() {

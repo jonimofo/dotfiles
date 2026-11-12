@@ -12,7 +12,8 @@ const SEARCH_PLACEHOLDER = "Type to search...";
 const MAX_RESULTS = 12;
 // Fewer columns are used when the monitor is too narrow for this many tiles.
 const MAX_RESULT_COLUMNS = 6;
-const RESULT_ICON_SIZE = 64;
+// Stylesheet property of the result grid: icon size of its tiles.
+const RESULT_ICON_SIZE_PROPERTY = '-scale-search-icon-size';
 // Unicode range of control characters, which a key can produce but are not text.
 const FIRST_PRINTABLE_CODE_POINT = 0x20;
 const DELETE_CODE_POINT = 0x7f;
@@ -187,9 +188,10 @@ var AppSearch = class AppSearch {
         this._results.destroy_all_children();
         this._tiles = [];
 
+        const iconSize = UiHelpers.getIconSize(this._results, RESULT_ICON_SIZE_PROPERTY);
         let row = null;
         this._apps.forEach((app, i) => {
-            const tile = this._createTile(app, i);
+            const tile = this._createTile(app, i, iconSize);
             this._tiles.push(tile);
             if (i === 0) {
                 row = this._addRow();
@@ -221,21 +223,16 @@ var AppSearch = class AppSearch {
         return Math.min(MAX_RESULT_COLUMNS, Math.max(1, fitting));
     }
 
-    _createTile(app, index) {
+    _createTile(app, index, iconSize) {
         const tile = new St.BoxLayout({
             style_class: 'scale-search-result',
             vertical: true,
             reactive: true,
             track_hover: true,
         });
-        tile.add_actor(new St.Bin({ child: app.create_icon_texture(RESULT_ICON_SIZE) }));
+        tile.add_actor(new St.Bin({ child: app.create_icon_texture(iconSize) }));
         tile.add_actor(new St.Label({ style_class: 'scale-search-result-label', text: app.get_name() }));
-        // Connected before swallowClicks, whose handlers stop the event.
-        tile.connect('button-release-event', (actor, event) => {
-            if (event.get_button() === Clutter.BUTTON_PRIMARY)
-                this._launch(index);
-        });
-        UiHelpers.swallowClicks(tile);
+        UiHelpers.connectClick(tile, [Clutter.BUTTON_PRIMARY], () => this._launch(index));
         return tile;
     }
 

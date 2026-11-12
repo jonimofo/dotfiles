@@ -273,7 +273,7 @@ or does nothing, and the reason goes to the journal once:
 | Tool | Used for | When absent |
 |---|---|---|
 | `ddcutil` | external monitor brightness | the laptop panel is used, through cinnamon-settings-daemon; with no laptop panel either, the Brightness row is dimmed |
-| `power-profiles-daemon` | Power profile tile and list | tile dimmed |
+| `power-profiles-daemon` | Power profile tile and list | tile dimmed until the daemon starts |
 | `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed |
 | `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
 | `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
@@ -289,23 +289,36 @@ manager come with the desktop.
   the previous value for about 1.3 s while it reads the monitor.
 - The laptop-panel brightness fallback is only tested with fakes: the DDC monitors were
   always connected.
+- The VPN tile may not connect: issue #33.
 - With the NordVPN tile hidden, its status is not read, so a NordVPN connection no longer
-  shows the VPN panel icon.
-- The hover and list tints are white overlays that suit dark themes.
+  shows the VPN panel icon. With the Brightness row hidden, ddcutil does not run at all.
+- While NordVPN connects or disconnects (about 10 s), its tile looks unavailable and takes
+  no click.
+- An unavailable tile or row keeps its label readable; only its icon and background dim.
+- The hover and list tints are white overlays that suit dark themes: issue #35.
 - A size changed in `stylesheet.css` shows after the next login.
 - NordVPN's own NetworkManager connection (interface `nordlynx`) is left out of the VPN
   tile; it was only checked while NordVPN was disconnected.
 
 ## Quick Settings: tests
 
+`scripts/check-all.sh` runs all of them, and the pre-push hook runs it (see
+`CONTRIBUTING.md`). One by one:
+
 ```bash
-scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema.json, module references
-scripts/cinnamon-applet-test.sh         # applet.sh, against a stub gsettings
-scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting changed
+scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema.json, module references, no libnm disconnect()
+scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
+scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
+scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 ```
 
-`cinnamon-quick-settings-test.sh` runs on the memory GSettings backend and fakes for ddcutil,
-nordvpn, BlueZ and NetworkManager writes, fed with output captured on this machine
-(`scripts/fixtures/`). It reads the real NetworkManager state without changing it.
+Prerequisites: `node` and `jq` for the check, `gjs` with the libnm and Cvc typelibs for the
+logic tests.
+
+`cinnamon-quick-settings-test.sh` runs on the memory GSettings backend and on fakes: fake
+NetworkManager objects (Wi-Fi, VPN), a fake system bus (BlueZ, power profiles), a fake
+session bus (Keep awake), fake Cvc streams, and fake ddcutil and nordvpn commands fed with
+output captured on this machine (`scripts/fixtures/`). It never talks to the real
+NetworkManager, BlueZ or session manager.
 
 Design record: [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md).

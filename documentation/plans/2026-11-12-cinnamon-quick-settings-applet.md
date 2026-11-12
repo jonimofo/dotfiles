@@ -82,7 +82,7 @@ Decisions:
   nothing shown the header line disappears.
 - Panel: a checkbox can hide an icon, never force one on; with no icon left, one fallback
   icon keeps the button on the panel.
-- A hidden Brightness row skips the ddcutil read when the menu opens; a hidden NordVPN tile
+- A hidden Brightness row runs no ddcutil at all (no detection, no read); a hidden NordVPN tile
   skips the `nordvpn status` call. The other backends keep running (event driven, shared).
 
 ## Slider rows reordered and renamed (after step 3)
@@ -193,6 +193,22 @@ Built differently from the first decisions:
   power applet), not `intel_backlight` directly, and only when no DDC monitor answers.
 - The '>' lists open in place in the menu (step 3 answer), not as separate submenus.
 
+## Audit fixes (2026-11-12)
+
+The diff audit (1 HIGH, 11 MEDIUM, 14 LOW) was fixed in this PR, except the white overlays
+(#35), the VPN connect bug (#33) and the VPN profile name in this file (kept by the owner).
+Changes to the facts above:
+
+- Wi-Fi and VPN share one NetworkManager client (`nmClient.js`).
+- No test talks to the real NetworkManager, BlueZ or session manager; the check script rejects
+  `.disconnect(` in any file that imports libnm.
+- An unavailable tile or row dims its icon and background only; the label stays readable. The
+  NordVPN tile looks unavailable while it connects or disconnects; the Wi-Fi tile while the
+  hardware switch is off.
+- Power profiles follow the daemon starting or stopping; the laptop brightness proxy is
+  retried after a failure.
+- `scripts/check-all.sh` runs every check and the pre-push hook runs it.
+
 ## Postponed
 
 | Item | Issue |
@@ -200,5 +216,5 @@ Built differently from the first decisions:
 | VPN tiles misbehave on connect | #33 |
 | Media controls (play, pause, next, previous) in the menu, to design with the user first | #34 |
 | Hover and list tints taken from the theme, for light themes | #35 |
-| Keep awake: automated tests, and the inhibit left behind by a reload during an `Inhibit` call | #36 |
+| Keep awake: automated tests, and the inhibit left behind by a reload during an `Inhibit` call | #36, fixed in this PR after the audit |
 | Brightness slider shows the old value for about 1.3 s on opening | #37 |

@@ -8,6 +8,7 @@ const MonitorDrop = require('./monitorDrop');
 const WindowClick = require('./windowClick');
 const SuperKey = require('./superKey');
 const AppSearch = require('./appSearch');
+const AppDock = require('./appDock');
 const UiHelpers = require('./uiHelpers');
 
 // One switch per slide animation, so a touchpad flick does not skip workspaces.
@@ -20,6 +21,7 @@ let overviewSignalIds = [];
 // One workspace strip per monitor while Scale is open.
 let strips = [];
 let search = null;
+let dock = null;
 let lastSwitchTime = 0;
 let smoothAccumulator = 0;
 
@@ -73,19 +75,23 @@ function onCapturedEvent(actor, event) {
     return Clutter.EVENT_STOP;
 }
 
-// Top of the primary monitor, in order: search field, workspace strip, then Scale's windows.
-// Top of every other monitor: its workspace strip, then Scale's windows.
-// Built from the monitor list at each opening: monitors may come and go while Scale is closed.
+// Primary monitor, top to bottom: search field, workspace strip, Scale's windows, dock.
+// Every other monitor: its workspace strip, then Scale's windows.
+// Built from the monitor list and the pinned apps at each opening: both may change while
+// Scale is closed.
 function showHeader() {
-    if (search || strips.length > 0)
+    if (search || dock || strips.length > 0)
         return;
 
     try {
         search = new AppSearch.AppSearch();
+        showDock();
         const primaryIndex = Main.layoutManager.primaryIndex;
         Main.layoutManager.monitors.forEach((monitor, index) => {
-            const topOffset = index === primaryIndex ? search.getHeight() : 0;
-            strips.push(new WorkspaceStrip.WorkspaceStrip(index, topOffset));
+            const isPrimary = index === primaryIndex;
+            const topOffset = isPrimary ? search.getHeight() : 0;
+            const bottomInset = isPrimary && dock ? dock.getHeight() : 0;
+            strips.push(new WorkspaceStrip.WorkspaceStrip(index, topOffset, bottomInset));
         });
         search.setResultsArea(strips[primaryIndex].getBigViewArea());
     } catch (e) {
@@ -94,11 +100,22 @@ function showHeader() {
     }
 }
 
+// No apps to show: no dock, and the windows keep the bottom of the monitor.
+function showDock() {
+    const apps = AppDock.getDockApps();
+    if (apps.length > 0)
+        dock = new AppDock.AppDock(apps);
+}
+
 // Each part is torn down on its own: some may exist without the others after a failure.
 function hideHeader() {
     if (search) {
         search.destroy();
         search = null;
+    }
+    if (dock) {
+        dock.destroy();
+        dock = null;
     }
     for (const strip of strips)
         strip.destroy();

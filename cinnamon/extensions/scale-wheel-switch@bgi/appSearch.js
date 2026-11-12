@@ -257,8 +257,7 @@ var AppSearch = class AppSearch {
         if (!app)
             return;
 
-        app.open_new_window(-1);
-        Main.overview.hide();
+        UiHelpers.openNewWindow(app);
     }
 
     // Returns true when the key was for the search; false leaves it to Scale.

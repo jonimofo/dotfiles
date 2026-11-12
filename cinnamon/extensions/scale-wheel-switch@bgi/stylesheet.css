@@ -74,7 +74,8 @@
     border: 2px solid transparent;
 }
 
-.scale-search-result:hover {
+.scale-search-result:hover,
+.scale-dock-icon:hover {
     background-color: rgba(255, 255, 255, 0.12);
 }
 
@@ -88,4 +89,22 @@
     font-weight: bold;
     color: #ffffff;
     text-align: center;
+}
+
+.scale-dock-bar {
+    padding-bottom: 12px;
+}
+
+.scale-dock {
+    padding: 8px;
+    spacing: 8px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background-color: rgba(0, 0, 0, 0.45);
+    -scale-dock-icon-size: 48px;
+}
+
+.scale-dock-icon {
+    padding: 6px;
+    border-radius: 8px;
 }

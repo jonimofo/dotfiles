@@ -4,6 +4,7 @@ const Main = imports.ui.main;
 const WorkspacesView = imports.ui.workspacesView;
 const WorkspaceStrip = require('./workspaceStrip');
 const WindowDrag = require('./windowDrag');
+const MonitorDrop = require('./monitorDrop');
 const WindowClick = require('./windowClick');
 const SuperKey = require('./superKey');
 const AppSearch = require('./appSearch');
@@ -122,6 +123,7 @@ function enableAll() {
         Main.overview.connect('hidden', hideHeader),
     ];
     WindowDrag.enable();
+    MonitorDrop.enable();
     WindowClick.enable();
     SuperKey.enable();
     AppSearch.enable();
@@ -141,6 +143,7 @@ function disable() {
     overviewSignalIds = [];
     hideHeader();
     AppSearch.disable();
+    MonitorDrop.disable();
     WindowDrag.disable();
     WindowClick.disable();
     SuperKey.disable();

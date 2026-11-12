@@ -100,9 +100,10 @@ class WorkspaceThumbnail {
 
         this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
         this.actor._delegate = this;
-        this._dragSource = null;
-        this._dragEndId = 0;
-        this.actor.connect('destroy', () => this._clearDropTarget());
+        this._dropHover = new UiHelpers.DragHover(
+            () => this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS),
+            () => this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS));
+        this.actor.connect('destroy', () => this._dropHover.leave());
         this._pressed = false;
         this.actor.connect('button-press-event', this._onButtonPress.bind(this));
         this.actor.connect('button-release-event', this._onButtonRelease.bind(this));
@@ -199,19 +200,19 @@ class WorkspaceThumbnail {
         if (!this._canDrop(source))
             return DND.DragMotionResult.CONTINUE;
 
-        this._markDropTarget(source);
+        this._dropHover.enter(source._draggable);
         return DND.DragMotionResult.MOVE_DROP;
     }
 
     handleDragOut() {
-        this._clearDropTarget();
+        this._dropHover.leave();
     }
 
     acceptDrop(source) {
         if (!this._canDrop(source))
             return false;
 
-        this._clearDropTarget();
+        this._dropHover.leave();
         source.metaWindow.change_workspace(this.metaWorkspace);
         return true;
     }
@@ -223,27 +224,6 @@ class WorkspaceThumbnail {
             return false;
 
         return metaWindow.get_workspace() !== this.metaWorkspace;
-    }
-
-    // dnd only reports a drag leaving when the pointer moves out: a drag cancelled
-    // with Escape over the thumbnail is caught through the draggable's 'drag-end'.
-    _markDropTarget(source) {
-        if (this._dragSource)
-            return;
-
-        this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS);
-        this._dragSource = source._draggable;
-        this._dragEndId = this._dragSource.connect('drag-end', () => this._clearDropTarget());
-    }
-
-    _clearDropTarget() {
-        if (!this._dragSource)
-            return;
-
-        this._dragSource.disconnect(this._dragEndId);
-        this._dragSource = null;
-        this._dragEndId = 0;
-        this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS);
     }
 
     setActive(isActive) {

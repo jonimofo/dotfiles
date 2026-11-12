@@ -1,11 +1,14 @@
 #!/bin/bash
-# Static checks of the Cinnamon extensions under cinnamon/extensions/: JavaScript syntax,
-# metadata.json validity, and every module reference between the files of one extension.
+# Static checks of the Cinnamon extensions and applets under cinnamon/extensions/ and
+# cinnamon/applets/: JavaScript syntax, metadata.json and settings-schema.json validity,
+# every module reference between the files of one extension or applet, and no libnm object
+# disconnect() call.
 # Usage: scripts/cinnamon-extension-check.sh (from any directory). Needs node and jq.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-extensions_dir="$(cd "$script_dir/../cinnamon/extensions" && pwd)"
+cinnamon_dir="$(cd "$script_dir/../cinnamon" && pwd)"
+readonly XLET_KINDS=(extensions applets)
 failures=0
 checked_files=0
 
@@ -41,6 +44,34 @@ check_metadata() {
     fi
     if ! jq empty "$metadata_file" 2>/dev/null; then
         fail "$metadata_file: invalid JSON"
+    fi
+}
+
+# Optional: an applet or extension without settings has no settings-schema.json.
+check_settings_schema() {
+    local schema_file="$1"
+    if [[ ! -f "$schema_file" ]]; then
+        return
+    fi
+    if ! jq empty "$schema_file" 2>/dev/null; then
+        fail "$schema_file: invalid JSON"
+    fi
+}
+
+# NM.Device has its own disconnect(), which takes the network device offline, and it hides
+# GObject's signal disconnect(). In a file that imports libnm, handlers are removed with
+# GObject.signal_handler_disconnect() only: any `.disconnect(` call fails the check.
+check_nm_disconnect() {
+    local js_file="$1"
+    local uses_nm calls
+    uses_nm="$(grep -n 'imports\.gi\.NM\b' "$js_file" || true)"
+    if [[ -z "$uses_nm" ]]; then
+        return
+    fi
+    calls="$(grep -n '\.disconnect(' "$js_file" || true)"
+    if [[ -n "$calls" ]]; then
+        fail "$js_file: imports libnm and calls .disconnect(, use GObject.signal_handler_disconnect"
+        printf '%s\n' "$calls" >&2
     fi
 }
 
@@ -89,32 +120,36 @@ check_extension() {
     local extension_dir="$1"
     local js_file
     check_metadata "$extension_dir/metadata.json"
+    check_settings_schema "$extension_dir/settings-schema.json"
     for js_file in "$extension_dir"/*.js; do
         if [[ ! -f "$js_file" ]]; then
             continue
         fi
         check_syntax "$js_file"
         check_requires "$js_file"
+        check_nm_disconnect "$js_file"
         checked_files=$((checked_files + 1))
     done
 }
 
 main() {
-    local extension_dir extension_count=0
+    local kind extension_dir extension_count=0
     require_commands node jq grep sed sort
-    for extension_dir in "$extensions_dir"/*/; do
-        if [[ ! -d "$extension_dir" ]]; then
-            continue
-        fi
-        check_extension "${extension_dir%/}"
-        extension_count=$((extension_count + 1))
+    for kind in "${XLET_KINDS[@]}"; do
+        for extension_dir in "$cinnamon_dir/$kind"/*/; do
+            if [[ ! -d "$extension_dir" ]]; then
+                continue
+            fi
+            check_extension "${extension_dir%/}"
+            extension_count=$((extension_count + 1))
+        done
     done
 
     if [[ "$failures" -gt 0 ]]; then
         printf '%d failure(s)\n' "$failures" >&2
         exit 1
     fi
-    printf 'ok: %d extension(s), %d JavaScript file(s) checked\n' "$extension_count" "$checked_files"
+    printf 'ok: %d extension(s) and applet(s), %d JavaScript file(s) checked\n' "$extension_count" "$checked_files"
 }
 
 main "$@"

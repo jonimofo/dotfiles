@@ -9,6 +9,12 @@ My Cinnamon extensions, versioned. Each one is symlinked into
   Tested on Cinnamon 6.4 (X11).
 - `extension.sh`: enable, disable or reload one extension, keeping the others enabled.
 
+## Custom shortcut: dropdown Nemo
+
+Super+E toggles a dropdown Nemo window through a Cinnamon custom shortcut named
+"Dropdown Nemo", command `/home/bgi/Repos/dotfiles/scripts/nemo_dropdown_toggle.sh`.
+Its header lists the dependencies and why tdrop is not used.
+
 ## What scale-wheel-switch does
 
 In Scale (hot corner or Super), from top to bottom: a search field, a strip with one

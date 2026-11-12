@@ -166,7 +166,22 @@ git config pull.ff only      # a pull that cannot fast-forward fails (no surpris
 - `commit-msg`: rejects subjects that break the Angular convention or exceed 71 characters,
   and messages carrying `Co-Authored-By` or "generated" footers.
 - `pre-push`: rejects pushes to `main`/`develop`/`server`, except `main` to the `gitlab` mirror.
-  Tag pushes (`git push origin vX.Y.Z`) are allowed.
+  Tag pushes (`git push origin vX.Y.Z`) are allowed. Then it runs `scripts/check-all.sh` and
+  cancels the push when a check fails. After a change to `.githooks/`, copy the hooks again.
+
+## Checks
+
+`scripts/check-all.sh` runs every check of the repo in about 20 s: each `scripts/*-test.sh`,
+`scripts/cinnamon-extension-check.sh`, and shellcheck (warnings and errors) on every tracked
+`*.sh` except the tmux-powerline configuration files. It needs `git`, `node`, `jq`, `gjs` and
+`shellcheck`. It is safe on the live desktop: the tests use stubs, fakes, throwaway repos and
+the memory GSettings backend.
+
+```bash
+scripts/check-all.sh
+```
+
+A new test script named `scripts/<topic>-test.sh` is picked up by it with no other change.
 
 Other rules:
 - 1 PR = 1 logical change (small PRs).

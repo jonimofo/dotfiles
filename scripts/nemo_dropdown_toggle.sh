@@ -14,9 +14,10 @@ set -euo pipefail
 
 readonly WIDTH_PERCENT=80
 readonly HEIGHT_PERCENT=60
-readonly TIMEOUT_SECONDS=10
+readonly DEFAULT_TIMEOUT_SECONDS=10
+readonly TIMEOUT_SECONDS="${NEMO_DROPDOWN_TIMEOUT_SECONDS:-$DEFAULT_TIMEOUT_SECONDS}"
 readonly POLL_SECONDS=0.1
-readonly POLLS_PER_SECOND=10
+readonly MICROSECONDS_PER_SECOND=1000000
 
 readonly NEMO_WM_CLASS='WM_CLASS(STRING) = "nemo", "Nemo"'
 readonly MARK_PROPERTY=NEMO_DROPDOWN
@@ -154,17 +155,24 @@ is_shown_here() {
     [[ $desktop == "$(xdotool get_desktop)" || $desktop == "$STICKY_DESKTOP" ]]
 }
 
+# EPOCHREALTIME uses the locale's decimal separator.
+now_microseconds() {
+    echo "${EPOCHREALTIME/[.,]/}"
+}
+
 # Runs "$@" until it succeeds or TIMEOUT_SECONDS elapse.
 wait_until() {
-    local polls=$((TIMEOUT_SECONDS * POLLS_PER_SECOND))
-    while ((polls > 0)); do
+    local deadline
+    deadline=$(($(now_microseconds) + TIMEOUT_SECONDS * MICROSECONDS_PER_SECOND))
+    while true; do
         if "$@"; then
             return 0
         fi
+        if (($(now_microseconds) >= deadline)); then
+            return 1
+        fi
         sleep "$POLL_SECONDS"
-        polls=$((polls - 1))
     done
-    return 1
 }
 
 # Prints "width height x y" of the monitor containing the pointer, or of the
@@ -305,7 +313,9 @@ find_new_nemo_window() {
 create_dropdown() {
     local known_ids wid
     known_ids=$(managed_window_ids)
-    setsid -f nemo "$HOME" >/dev/null 2>&1 </dev/null
+    # The launched nemo can become the long-lived Nemo process: it must not
+    # inherit the lock, or every later press would be skipped.
+    setsid -f nemo "$HOME" 9>&- >/dev/null 2>&1 </dev/null
     if ! wid=$(wait_until find_new_nemo_window "$known_ids"); then
         die "ran 'nemo $HOME' but no new Nemo window appeared within ${TIMEOUT_SECONDS}s"
     fi
@@ -332,13 +342,20 @@ saved_window_id() {
     fi
 }
 
+require_valid_timeout() {
+    if [[ ! $TIMEOUT_SECONDS =~ ^[1-9][0-9]*$ ]]; then
+        die "NEMO_DROPDOWN_TIMEOUT_SECONDS must be a positive integer, got '$TIMEOUT_SECONDS'"
+    fi
+}
+
 main() {
     local wid
+    require_valid_timeout
     require_commands
     ensure_state_dir
 
-    # A press while another run is still working is ignored, so a fast double
-    # press cannot create two dropdowns.
+    # A press while another run of this script is still working is ignored,
+    # so a fast double press cannot create two dropdowns.
     exec 9>"$LOCK_FILE"
     if ! flock -n 9; then
         exit 0

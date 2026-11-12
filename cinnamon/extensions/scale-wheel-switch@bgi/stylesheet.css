@@ -1,7 +1,17 @@
+.scale-strip,
+.scale-search-bar,
+.scale-dock {
+    background-color: rgba(0, 0, 0, 0.45);
+}
+
+.scale-strip,
+.scale-dock {
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
 .scale-strip {
     padding: 12px;
-    background-color: rgba(0, 0, 0, 0.45);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+    border-bottom-width: 1px;
 }
 
 .scale-strip-row {
@@ -38,7 +48,6 @@
 
 .scale-search-bar {
     padding: 12px 12px 0 12px;
-    background-color: rgba(0, 0, 0, 0.45);
 }
 
 .scale-search-entry {
@@ -100,8 +109,7 @@
     padding: 8px;
     spacing: 8px;
     border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    background-color: rgba(0, 0, 0, 0.45);
+    border-width: 1px;
     -scale-dock-icon-size: 48px;
 }
 
@@ -114,7 +122,7 @@
 .scale-dock-separator {
     width: 1px;
     margin: 4px 2px;
-    background-color: rgba(255, 255, 255, 0.25);
+    background-color: rgba(255, 255, 255, 0.6);
 }
 
 .scale-dock-dot {

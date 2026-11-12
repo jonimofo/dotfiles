@@ -4,6 +4,8 @@ const Header = require('./header');
 const SliderRow = require('./sliderRow');
 const Tile = require('./tile');
 const ThemeColors = require('./themeColors');
+const ListPanel = require('./listPanel');
+const ListHost = require('./listHost');
 
 // Everything inside the menu, top to bottom: header, sliders, tile grid.
 class MenuContent {
@@ -37,6 +39,10 @@ class MenuContent {
             this.tiles[definition.id] = tile;
         });
         this.actor.add_child(grid);
+
+        // One in-place list at a time, moved under the row whose arrow opened it.
+        this.listPanel = new ListPanel.ListPanel();
+        this.lists = new ListHost.ListHost(this.listPanel);
 
         // The first slider carries the theme's slider colours: a theme change restyles it.
         this._colorSource = this.sliders[Constants.SLIDERS[0].id].slider.actor;

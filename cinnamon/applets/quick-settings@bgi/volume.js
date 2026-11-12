@@ -69,11 +69,15 @@ class StreamVolume {
 }
 
 // The mixer, opened like the stock sound applet: default sink for the output, default
-// source for the input. @onOutput and @onInput get (available, value).
+// source for the input. @onOutput and @onInput get (available, value); @onDevices(kind)
+// runs when the device list of 'output' or 'input' changes.
 class Volume {
-    constructor(onOutput, onInput) {
+    constructor(onOutput, onInput, onDevices) {
         this.output = new StreamVolume(onOutput);
         this.input = new StreamVolume(onInput);
+        this._onDevices = onDevices;
+        // Device ids by kind, filled by the mixer's output-added and input-added signals.
+        this._deviceIds = { output: new Set(), input: new Set() };
         this._soundSettings = new Gio.Settings({ schema_id: Constants.SOUND_SCHEMA });
         this._settingsId = this._soundSettings.connect(`changed::${Constants.AMPLIFIED_VOLUME_KEY}`,
             () => this._updateLimits());
@@ -86,9 +90,35 @@ class Volume {
             this._control.connect('default-source-changed', () => this._readInput()),
             this._control.connect('active-input-update', () => this._readInput()),
         ];
+        for (const kind of ['output', 'input']) {
+            this._controlIds.push(this._control.connect(`${kind}-added`, (control, id) => this._onDeviceAdded(kind, id)));
+            this._controlIds.push(this._control.connect(`${kind}-removed`, (control, id) => this._onDeviceRemoved(kind, id)));
+        }
         this._norm = this._control.get_vol_max_norm();
         this._updateLimits();
         this._control.open();
+    }
+
+    // [{ id, label, active }] for 'output' or 'input', the default device marked.
+    devices(kind) {
+        const stream = kind === 'output' ? this._control.get_default_sink() : this._control.get_default_source();
+        const activeDevice = stream ? this._control.lookup_device_from_stream(stream) : null;
+        const activeId = activeDevice ? activeDevice.get_id() : null;
+        return [...this._deviceIds[kind]]
+            .map(id => this._lookupDevice(kind, id))
+            .filter(device => device !== null)
+            .map(device => ({ id: device.get_id(), label: device.description, active: device.get_id() === activeId }));
+    }
+
+    // Makes @id the default device, as the stock sound applet's device menu does.
+    selectDevice(kind, id) {
+        const device = this._lookupDevice(kind, id);
+        if (!device)
+            return;
+        if (kind === 'output')
+            this._control.change_output(device);
+        else
+            this._control.change_input(device);
     }
 
     destroy() {
@@ -113,10 +143,26 @@ class Volume {
 
     _readOutput() {
         this.output.setStream(this._control.get_default_sink());
+        this._onDevices('output');
     }
 
     _readInput() {
         this.input.setStream(this._control.get_default_source());
+        this._onDevices('input');
+    }
+
+    _lookupDevice(kind, id) {
+        return kind === 'output' ? this._control.lookup_output_id(id) : this._control.lookup_input_id(id);
+    }
+
+    _onDeviceAdded(kind, id) {
+        this._deviceIds[kind].add(id);
+        this._onDevices(kind);
+    }
+
+    _onDeviceRemoved(kind, id) {
+        this._deviceIds[kind].delete(id);
+        this._onDevices(kind);
     }
 
     // Only the output may go past 100%, when the user allows amplified volume.

@@ -22,11 +22,20 @@ function streamVolume(value, norm, max) {
     return { volume: Math.round(volume), muted: false };
 }
 
-// Panel icon for an output slider position.
-function outputIconName(value) {
+// Level word for a slider position, as the stock sound applet's _volumeToIcon().
+function levelName(value) {
     const levels = Constants.VOLUME_ICON_LEVELS;
-    const level = value < Constants.VOLUME_MUTE_THRESHOLD
-        ? Constants.VOLUME_ICON_MUTED
-        : levels[Math.min(Math.floor(levels.length * value), levels.length - 1)];
-    return `${Constants.VOLUME_ICON_PREFIX}${level}${Constants.SYMBOLIC_SUFFIX}`;
+    if (value < Constants.VOLUME_MUTE_THRESHOLD)
+        return Constants.VOLUME_ICON_MUTED;
+    return levels[Math.min(Math.floor(levels.length * value), levels.length - 1)];
+}
+
+// Icon for an output slider position: panel icon and Output row icon.
+function outputIconName(value) {
+    return `${Constants.VOLUME_ICON_PREFIX}${levelName(value)}${Constants.SYMBOLIC_SUFFIX}`;
+}
+
+// Icon for an input slider position: Input row icon.
+function inputIconName(value) {
+    return `${Constants.INPUT_ICON_PREFIX}${levelName(value)}${Constants.SYMBOLIC_SUFFIX}`;
 }

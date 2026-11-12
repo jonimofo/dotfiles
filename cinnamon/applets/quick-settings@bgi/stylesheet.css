@@ -128,3 +128,53 @@
 .quick-settings-tile-label {
     font-weight: bold;
 }
+
+/* In-place list, under the row whose arrow opened it */
+
+.quick-settings-list {
+    padding: 10px;
+    spacing: 6px;
+    border-radius: 16px;
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.quick-settings-list-title {
+    padding: 0 8px;
+    font-weight: bold;
+}
+
+.quick-settings-list-scroll {
+    max-height: 240px;
+}
+
+.quick-settings-list-entries {
+    spacing: 2px;
+}
+
+.quick-settings-list-entry {
+    padding: 6px 8px;
+    border-radius: 10px;
+}
+
+.quick-settings-list-entry:hover,
+.quick-settings-list-entry:focus {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.quick-settings-list-entry:checked {
+    font-weight: bold;
+}
+
+.quick-settings-list-entry-content {
+    spacing: 10px;
+}
+
+.quick-settings-list-icon {
+    icon-size: 16px;
+}
+
+.quick-settings-list-separator {
+    height: 1px;
+    margin: 2px 8px;
+    background-color: rgba(255, 255, 255, 0.2);
+}

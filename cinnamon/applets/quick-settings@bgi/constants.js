@@ -23,7 +23,7 @@ const WIFI_ON_ICON = 'network-wireless-symbolic';
 const WIFI_OFF_ICON = 'network-wireless-disabled-symbolic';
 
 const PANEL_ICONS = {
-    bluetooth: 'bluetooth-active-symbolic',
+    bluetooth: 'bluetooth-symbolic',
     vpn: 'network-vpn-symbolic',
     volume: 'audio-volume-high-symbolic',
 };
@@ -95,3 +95,68 @@ const VOLUME_ICON_PREFIX = 'audio-volume-';
 const VOLUME_ICON_LEVELS = ['low', 'medium', 'high'];
 const VOLUME_ICON_MUTED = 'muted';
 const SYMBOLIC_SUFFIX = '-symbolic';
+
+// In-place lists opened by a '>' arrow.
+const LIST_EXPANDED_ICON = 'go-down-symbolic';
+const LIST_ACTIVE_ICON = 'object-select-symbolic';
+const LIST_SECURE_ICON = 'changes-prevent-symbolic';
+const LIST_TITLES = {
+    wifi: 'Wi-Fi',
+    bluetooth: 'Bluetooth',
+    vpn: 'VPN',
+    nordvpn: 'NordVPN',
+    output: 'Output',
+    input: 'Input',
+};
+const LIST_SETTINGS_LABELS = {
+    wifi: 'All networks...',
+    bluetooth: 'Bluetooth settings...',
+    vpn: 'Network settings...',
+    output: 'Sound settings...',
+    input: 'Sound settings...',
+};
+// The commands the stock applets and the installed tools use for each settings page.
+const SETTINGS_COMMANDS = {
+    network: ['cinnamon-settings', 'network'],
+    // Wi-Fi with 802.1x needs the stock wizard: device path and access point path follow.
+    enterpriseWifi: ['cinnamon-settings', 'network', 'connect-8021x-wifi'],
+    bluetooth: ['blueman-manager'],
+    sound: ['cinnamon-settings', 'sound'],
+};
+
+// Wi-Fi list.
+const WIFI_LIST_MAX = 8;
+const WIFI_SIGNAL_ICON_PREFIX = 'network-wireless-signal-';
+// Same thresholds as the stock network applet (signalToIcon), strongest first.
+const WIFI_SIGNAL_LEVELS = [
+    { above: 80, name: 'excellent' },
+    { above: 55, name: 'good' },
+    { above: 30, name: 'ok' },
+    { above: 5, name: 'weak' },
+    { above: -1, name: 'none' },
+];
+// The stock network applet names new connections this way ("Auto %s").
+const WIFI_AUTO_CONNECTION_PREFIX = 'Auto ';
+
+// Bluetooth, through BlueZ on the system bus.
+const BLUEZ_NAME = 'org.bluez';
+const BLUEZ_ADAPTER_INTERFACE = 'org.bluez.Adapter1';
+const BLUEZ_DEVICE_INTERFACE = 'org.bluez.Device1';
+const DBUS_PROPERTIES_INTERFACE = 'org.freedesktop.DBus.Properties';
+const BLUETOOTH_ON_ICON = 'bluetooth-active-symbolic';
+const BLUETOOTH_IDLE_ICON = 'bluetooth-symbolic';
+const BLUETOOTH_OFF_ICON = 'bluetooth-disabled-symbolic';
+const BLUETOOTH_DEVICE_ICON = 'bluetooth-symbolic';
+
+// NetworkManager VPN profiles. NordVPN's own interface is left to the NordVPN tile.
+const VPN_CONNECTION_TYPES = ['vpn', 'wireguard'];
+const NORDVPN_INTERFACES = ['nordlynx'];
+const VPN_TILE_PREFIX = 'VPN';
+
+// NordVPN command line client.
+const NORDVPN = 'nordvpn';
+const NORDVPN_CONNECTED = 'Connected';
+const NORDVPN_QUICK_CONNECT = 'Quick connect';
+
+// Slider row icons that follow the level, as in the stock sound applet.
+const INPUT_ICON_PREFIX = 'microphone-sensitivity-';

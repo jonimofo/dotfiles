@@ -7,15 +7,19 @@ const ReleaseCommit = require('./releaseCommit');
 
 // One slider line: icon, label, slider, and an arrow when the line opens a submenu. A row
 // without a submenu keeps an empty space of the arrow's size, so every slider has the same
-// length. The row stays dimmed and inert until setAvailable(true); the arrow stays inert
-// until the submenus exist.
+// length. The row stays dimmed and inert until setAvailable(true); the arrow works once
+// setOnArrow() gives it an action and the row is available.
 class SliderRow {
     constructor(definition) {
         this._dragging = false;
         this._releaseCommit = null;
+        this._available = false;
+        this._hasArrowAction = false;
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-slider-row' });
 
-        this.actor.add_child(UiHelpers.symbolicIcon(definition.icon, 'quick-settings-slider-icon'));
+        this._defaultIconName = definition.icon;
+        this._icon = UiHelpers.symbolicIcon(definition.icon, 'quick-settings-slider-icon');
+        this.actor.add_child(this._icon);
         this.actor.add_child(new St.Label({
             text: definition.label,
             style_class: 'quick-settings-slider-label',
@@ -34,9 +38,11 @@ class SliderRow {
         this.actor.add_child(this.slider.actor);
 
         this._arrow = null;
+        this._arrowIcon = null;
         if (definition.hasMenu) {
+            this._arrowIcon = UiHelpers.symbolicIcon(Constants.SUBMENU_ICON, 'quick-settings-slider-icon');
             this._arrow = new St.Button({
-                child: UiHelpers.symbolicIcon(Constants.SUBMENU_ICON, 'quick-settings-slider-icon'),
+                child: this._arrowIcon,
                 style_class: 'quick-settings-slider-arrow',
             });
             UiHelpers.setButtonInactive(this._arrow, true);
@@ -50,8 +56,35 @@ class SliderRow {
     }
 
     setAvailable(available) {
+        this._available = available;
         this.slider.actor.reactive = available;
         UiHelpers.setDimmed(this.actor, !available);
+        this._syncArrow();
+    }
+
+    // @iconName null puts back the row's own icon.
+    setIconName(iconName) {
+        this._icon.icon_name = iconName || this._defaultIconName;
+    }
+
+    setOnArrow(onArrow) {
+        this._hasArrowAction = true;
+        this._arrow.connect('clicked', () => onArrow());
+        this._syncArrow();
+    }
+
+    // The arrow points down while the row's list is open.
+    setExpanded(expanded) {
+        if (this._arrowIcon)
+            this._arrowIcon.icon_name = expanded ? Constants.LIST_EXPANDED_ICON : Constants.SUBMENU_ICON;
+    }
+
+    _syncArrow() {
+        if (!this._arrow)
+            return;
+        const works = this._available && this._hasArrowAction;
+        UiHelpers.setButtonInactive(this._arrow, !works);
+        UiHelpers.setDimmed(this._arrow, this._available && !works);
     }
 
     // Shows a value read from the system. Ignored while the user drags the handle.

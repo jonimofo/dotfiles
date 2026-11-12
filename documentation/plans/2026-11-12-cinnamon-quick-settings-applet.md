@@ -37,6 +37,26 @@ Panel:  [ wifi bt vpn vol ]   one button
 VPN profiles, NordVPN countries, profiles.
 ```
 
+## Validated list mockup (step 3)
+
+Answer: "GNOME style, in place (Recommended)": the list opens as a panel inside the menu,
+under the row of the tile, and pushes the rest down. A second click on '>' or opening
+another list closes it.
+
+```
+| [ Wi-Fi     v ]   [ Bluetooth     > ]    |
+| +--------------------------------------+ |
+| | Wi-Fi                                | |
+| |  * HomeBox            lock  ||||     | |
+| |    Office-5G          lock  |||      | |
+| |    Cafe                     ||       | |
+| |  ----------------------------------  | |
+| |  All networks...                     | |
+| +--------------------------------------+ |
+| [ VPN SEB   > ]   [ NordVPN       > ]    |
+| [ Power: Bal > ]  [ Night Light     ]    |
+```
+
 ## Decisions
 
 | Question | Answer |
@@ -56,7 +76,19 @@ VPN profiles, NordVPN countries, profiles.
 - No PulseAudio source exists while the internal microphone is disabled: the Input slider is
   dimmed, as the stock sound applet hides its input section.
 - `power-profiles-daemon` is active. `nordvpn`, `nmcli`, `bluetoothctl`, `flameshot` are installed.
-- NetworkManager has one VPN profile, `SEB`.
+- NetworkManager has one VPN profile, `SEB` (OpenVPN). NordVPN creates no NetworkManager
+  profile while disconnected; its interface is `nordlynx` (name found in its binaries), left
+  out of the VPN tile. Not checked while connected.
+- `nordvpn` 6.0.2: `nordvpn status` prints `Status: Disconnected`; `nordvpn countries` prints
+  one name per line with underscores for spaces. The connected status format comes from the
+  binary's strings (`Status: %s`, `Country: %s`), not from a capture.
+- Bluetooth: BlueZ is active (adapter `hci0`, four paired devices), driven over D-Bus
+  (`org.bluez`, ObjectManager). blueman is the installed settings tool (`blueman-manager`);
+  blueberry and the GNOME panel are not usable here.
+- Settings pages, as the stock applets open them: `cinnamon-settings network`,
+  `cinnamon-settings sound`; 802.1x Wi-Fi goes to `cinnamon-settings network connect-8021x-wifi`.
+- `NM.Device.disconnect()` takes the device offline and shadows GObject's `disconnect()`:
+  signal handlers on NetworkManager objects are removed with `GObject.signal_handler_disconnect`.
 - Night Light: `org.cinnamon.settings-daemon.plugins.color night-light-enabled`.
 - Dark style: `org.x.apps.portal color-scheme` (`prefer-dark` today).
 - Do Not Disturb and Keep awake: mechanism to read from the stock `notifications@cinnamon.org`

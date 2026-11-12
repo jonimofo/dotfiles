@@ -1,7 +1,9 @@
 // Logic tests of the quick-settings@bgi applet modules, run by cinnamon-quick-settings-test.sh.
 // Dark style runs on the memory GSettings backend; Wi-Fi reads the real NetworkManager state
 // and never writes it (the D-Bus write is intercepted); brightness runs against fake ddcutil
-// and laptop backends fed with captured ddcutil output. No real setting is changed.
+// and laptop backends fed with captured ddcutil output; NordVPN runs against a fake client
+// fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
+// models run on plain data. No real setting is changed.
 // Usage: GSETTINGS_BACKEND=memory gjs cinnamon-quick-settings-test.js <applet folder> <fixtures folder>
 const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
@@ -14,7 +16,9 @@ if (GLib.getenv('GSETTINGS_BACKEND') !== 'memory') {
     imports.system.exit(2);
 }
 
-const [appletDir, fixturesDir] = ARGV;
+const [appletDir, fixturesRoot] = ARGV;
+const fixturesDir = `${fixturesRoot}/ddcutil`;
+const nordvpnFixtures = `${fixturesRoot}/nordvpn`;
 const SCROLL_DELAY_MS = 30;
 const VOLUME_NORM = 65536;
 let failures = 0;
@@ -28,6 +32,13 @@ function readText(path) {
     return ByteArray.toString(GLib.file_get_contents(path)[1]);
 }
 
+// Commands the applet would start (settings pages): recorded, never run.
+const spawned = [];
+// GJS's imports, plus the Cinnamon modules the applet files import at load time.
+const appletImports = new Proxy({}, {
+    get: (target, name) => (name === 'misc' ? { util: { spawn: argv => spawned.push(argv) } } : imports[name]),
+});
+
 // Cinnamon's require(): every top-level declaration of the file is exported.
 const modules = {};
 function load(name) {
@@ -35,7 +46,7 @@ function load(name) {
     if (!modules[file]) {
         const source = readText(`${appletDir}/${file}`);
         const names = [...source.matchAll(/^(?:function|const|let|var|class) ([A-Za-z0-9_]+)/gm)].map(m => m[1]);
-        modules[file] = new Function('require', `${source}\nreturn { ${names.join(', ')} };`)(load);
+        modules[file] = new Function('require', 'imports', `${source}\nreturn { ${names.join(', ')} };`)(load, appletImports);
     }
     return modules[file];
 }
@@ -101,7 +112,11 @@ function testWifi() {
             };
             wifi.toggle();
             check(`wifi: toggle asks for ${!nm.wireless_enabled}`, target === !nm.wireless_enabled);
+            const device = nm.get_devices().find(candidate => candidate instanceof imports.gi.NM.DeviceWifi);
+            const stateBefore = device ? device.get_state() : null;
+            // Regression: NM.Device.disconnect() shadows GObject's and takes the device offline.
             wifi.destroy();
+            check('wifi: destroy leaves the Wi-Fi device as it was', !device || device.get_state() === stateBefore);
             resolve();
         });
     });
@@ -242,6 +257,187 @@ async function testBrightness() {
     check('no logged error', errors.length === 0);
 }
 
+function testWifiNetworks() {
+    const WifiNetworks = load('./wifiNetworks');
+    const accessPoints = [
+        { ssid: 'Cafe', strength: 30, secure: false },
+        { ssid: 'HomeBox', strength: 60, secure: true },
+        { ssid: 'HomeBox', strength: 90, secure: true },
+        { ssid: null, strength: 99, secure: true },
+        { ssid: 'Office-5G', strength: 70, secure: true },
+    ];
+    const list = WifiNetworks.buildNetworkList(accessPoints, 'Cafe', 8);
+    check(`wifi list: deduped, hidden left out, strongest first (${list.map(n => n.ssid)})`,
+        `${list.map(n => n.ssid)}` === 'HomeBox,Office-5G,Cafe');
+    check('wifi list: one SSID keeps its strongest access point', list[0].strength === 90);
+    check('wifi list: the active network is marked', list.filter(n => n.active).map(n => n.ssid).join() === 'Cafe');
+    const many = Array.from({ length: 12 }, (_, i) => ({ ssid: `Net${i}`, strength: 100 - i, secure: false }));
+    const capped = WifiNetworks.buildNetworkList(many, 'Net11', 8);
+    check(`wifi list: capped at 8, the active one kept (${capped.map(n => n.ssid)})`,
+        capped.length === 8 && capped[7].ssid === 'Net11' && capped[7].active);
+    check('wifi list: signal icons use the stock thresholds',
+        WifiNetworks.signalIconName(81) === 'network-wireless-signal-excellent-symbolic'
+        && WifiNetworks.signalIconName(56) === 'network-wireless-signal-good-symbolic'
+        && WifiNetworks.signalIconName(31) === 'network-wireless-signal-ok-symbolic'
+        && WifiNetworks.signalIconName(6) === 'network-wireless-signal-weak-symbolic'
+        && WifiNetworks.signalIconName(0) === 'network-wireless-signal-none-symbolic');
+}
+
+function testListHost() {
+    const ListHost = load('./listHost');
+    const view = { shown: [], hidden: 0, updated: 0 };
+    view.show = (spec, anchor) => view.shown.push(`${spec.title}@${anchor}`);
+    view.hide = () => view.hidden++;
+    view.update = () => view.updated++;
+    const expanded = {};
+    const opened = [];
+    const host = new ListHost.ListHost(view);
+    for (const key of ['wifi', 'bluetooth']) {
+        host.register(key, {
+            anchor: `${key}-row`,
+            build: () => ({ title: key, items: [], settings: null }),
+            onExpanded: value => {
+                expanded[key] = value;
+            },
+            onOpen: () => opened.push(key),
+        });
+    }
+    host.toggle('wifi');
+    check('lists: opening shows the list under its row and flips the arrow',
+        `${view.shown}` === 'wifi@wifi-row' && expanded.wifi === true && `${opened}` === 'wifi');
+    host.toggle('bluetooth');
+    check('lists: opening another closes the first',
+        host.openKey === 'bluetooth' && expanded.wifi === false && expanded.bluetooth === true && view.hidden === 1);
+    host.refresh('wifi');
+    check('lists: a closed list is not redrawn', view.updated === 0);
+    host.refresh('bluetooth');
+    check('lists: the open list is redrawn on change', view.updated === 1);
+    host.toggle('bluetooth');
+    check('lists: a second click closes it', host.openKey === null && expanded.bluetooth === false && view.hidden === 2);
+    host.toggle('wifi');
+    host.close();
+    check('lists: closing the menu closes the list', host.openKey === null && expanded.wifi === false);
+}
+
+function testListSpecs() {
+    const ListSpecs = load('./listSpecs');
+    const calls = [];
+    const nordvpn = ListSpecs.nordvpnSpec({ connected: true, country: 'United States' },
+        [{ name: 'France', label: 'France' }, { name: 'United_States', label: 'United States' }],
+        { connectTo: country => calls.push(country) });
+    check('nordvpn list: quick connect first, connected country marked, no settings entry',
+        nordvpn.items[0].label === 'Quick connect' && nordvpn.items[2].active && !nordvpn.items[1].active
+        && nordvpn.settings === null);
+    nordvpn.items[0].onActivate();
+    nordvpn.items[2].onActivate();
+    check(`nordvpn list: entries connect by CLI name (${calls})`, `${calls}` === ',United_States');
+
+    const bluetooth = ListSpecs.bluetoothSpec({ powered: false, devices: [{ name: 'X' }] }, {});
+    check('bluetooth list: no devices while the adapter is off', bluetooth.items.length === 0
+        && bluetooth.settings.label === 'Bluetooth settings...');
+    const devices = ListSpecs.deviceSpec('output', [{ id: 1, label: 'Speaker', active: true }, { id: 2, label: 'HDMI', active: false }],
+        { selectDevice: id => calls.push(`device ${id}`), openSettings: () => calls.push('sound settings') });
+    devices.items[1].onActivate();
+    devices.settings.onActivate();
+    check('device list: active marked, click selects, last entry opens sound settings',
+        devices.items[0].active && calls.includes('device 2') && calls.includes('sound settings')
+        && devices.settings.label === 'Sound settings...');
+}
+
+function testBluetoothModel() {
+    const Model = load('./bluetoothModel');
+    const adapter = '/org/bluez/hci0';
+    const devices = [
+        { path: 'b', adapter, name: 'WH-1000XM5', icon: 'audio-headset', paired: true, connected: false },
+        { path: 'a', adapter, name: 'Speaker', icon: 'audio-card', paired: true, connected: true },
+        { path: 'c', adapter, name: 'Stranger', icon: null, paired: false, connected: false },
+    ];
+    const on = Model.summarize([{ path: adapter, powered: true }], devices);
+    check(`bluetooth: paired devices only, connected first (${on.devices.map(d => d.name)})`,
+        `${on.devices.map(d => d.name)}` === 'Speaker,WH-1000XM5');
+    check('bluetooth: one connected device names the tile', Model.tileLabel(on, 'Bluetooth') === 'Speaker');
+    check('bluetooth: panel icon active while a device is connected', Model.panelIconName(on) === 'bluetooth-active-symbolic');
+    const idle = Model.summarize([{ path: adapter, powered: true }], devices.map(d => ({ ...d, connected: false })));
+    check('bluetooth: no connection keeps the label and the idle icon',
+        Model.tileLabel(idle, 'Bluetooth') === 'Bluetooth' && Model.panelIconName(idle) === 'bluetooth-symbolic');
+    const off = Model.summarize([{ path: adapter, powered: false }], devices);
+    check('bluetooth: adapter off hides the panel icon', Model.panelIconName(off) === null && Model.tileLabel(off, 'Bluetooth') === 'Bluetooth');
+    check('bluetooth: no adapter means unavailable', Model.summarize([], devices).available === false);
+}
+
+function testVpnModel() {
+    const Model = load('./vpnModel');
+    const seb = { uuid: 'u1', id: 'SEB', type: 'vpn', iface: null, timestamp: 0 };
+    const wifi = { uuid: 'u2', id: 'HomeBox', type: '802-11-wireless', iface: null, timestamp: 9 };
+    const nordlynx = { uuid: 'u3', id: 'nordlynx', type: 'wireguard', iface: 'nordlynx', timestamp: 9 };
+    const today = Model.summarize([seb, wifi, nordlynx], []);
+    check(`vpn: only VPN profiles, NordVPN's own left out (${today.profiles.map(p => p.id)})`,
+        `${today.profiles.map(p => p.id)}` === 'SEB');
+    check('vpn: a single profile names the tile "VPN SEB" and is the toggle target',
+        today.label === 'VPN SEB' && today.target.id === 'SEB' && today.active === null);
+    const work = { uuid: 'u4', id: 'Work', type: 'wireguard', iface: 'wg0', timestamp: 5 };
+    const two = Model.summarize([seb, work], []);
+    check('vpn: several profiles, none up: "VPN", last used is the target', two.label === 'VPN' && two.target.id === 'Work');
+    const up = Model.summarize([seb, work], ['u1']);
+    check('vpn: the active profile names the tile and is marked',
+        up.label === 'VPN SEB' && up.target.id === 'SEB' && up.profiles.find(p => p.id === 'SEB').active);
+    check('vpn: no profile means unavailable', Model.summarize([wifi], []).available === false);
+}
+
+function testNordvpnParser() {
+    const Parser = load('./nordvpnParser');
+    const off = Parser.parseStatus(readText(`${nordvpnFixtures}/status-disconnected.txt`), 'Connected');
+    check('nordvpn: captured "Status: Disconnected" reads as off', !off.connected && off.country === null);
+    const on = Parser.parseStatus(readText(`${nordvpnFixtures}/status-connected-constructed.txt`), 'Connected');
+    check('nordvpn: connected status gives the country', on.connected && on.country === 'United States');
+    const countries = Parser.parseCountries(readText(`${nordvpnFixtures}/countries.txt`));
+    check(`nordvpn: captured country list parses (${countries.length} countries)`, countries.length === 150
+        && countries[0].name === 'Afghanistan'
+        && countries.some(c => c.name === 'United_States' && c.label === 'United States'));
+}
+
+async function testNordvpn() {
+    const Nordvpn = load('./nordvpn');
+    errors = [];
+    const calls = [];
+    let status = readText(`${nordvpnFixtures}/status-disconnected.txt`);
+    const run = argv => {
+        calls.push(argv.slice(1).join(' '));
+        if (argv[1] === 'status')
+            return Promise.resolve(status);
+        if (argv[1] === 'connect') {
+            status = readText(`${nordvpnFixtures}/status-connected-constructed.txt`);
+            return Promise.resolve('');
+        }
+        if (argv[1] === 'disconnect') {
+            status = readText(`${nordvpnFixtures}/status-disconnected.txt`);
+            return Promise.resolve('');
+        }
+        return Promise.resolve(readText(`${nordvpnFixtures}/countries.txt`));
+    };
+    let changes = 0;
+    const nordvpn = new Nordvpn.Nordvpn(run, () => changes++);
+    await nordvpn.refresh();
+    check('nordvpn: status read, available, off', nordvpn.available && !nordvpn.status.connected);
+    await nordvpn.toggle();
+    check(`nordvpn: toggle connects, then reads the status again (${calls})`,
+        `${calls}` === 'status,connect,status' && nordvpn.connectedCountry === 'United States');
+    await nordvpn.toggle();
+    check('nordvpn: toggle while connected disconnects', calls[3] === 'disconnect' && !nordvpn.status.connected);
+    calls.length = 0;
+    await nordvpn.connectTo('France');
+    check('nordvpn: a country entry runs "connect France"', calls[0] === 'connect France');
+    const callsBeforeWait = calls.length;
+    await wait(SCROLL_DELAY_MS * 3);
+    check('nordvpn: nothing runs in the background', calls.length === callsBeforeWait);
+
+    const missing = new Nordvpn.Nordvpn(() => Promise.reject(new Error('nordvpn: not found')), () => {});
+    await missing.refresh();
+    await missing.refresh();
+    check('nordvpn: missing client means unavailable, logged once', !missing.available && errors.length === 1);
+    errors = [];
+}
+
 async function main() {
     await testDarkStyle();
     await testWifi();
@@ -249,6 +445,13 @@ async function main() {
     testDdcutilParser();
     await testReleaseCommit();
     await testBrightness();
+    testWifiNetworks();
+    testListHost();
+    testListSpecs();
+    testBluetoothModel();
+    testVpnModel();
+    testNordvpnParser();
+    await testNordvpn();
 }
 
 const loop = GLib.MainLoop.new(null, false);

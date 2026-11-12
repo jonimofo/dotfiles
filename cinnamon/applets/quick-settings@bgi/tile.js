@@ -14,11 +14,12 @@ function backgroundStyle(color) {
 }
 
 // A pill-shaped toggle: icon and label on the left, an arrow on the right when the tile
-// opens a submenu. A tile does nothing until setOnToggle() gives it an action.
+// opens an in-place list. A tile does nothing until setOnToggle() gives it an action.
 class Tile {
     constructor(definition) {
         this._checked = false;
         this._colors = null;
+        this.defaultLabel = definition.label;
 
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-tile' });
 
@@ -44,27 +45,61 @@ class Tile {
         this.actor.add_child(this._toggle);
 
         this._arrow = null;
+        this._arrowIcon = null;
         if (definition.hasMenu) {
+            this._arrowIcon = UiHelpers.symbolicIcon(Constants.SUBMENU_ICON, 'quick-settings-tile-icon');
             this._arrow = new St.Button({
-                child: UiHelpers.symbolicIcon(Constants.SUBMENU_ICON, 'quick-settings-tile-icon'),
+                child: this._arrowIcon,
                 style_class: 'quick-settings-tile-arrow',
             });
             this.actor.add_child(this._arrow);
         }
 
-        UiHelpers.setButtonInactive(this._toggle, true);
-        if (this._arrow)
-            UiHelpers.setButtonInactive(this._arrow, true);
-        UiHelpers.setDimmed(this.actor, true);
+        this._hasToggle = false;
+        this._hasArrowAction = false;
+        this._available = true;
+        this._sync();
     }
 
     setOnToggle(onToggle) {
-        UiHelpers.setButtonInactive(this._toggle, false);
+        this._hasToggle = true;
         this._toggle.connect('clicked', () => onToggle());
-        UiHelpers.setDimmed(this.actor, false);
-        // The submenu comes in a later step: its arrow stays visibly inactive.
-        if (this._arrow)
-            UiHelpers.setDimmed(this._arrow, true);
+        this._sync();
+    }
+
+    setOnArrow(onArrow) {
+        this._hasArrowAction = true;
+        this._arrow.connect('clicked', () => onArrow());
+        this._sync();
+    }
+
+    // An unavailable tile (no adapter, daemon not running) is dimmed and takes no click.
+    setAvailable(available) {
+        this._available = available;
+        this._sync();
+    }
+
+    setLabel(text) {
+        this._label.text = text;
+    }
+
+    // The arrow points down while the tile's list is open.
+    setExpanded(expanded) {
+        if (this._arrowIcon)
+            this._arrowIcon.icon_name = expanded ? Constants.LIST_EXPANDED_ICON : Constants.SUBMENU_ICON;
+    }
+
+    // A part without an action stays visibly inactive: the whole tile when the toggle has
+    // none, only the arrow when the list is not wired.
+    _sync() {
+        const toggleWorks = this._available && this._hasToggle;
+        UiHelpers.setButtonInactive(this._toggle, !toggleWorks);
+        UiHelpers.setDimmed(this.actor, !toggleWorks);
+        if (!this._arrow)
+            return;
+        const arrowWorks = this._available && this._hasArrowAction;
+        UiHelpers.setButtonInactive(this._arrow, !arrowWorks);
+        UiHelpers.setDimmed(this._arrow, toggleWorks && !arrowWorks);
     }
 
     setChecked(checked) {

@@ -23,6 +23,17 @@ usage() {
     exit 2
 }
 
+# list_entries splits on "', '": an entry holding a quote or a backslash would be cut
+# wrongly, so such a list is refused before anything is read or written. Runs in the main
+# shell: a fail() inside list_entries' process substitution would not stop the script.
+require_parseable_list() {
+    local current
+    current=$(gsettings get "$SCHEMA" "$KEY")
+    if [[ "$current" == *\\* || "$current" =~ [^\[,\ ]\'[^,\]] ]]; then
+        fail "unexpected character in $KEY, nothing changed"
+    fi
+}
+
 # One entry per line, without quotes. Entries read 'panelN:zone:order:uuid:instanceId'.
 list_entries() {
     local current
@@ -129,6 +140,7 @@ fi
 action="$1"
 uuid="$2"
 require_valid_uuid applet
+require_parseable_list
 
 case "$action" in
     enable) enable_applet ;;

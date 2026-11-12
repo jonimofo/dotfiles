@@ -12,7 +12,7 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 ## What scale-wheel-switch does
 
 In Scale (hot corner or Super), from top to bottom: a search field, a strip with one
-thumbnail per workspace, then Scale's windows.
+thumbnail per workspace, both centered, then Scale's windows.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,

@@ -20,7 +20,7 @@ Out of scope: Expo, other monitors, adding, removing or renaming workspaces, any
 
 ```
 +------------------------------------------+
-| [ws1*]  [ws2 ]  [ws3 ]  [ws4 ]           |
+|     [ws1*]  [ws2 ]  [ws3 ]  [ws4 ]       |
 |------------------------------------------|
 |                                          |
 |   [win A]        [win B]                 |
@@ -32,6 +32,8 @@ Out of scope: Expo, other monitors, adding, removing or renaming workspaces, any
  wheel -> big view slides, * follows
  click [ws2] -> switch, Scale stays open
 ```
+
+The thumbnails are centered in the full-width band, under the search field (PR #26).
 
 ### 2. Thumbnail content
 

@@ -13,6 +13,7 @@ are moved by drag and drop, applications are launched by typing.
 
 Out of scope: Expo, other monitors, adding, removing or renaming workspaces, any file under
 `/usr/share/cinnamon`, publishing on cinnamon-spices.
+Other monitors came later: [`2026-11-12-cinnamon-scale-second-screen.md`](2026-11-12-cinnamon-scale-second-screen.md).
 
 ## Validated mockups
 
@@ -88,6 +89,7 @@ The "Enter -> launch first" line is an annotation, not text in the interface.
 ## Decisions
 
 1. The header is drawn on the primary monitor only, where Scale itself draws.
+   Strips on every screen came later: [`2026-11-12-cinnamon-scale-second-screen.md`](2026-11-12-cinnamon-scale-second-screen.md).
 2. After a drop the user stays on the current workspace; the window leaves the big view and
    appears in the target thumbnail.
 3. A click on a thumbnail switches workspace and keeps Scale open.
@@ -111,6 +113,7 @@ The "Enter -> launch first" line is an annotation, not text in the interface.
 | `appSearch.js` | Search field, application index and ranking, result grid, key handling |
 | `workspaceStrip.js` | Strip, thumbnails, grid layout, click, drop target, big view inset |
 | `windowDrag.js` | Makes Scale's window clones draggable |
+| `monitorDrop.js` | Drop target on each screen's window area, moves a window to that screen |
 | `superKey.js` | Super hotkey |
 | `uiHelpers.js` | Shared constants, click swallowing, natural sizes, modal checks |
 | `stylesheet.css` | Colors, paddings, sizes |

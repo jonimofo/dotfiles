@@ -1,14 +1,29 @@
 #!/bin/bash
 #
-# Toggle one dropdown Nemo window (bound to Super+E in Cinnamon).
+# Toggle one dropdown Nemo window.
 # First run opens a Nemo window on $HOME, next run hides it, next run shows
 # the same window again on the current workspace. The window is placed at the
 # top of the monitor under the pointer, centered horizontally.
 #
-# Nemo is a single-instance application: a `nemo` command hands its request to
-# the running process and exits, so the new window never belongs to the
-# launched pid. tdrop waits for a window of that pid and times out, which is
-# why this script tracks the window itself instead of using tdrop.
+# Keybinding: Cinnamon custom shortcut "Dropdown Nemo", binding Super+E,
+# command /home/bgi/Repos/dotfiles/scripts/nemo_dropdown_toggle.sh
+# (System Settings > Keyboard > Shortcuts > Custom Shortcuts).
+#
+# Needs: xdotool xprop xwininfo xrandr flock setsid python3 with python3-gi
+# (GdkX11). Optional: notify-send, which shows errors as a notification,
+# since a keybinding's stderr is never seen.
+#
+# Why not tdrop: Nemo is a single-instance application. A `nemo` command
+# hands its request to the running process and exits, so the new window never
+# belongs to the launched pid; tdrop waits for a window of that pid and times
+# out. This script tracks its own window instead.
+#
+# Limitation: the dropdown is the first new normal Nemo window that appears
+# after launching nemo. Another Nemo window opened in the same second, such as
+# a file operation window, can be adopted instead. The title cannot narrow it:
+# Nemo shows "nemo" until the folder loads, and the folder name is localized.
+#
+# Tests: scripts/nemo_dropdown_toggle-test.sh
 
 set -euo pipefail
 
@@ -23,8 +38,9 @@ readonly NEMO_WM_CLASS='WM_CLASS(STRING) = "nemo", "Nemo"'
 readonly MARK_PROPERTY=NEMO_DROPDOWN
 readonly MARK_VALUE=1
 readonly STICKY_DESKTOP=4294967295
+readonly NOTIFY_TITLE="Dropdown Nemo"
 
-if [[ -n ${XDG_RUNTIME_DIR:-} ]]; then
+if [[ ${XDG_RUNTIME_DIR:-} == /* ]]; then
     readonly STATE_DIR="$XDG_RUNTIME_DIR/nemo-dropdown"
 else
     readonly STATE_DIR="/tmp/nemo-dropdown-$UID"
@@ -34,18 +50,40 @@ readonly LOCK_FILE="$STATE_DIR/lock"
 
 readonly SCRIPT_NAME="${0##*/}"
 
+notify_error() {
+    local message=$1
+    if ! command -v notify-send >/dev/null 2>&1; then
+        return 0
+    fi
+    if ! notify-send --urgency=critical "$NOTIFY_TITLE" "$message"; then
+        echo "$SCRIPT_NAME: notify-send failed" >&2
+    fi
+}
+
 die() {
     echo "$SCRIPT_NAME: $*" >&2
+    notify_error "$*"
     exit 1
 }
 
+require_valid_timeout() {
+    if [[ ! $TIMEOUT_SECONDS =~ ^[1-9][0-9]*$ ]]; then
+        die "NEMO_DROPDOWN_TIMEOUT_SECONDS must be a positive integer, got '$TIMEOUT_SECONDS'"
+    fi
+}
+
+# require_version only checks that the GdkX11 typelib exists, at about half
+# the cost of importing it on every key press.
 require_commands() {
     local cmd
-    for cmd in nemo xdotool xprop xwininfo xrandr flock setsid; do
+    for cmd in nemo xdotool xprop xwininfo xrandr flock setsid python3; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             die "$cmd is not installed"
         fi
     done
+    if ! python3 -I -c 'import gi; gi.require_version("GdkX11", "3.0")' 2>/dev/null; then
+        die "python3-gi with GdkX11 3.0 is not installed"
+    fi
 }
 
 # Prints the decimal ids of the windows managed by the window manager.
@@ -68,37 +106,28 @@ is_managed() {
     is_in_list "$1" "$(managed_window_ids)"
 }
 
-is_unmanaged() {
-    ! is_managed "$1"
-}
-
 window_property() {
     local wid=$1 property=$2
     xprop -id "$wid" "$property" 2>/dev/null
 }
 
+# property_matches <wid> <property> <glob matched against xprop's output line>
+property_matches() {
+    local wid=$1 property=$2 pattern=$3 value
+    if ! value=$(window_property "$wid" "$property"); then
+        return 1
+    fi
+    # shellcheck disable=SC2053 # the pattern is a glob on purpose
+    [[ $value == $pattern ]]
+}
+
+has_wm_state() {
+    local wid=$1 state=$2
+    property_matches "$wid" _NET_WM_STATE "*$state*"
+}
+
 is_nemo_window() {
-    local wid=$1 class
-    if ! class=$(window_property "$wid" WM_CLASS); then
-        return 1
-    fi
-    [[ $class == "$NEMO_WM_CLASS" ]]
-}
-
-is_normal_window() {
-    local wid=$1 type
-    if ! type=$(window_property "$wid" _NET_WM_WINDOW_TYPE); then
-        return 1
-    fi
-    [[ $type == *_NET_WM_WINDOW_TYPE_NORMAL* ]]
-}
-
-has_dropdown_mark() {
-    local wid=$1 mark
-    if ! mark=$(window_property "$wid" "$MARK_PROPERTY"); then
-        return 1
-    fi
-    [[ $mark == "$MARK_PROPERTY(STRING) = \"$MARK_VALUE\"" ]]
+    property_matches "$1" WM_CLASS "$NEMO_WM_CLASS"
 }
 
 # X window ids are reused: a saved id counts only if the window still carries
@@ -111,7 +140,7 @@ is_dropdown_window() {
     if ! is_nemo_window "$wid"; then
         return 1
     fi
-    has_dropdown_mark "$wid"
+    property_matches "$wid" "$MARK_PROPERTY" "$MARK_PROPERTY(STRING) = \"$MARK_VALUE\""
 }
 
 mark_dropdown_window() {
@@ -135,12 +164,6 @@ window_desktop() {
     fi
 }
 
-is_minimized() {
-    local wid=$1 state
-    state=$(window_property "$wid" _NET_WM_STATE || true)
-    [[ $state == *_NET_WM_STATE_HIDDEN* ]]
-}
-
 # Muffin keeps the windows of other workspaces mapped (IsViewable), so
 # viewable alone does not mean the user can see the window.
 is_shown_here() {
@@ -148,7 +171,7 @@ is_shown_here() {
     if ! is_viewable "$wid"; then
         return 1
     fi
-    if is_minimized "$wid"; then
+    if has_wm_state "$wid" _NET_WM_STATE_HIDDEN; then
         return 1
     fi
     desktop=$(window_desktop "$wid")
@@ -160,12 +183,19 @@ now_microseconds() {
     echo "${EPOCHREALTIME/[.,]/}"
 }
 
-# Runs "$@" until it succeeds or TIMEOUT_SECONDS elapse.
-wait_until() {
-    local deadline
+# wait_for_status <0|1> <command...>: runs the command until its status is
+# success (0) or failure (1), for at most TIMEOUT_SECONDS.
+wait_for_status() {
+    local wanted=$1 deadline status
+    shift
     deadline=$(($(now_microseconds) + TIMEOUT_SECONDS * MICROSECONDS_PER_SECOND))
     while true; do
         if "$@"; then
+            status=0
+        else
+            status=1
+        fi
+        if ((status == wanted)); then
             return 0
         fi
         if (($(now_microseconds) >= deadline)); then
@@ -173,6 +203,14 @@ wait_until() {
         fi
         sleep "$POLL_SECONDS"
     done
+}
+
+wait_until() {
+    wait_for_status 0 "$@"
+}
+
+wait_while() {
+    wait_for_status 1 "$@"
 }
 
 # Prints "width height x y" of the monitor containing the pointer, or of the
@@ -183,6 +221,9 @@ pointer_monitor_geometry() {
     location=$(xdotool getmouselocation --shell)
     pointer_x=$(sed -n 's/^X=//p' <<<"$location")
     pointer_y=$(sed -n 's/^Y=//p' <<<"$location")
+    if [[ ! $pointer_x =~ ^-?[0-9]+$ || ! $pointer_y =~ ^-?[0-9]+$ ]]; then
+        die "unexpected pointer location from 'xdotool getmouselocation': $location"
+    fi
     monitors=$(xrandr --listmonitors)
     while read -r line; do
         if [[ ! $line =~ ([0-9]+)/[0-9]+x([0-9]+)/[0-9]+\+(-?[0-9]+)\+(-?[0-9]+) ]]; then
@@ -232,16 +273,6 @@ place_on_pointer_monitor() {
     xdotool windowmove "$wid" $((monitor_x + (monitor_width - outer_width) / 2)) "$monitor_y"
 }
 
-is_maximized() {
-    local wid=$1 state
-    state=$(window_property "$wid" _NET_WM_STATE || true)
-    [[ $state == *_NET_WM_STATE_MAXIMIZED_* ]]
-}
-
-is_not_maximized() {
-    ! is_maximized "$1"
-}
-
 # GTK maximizes the window again each time it is mapped, and the WM ignores
 # a resize of a maximized window. This xdotool has no windowstate command and
 # wmctrl is not installed, so the request goes through GDK (python3-gi).
@@ -257,9 +288,9 @@ GdkX11.X11Window.foreign_new_for_display(display, int(sys.argv[1])).unmaximize()
 display.flush()
 EOF
     then
-        die "could not ask the WM to unmaximize window $wid (needs python3-gi)"
+        die "could not ask the WM to unmaximize window $wid"
     fi
-    if ! wait_until is_not_maximized "$wid"; then
+    if ! wait_while has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
         die "window $wid is still maximized ${TIMEOUT_SECONDS}s after asking to unmaximize it"
     fi
 }
@@ -267,7 +298,7 @@ EOF
 bring_here() {
     local wid=$1
     xdotool set_desktop_for_window "$wid" "$(xdotool get_desktop)"
-    if is_maximized "$wid"; then
+    if has_wm_state "$wid" _NET_WM_STATE_MAXIMIZED_; then
         unmaximize_window "$wid"
     fi
     place_on_pointer_monitor "$wid"
@@ -284,7 +315,7 @@ show_dropdown() {
     local wid=$1
     if is_managed "$wid"; then
         xdotool windowunmap "$wid"
-        if ! wait_until is_unmanaged "$wid"; then
+        if ! wait_while is_managed "$wid"; then
             die "window $wid is still managed ${TIMEOUT_SECONDS}s after unmapping it"
         fi
     fi
@@ -295,14 +326,17 @@ show_dropdown() {
     bring_here "$wid"
 }
 
-# Prints the id of a Nemo window managed now but absent from $1.
+# Prints the id of a normal, viewable Nemo window managed now but absent from $1.
 find_new_nemo_window() {
     local known_ids=$1 wid
     for wid in $(managed_window_ids); do
         if is_in_list "$wid" "$known_ids"; then
             continue
         fi
-        if is_nemo_window "$wid" && is_normal_window "$wid" && is_viewable "$wid"; then
+        if ! is_nemo_window "$wid"; then
+            continue
+        fi
+        if property_matches "$wid" _NET_WM_WINDOW_TYPE "*_NET_WM_WINDOW_TYPE_NORMAL*" && is_viewable "$wid"; then
             echo "$wid"
             return 0
         fi
@@ -325,26 +359,26 @@ create_dropdown() {
 }
 
 # The /tmp fallback is shared by all users: refuse a directory someone else
-# created there, or a symlink.
+# created there, or a symlink in place of the directory or its files.
 ensure_state_dir() {
-    if [[ ! -e $STATE_DIR ]]; then
+    local file
+    if [[ ! -e $STATE_DIR && ! -L $STATE_DIR ]]; then
         mkdir -m 700 "$STATE_DIR"
     fi
-    if [[ -L $STATE_DIR || ! -O $STATE_DIR ]]; then
-        die "state directory $STATE_DIR is a symlink or not owned by $(id -un)"
+    if [[ -L $STATE_DIR || ! -d $STATE_DIR || ! -O $STATE_DIR ]]; then
+        die "state directory $STATE_DIR is a symlink, not a directory, or not owned by $(id -un)"
     fi
     chmod 700 "$STATE_DIR"
+    for file in "$LOCK_FILE" "$WID_FILE"; do
+        if [[ -L $file ]]; then
+            die "refusing to use $file: it is a symlink"
+        fi
+    done
 }
 
 saved_window_id() {
     if [[ -f $WID_FILE ]]; then
         cat "$WID_FILE"
-    fi
-}
-
-require_valid_timeout() {
-    if [[ ! $TIMEOUT_SECONDS =~ ^[1-9][0-9]*$ ]]; then
-        die "NEMO_DROPDOWN_TIMEOUT_SECONDS must be a positive integer, got '$TIMEOUT_SECONDS'"
     fi
 }
 

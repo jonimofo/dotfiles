@@ -37,6 +37,54 @@ Panel:  [ wifi bt vpn vol ]   one button
 VPN profiles, NordVPN countries, profiles.
 ```
 
+## Settings dialog (step 5)
+
+Answer 1: "Everything visible (Recommended)": four tabs: tiles, sliders, header buttons,
+panel icons. Each row has a Show checkbox and can be moved. Answer 2: "No extra tab for now
+(Recommended)": the dialog only does show, hide and reorder. The unchecked VPN row below is
+an illustration of a hidden row, not a default: the defaults show everything, in today's order.
+
+```
++-- Quick Settings ------------------------------+
+| [ Tiles ] [ Sliders ] [ Header ] [ Panel ]      |
+|                                                 |
+|  Show   Tile                                    |
+|  [x]    Wi-Fi                                   |
+|  [x]    Bluetooth                               |
+|  [ ]    VPN                                     |
+|  [x]    NordVPN                                 |
+|  [x]    Power profile                           |
+|  [x]    Night Light                             |
+|  [x]    Dark style                              |
+|  [x]    Do Not Disturb                          |
+|  [x]    Keep awake                              |
+|  [x]    Mic mute                                |
+|                    [ Move up ]  [ Move down ]   |
++-------------------------------------------------+
+Sliders tab: Sound, Microphone, Brightness
+Header tab:  Battery, Screenshot, Settings,
+             Lock, Power
+Panel tab:   Wi-Fi, Bluetooth, VPN, Volume icons
+```
+
+Decisions:
+
+- Native applet settings (`settings-schema.json`, `list` type, columns Show and name). The
+  name column maps each displayed name to a stored id (`options`), so no id column shows.
+- The schema is generated from the ordered declarations in `constants.js`
+  (`scripts/cinnamon-quick-settings-schema.js`); a test fails when they differ.
+- The stock list widget shows Add, Remove and Edit next to the moves and can only hide all
+  buttons at once (`show-buttons`). They stay, made harmless: unknown ids ignored, a repeated
+  id keeps its first row, a declared element missing from the list comes back at the end, shown.
+- Hidden tiles reflow two per row; an odd last tile sits on the left at normal width. Hidden
+  slider rows leave no gap. Any layout change closes an open in-place list.
+- Header: the battery stays on the left, the dialog's order applies among the buttons; with
+  nothing shown the header line disappears.
+- Panel: a checkbox can hide an icon, never force one on; with no icon left, one fallback
+  icon keeps the button on the panel.
+- A hidden Brightness row skips the ddcutil read when the menu opens; a hidden NordVPN tile
+  skips the `nordvpn status` call. The other backends keep running (event driven, shared).
+
 ## Slider rows reordered and renamed (after step 3)
 
 Request: "first show Sound, second Microphone, 3rd brigthness". Answer: "Reorder and rename

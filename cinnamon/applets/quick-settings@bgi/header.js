@@ -5,11 +5,16 @@ const Tooltips = imports.ui.tooltips;
 const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
 const BatteryModel = require('./batteryModel');
+const LayoutModel = require('./layoutModel');
 
 // Top line of the menu: battery level on the left, round action buttons on the right.
+// applyLayout() picks the shown elements and the buttons' order; the line disappears when
+// nothing in it shows.
 class Header {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-header' });
+        this._ids = [];
+        this._batteryPresent = false;
 
         this._battery = new St.BoxLayout({
             style_class: 'quick-settings-battery',
@@ -30,6 +35,7 @@ class Header {
         this._buttons = {};
         this._tooltips = [];
         const buttons = new St.BoxLayout({ style_class: 'quick-settings-header-buttons' });
+        this._buttonsBox = buttons;
         for (const definition of Constants.HEADER_BUTTONS) {
             const button = new St.Button({
                 child: UiHelpers.symbolicIcon(definition.icon, 'quick-settings-header-icon'),
@@ -39,10 +45,24 @@ class Header {
             this._tooltips.push(new Tooltips.Tooltip(button, definition.label));
             UiHelpers.setButtonInactive(button, true);
             UiHelpers.setDimmed(button, true);
-            buttons.add_child(button);
             this._buttons[definition.id] = button;
         }
         this.actor.add_child(buttons);
+        this.applyLayout([Constants.HEADER_BATTERY_ID, ...Constants.HEADER_BUTTONS.map(item => item.id)]);
+    }
+
+    // @ids: the header elements to show; the buttons take the order of @ids.
+    applyLayout(ids) {
+        this._ids = ids;
+        for (const button of Object.values(this._buttons)) {
+            if (button.get_parent())
+                this._buttonsBox.remove_child(button);
+        }
+        for (const id of ids) {
+            if (this._buttons[id])
+                this._buttonsBox.add_child(this._buttons[id]);
+        }
+        this._syncVisibility();
     }
 
     // @id: a HEADER_BUTTONS id.
@@ -55,11 +75,18 @@ class Header {
 
     // @battery: from BatteryModel.pickBattery(), null hides the figure.
     setBattery(battery) {
-        this._battery.visible = battery !== null;
+        this._batteryPresent = battery !== null;
+        this._syncVisibility();
         if (!battery)
             return;
         this._batteryIcon.gicon = Gio.icon_new_for_string(battery.iconString);
         this._batteryLabel.text = BatteryModel.label(battery.percent);
+    }
+
+    _syncVisibility() {
+        const { battery, line } = LayoutModel.headerVisibility(this._ids, Constants.HEADER_BATTERY_ID, this._batteryPresent);
+        this._battery.visible = battery;
+        this.actor.visible = line;
     }
 
     destroy() {

@@ -2,7 +2,8 @@
 // click on the same arrow closes it. The view draws the list; this file only decides.
 //
 // A list registers with:
-//   anchor: what the view puts the list under (a tile row or a slider row)
+//   anchor(): what the view puts the list under (a tile row or a slider row), asked at
+//             each opening since the rows are rebuilt when the layout changes
 //   build(): { title, items: [{ label, iconName, trailingIconName, active, secure, onActivate }], settings }
 //            settings is { label, onActivate } or null
 //   onExpanded(bool): flips the arrow
@@ -29,7 +30,7 @@ class ListHost {
             return;
         this.openKey = key;
         list.onExpanded(true);
-        this._view.show(list.build(), list.anchor);
+        this._view.show(list.build(), list.anchor());
         if (list.onOpen)
             list.onOpen();
     }

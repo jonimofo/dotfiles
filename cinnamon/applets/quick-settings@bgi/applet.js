@@ -27,6 +27,8 @@ const BooleanSetting = require('./booleanSetting');
 const KeepAwake = require('./keepAwake');
 const PowerProfiles = require('./powerProfiles');
 const PowerProfileModel = require('./powerProfileModel');
+const Settings = imports.ui.settings;
+const LayoutModel = require('./layoutModel');
 
 class QuickSettingsApplet extends Applet.Applet {
     constructor(metadata, orientation, panelHeight, instanceId) {
@@ -45,8 +47,11 @@ class QuickSettingsApplet extends Applet.Applet {
         this.menu.connect('open-state-changed', (menu, open) => {
             if (open) {
                 this._content.refresh();
-                this._brightness.refresh();
-                this._nordvpn.refresh();
+                // A hidden row or tile costs nothing: no ddcutil read, no nordvpn call.
+                if (this._isShown(Constants.LAYOUT_KEYS.sliders, 'monitors'))
+                    this._brightness.refresh();
+                if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'nordvpn'))
+                    this._nordvpn.refresh();
             } else {
                 this._content.lists.close();
             }
@@ -69,6 +74,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpKeepAwake();
         this._setUpMicMute();
         this._setUpHeader();
+        this._setUpLayoutSettings(metadata.uuid, instanceId);
     }
 
     on_applet_added_to_panel() {
@@ -84,6 +90,7 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     on_applet_removed_from_panel() {
+        this.settings.finalize();
         Main.layoutManager.disconnect(this._monitorsChangedId);
         this._brightness.destroy();
         this._volume.destroy();
@@ -101,8 +108,8 @@ class QuickSettingsApplet extends Applet.Applet {
         this.menu.destroy();
     }
 
-    // @owner: the tile or slider row whose arrow opens the list; @anchor: the row the list
-    // goes under.
+    // @owner: the tile or slider row whose arrow opens the list; @anchor(): the row the list
+    // goes under, asked at each opening (the rows change with the layout).
     _registerList(key, owner, anchor, build, onOpen = null) {
         this._content.lists.register(key, {
             anchor,
@@ -121,7 +128,7 @@ class QuickSettingsApplet extends Applet.Applet {
         const tile = this._content.tiles.wifi;
         this._wifi = new WifiState.WifiState(() => this._syncWifi());
         tile.setOnToggle(() => this._wifi.toggle());
-        this._registerList('wifi', tile, this._tileAnchor('wifi'),
+        this._registerList('wifi', tile, () => this._tileAnchor('wifi'),
             () => ListSpecs.wifiSpec(this._wifi.networks, {
                 connect: network => this._wifi.connect(network),
                 openSettings: () => this._openSettings(Constants.SETTINGS_COMMANDS.network),
@@ -146,7 +153,7 @@ class QuickSettingsApplet extends Applet.Applet {
         const tile = this._content.tiles.bluetooth;
         this._bluetooth = new Bluetooth.Bluetooth(() => this._syncBluetooth());
         tile.setOnToggle(() => this._bluetooth.toggle());
-        this._registerList('bluetooth', tile, this._tileAnchor('bluetooth'),
+        this._registerList('bluetooth', tile, () => this._tileAnchor('bluetooth'),
             () => ListSpecs.bluetoothSpec(this._bluetooth.summary, {
                 toggleDevice: device => this._bluetooth.toggleDevice(device),
                 openSettings: () => this._openSettings(Constants.SETTINGS_COMMANDS.bluetooth),
@@ -169,7 +176,7 @@ class QuickSettingsApplet extends Applet.Applet {
         const tile = this._content.tiles.vpn;
         this._vpn = new VpnState.VpnState(() => this._syncVpn());
         tile.setOnToggle(() => this._vpn.toggle());
-        this._registerList('vpn', tile, this._tileAnchor('vpn'),
+        this._registerList('vpn', tile, () => this._tileAnchor('vpn'),
             () => ListSpecs.vpnSpec(this._vpn.summary, {
                 toggleProfile: profile => this._vpn.toggleProfile(profile),
                 openSettings: () => this._openSettings(Constants.SETTINGS_COMMANDS.network),
@@ -192,7 +199,7 @@ class QuickSettingsApplet extends Applet.Applet {
         const tile = this._content.tiles.nordvpn;
         this._nordvpn = new Nordvpn.Nordvpn(Subprocess.runCommand, () => this._syncNordvpn());
         tile.setOnToggle(() => this._nordvpn.toggle());
-        this._registerList('nordvpn', tile, this._tileAnchor('nordvpn'),
+        this._registerList('nordvpn', tile, () => this._tileAnchor('nordvpn'),
             () => ListSpecs.nordvpnSpec(this._nordvpn.status, this._nordvpn.countries, {
                 connectTo: country => this._nordvpn.connectTo(country),
             }),
@@ -225,7 +232,7 @@ class QuickSettingsApplet extends Applet.Applet {
         const tile = this._content.tiles['power-profile'];
         this._powerProfiles = new PowerProfiles.PowerProfiles(() => this._syncPowerProfile());
         tile.setOnToggle(() => this._powerProfiles.toggle());
-        this._registerList('power-profile', tile, this._tileAnchor('power-profile'),
+        this._registerList('power-profile', tile, () => this._tileAnchor('power-profile'),
             () => ListSpecs.powerProfileSpec(this._powerProfiles.profiles, this._powerProfiles.active, {
                 select: profile => this._powerProfiles.select(profile),
                 openSettings: () => this._openSettings(Constants.POWER_SETTINGS_COMMAND),
@@ -296,6 +303,39 @@ class QuickSettingsApplet extends Applet.Applet {
         header.setOnButton('power', () => this._closeThen(() => this._session().ShutdownRemote()));
     }
 
+    // The settings dialog's four lists (settings-schema.json, generated from constants.js),
+    // applied live on every change.
+    _setUpLayoutSettings(uuid, instanceId) {
+        this._layout = {};
+        this.settings = new Settings.AppletSettings(this._layout, uuid, instanceId);
+        for (const key of Object.values(Constants.LAYOUT_KEYS))
+            this.settings.bind(key, key, () => this._applyLayout());
+        this._applyLayout();
+    }
+
+    _declared(key) {
+        return {
+            [Constants.LAYOUT_KEYS.tiles]: Constants.TILES,
+            [Constants.LAYOUT_KEYS.sliders]: Constants.SLIDERS,
+            [Constants.LAYOUT_KEYS.header]: Constants.HEADER_ITEMS,
+            [Constants.LAYOUT_KEYS.panelIcons]: Constants.PANEL_ICON_ITEMS,
+        }[key];
+    }
+
+    _visible(key) {
+        return LayoutModel.visibleIds(this._layout ? this._layout[key] : null, this._declared(key));
+    }
+
+    _isShown(key, id) {
+        return this._visible(key).includes(id);
+    }
+
+    _applyLayout() {
+        this._content.applyLayout(this._visible(Constants.LAYOUT_KEYS.sliders), this._visible(Constants.LAYOUT_KEYS.tiles));
+        this._content.header.applyLayout(this._visible(Constants.LAYOUT_KEYS.header));
+        this._panelIcons.applyLayout(this._visible(Constants.LAYOUT_KEYS.panelIcons));
+    }
+
     _closeThen(action) {
         this.menu.close(false);
         action();
@@ -356,7 +396,7 @@ class QuickSettingsApplet extends Applet.Applet {
         output.onLiveChange(value => this._volume.output.set(value));
         input.onLiveChange(value => this._volume.input.set(value));
         for (const [kind, row] of [['output', output], ['input', input]]) {
-            this._registerList(kind, row, row.actor,
+            this._registerList(kind, row, () => row.actor,
                 () => ListSpecs.deviceSpec(kind, this._volume.devices(kind), {
                     selectDevice: id => this._volume.selectDevice(kind, id),
                     openSettings: () => this._openSettings(Constants.SETTINGS_COMMANDS.sound),

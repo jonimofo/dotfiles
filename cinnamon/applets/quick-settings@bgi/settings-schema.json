@@ -1,0 +1,261 @@
+{
+    "layout": {
+        "type": "layout",
+        "pages": [
+            "tiles-page",
+            "sliders-page",
+            "header-page",
+            "panel-icons-page"
+        ],
+        "tiles-page": {
+            "type": "page",
+            "title": "Tiles",
+            "sections": [
+                "tiles-section"
+            ]
+        },
+        "tiles-section": {
+            "type": "section",
+            "title": "",
+            "keys": [
+                "tiles"
+            ]
+        },
+        "sliders-page": {
+            "type": "page",
+            "title": "Sliders",
+            "sections": [
+                "sliders-section"
+            ]
+        },
+        "sliders-section": {
+            "type": "section",
+            "title": "",
+            "keys": [
+                "sliders"
+            ]
+        },
+        "header-page": {
+            "type": "page",
+            "title": "Header",
+            "sections": [
+                "header-section"
+            ]
+        },
+        "header-section": {
+            "type": "section",
+            "title": "",
+            "keys": [
+                "header"
+            ]
+        },
+        "panel-icons-page": {
+            "type": "page",
+            "title": "Panel",
+            "sections": [
+                "panel-icons-section"
+            ]
+        },
+        "panel-icons-section": {
+            "type": "section",
+            "title": "",
+            "keys": [
+                "panel-icons"
+            ]
+        }
+    },
+    "tiles": {
+        "type": "list",
+        "description": "Tile",
+        "height": 340,
+        "columns": [
+            {
+                "id": "show",
+                "title": "Show",
+                "type": "boolean"
+            },
+            {
+                "id": "id",
+                "title": "Tile",
+                "type": "string",
+                "options": {
+                    "Wi-Fi": "wifi",
+                    "Bluetooth": "bluetooth",
+                    "VPN": "vpn",
+                    "NordVPN": "nordvpn",
+                    "Power profile": "power-profile",
+                    "Night Light": "night-light",
+                    "Dark style": "dark-style",
+                    "Do Not Disturb": "do-not-disturb",
+                    "Keep awake": "keep-awake",
+                    "Mic mute": "mic-mute"
+                }
+            }
+        ],
+        "default": [
+            {
+                "show": true,
+                "id": "wifi"
+            },
+            {
+                "show": true,
+                "id": "bluetooth"
+            },
+            {
+                "show": true,
+                "id": "vpn"
+            },
+            {
+                "show": true,
+                "id": "nordvpn"
+            },
+            {
+                "show": true,
+                "id": "power-profile"
+            },
+            {
+                "show": true,
+                "id": "night-light"
+            },
+            {
+                "show": true,
+                "id": "dark-style"
+            },
+            {
+                "show": true,
+                "id": "do-not-disturb"
+            },
+            {
+                "show": true,
+                "id": "keep-awake"
+            },
+            {
+                "show": true,
+                "id": "mic-mute"
+            }
+        ]
+    },
+    "sliders": {
+        "type": "list",
+        "description": "Slider",
+        "height": 340,
+        "columns": [
+            {
+                "id": "show",
+                "title": "Show",
+                "type": "boolean"
+            },
+            {
+                "id": "id",
+                "title": "Slider",
+                "type": "string",
+                "options": {
+                    "Sound": "output",
+                    "Microphone": "input",
+                    "Brightness": "monitors"
+                }
+            }
+        ],
+        "default": [
+            {
+                "show": true,
+                "id": "output"
+            },
+            {
+                "show": true,
+                "id": "input"
+            },
+            {
+                "show": true,
+                "id": "monitors"
+            }
+        ]
+    },
+    "header": {
+        "type": "list",
+        "description": "Element",
+        "height": 340,
+        "columns": [
+            {
+                "id": "show",
+                "title": "Show",
+                "type": "boolean"
+            },
+            {
+                "id": "id",
+                "title": "Element",
+                "type": "string",
+                "options": {
+                    "Battery": "battery",
+                    "Screenshot": "screenshot",
+                    "Settings": "settings",
+                    "Lock": "lock",
+                    "Power": "power"
+                }
+            }
+        ],
+        "default": [
+            {
+                "show": true,
+                "id": "battery"
+            },
+            {
+                "show": true,
+                "id": "screenshot"
+            },
+            {
+                "show": true,
+                "id": "settings"
+            },
+            {
+                "show": true,
+                "id": "lock"
+            },
+            {
+                "show": true,
+                "id": "power"
+            }
+        ]
+    },
+    "panel-icons": {
+        "type": "list",
+        "description": "Icon",
+        "height": 340,
+        "columns": [
+            {
+                "id": "show",
+                "title": "Show",
+                "type": "boolean"
+            },
+            {
+                "id": "id",
+                "title": "Icon",
+                "type": "string",
+                "options": {
+                    "Wi-Fi": "wifi",
+                    "Bluetooth": "bluetooth",
+                    "VPN": "vpn",
+                    "Volume": "volume"
+                }
+            }
+        ],
+        "default": [
+            {
+                "show": true,
+                "id": "wifi"
+            },
+            {
+                "show": true,
+                "id": "bluetooth"
+            },
+            {
+                "show": true,
+                "id": "vpn"
+            },
+            {
+                "show": true,
+                "id": "volume"
+            }
+        ]
+    }
+}

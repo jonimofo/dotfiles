@@ -1,7 +1,7 @@
 #!/bin/bash
 # Static checks of the Cinnamon extensions and applets under cinnamon/extensions/ and
-# cinnamon/applets/: JavaScript syntax, metadata.json validity, and every module reference
-# between the files of one extension or applet.
+# cinnamon/applets/: JavaScript syntax, metadata.json and settings-schema.json validity,
+# and every module reference between the files of one extension or applet.
 # Usage: scripts/cinnamon-extension-check.sh (from any directory). Needs node and jq.
 set -euo pipefail
 
@@ -43,6 +43,17 @@ check_metadata() {
     fi
     if ! jq empty "$metadata_file" 2>/dev/null; then
         fail "$metadata_file: invalid JSON"
+    fi
+}
+
+# Optional: an applet or extension without settings has no settings-schema.json.
+check_settings_schema() {
+    local schema_file="$1"
+    if [[ ! -f "$schema_file" ]]; then
+        return
+    fi
+    if ! jq empty "$schema_file" 2>/dev/null; then
+        fail "$schema_file: invalid JSON"
     fi
 }
 
@@ -91,6 +102,7 @@ check_extension() {
     local extension_dir="$1"
     local js_file
     check_metadata "$extension_dir/metadata.json"
+    check_settings_schema "$extension_dir/settings-schema.json"
     for js_file in "$extension_dir"/*.js; do
         if [[ ! -f "$js_file" ]]; then
             continue

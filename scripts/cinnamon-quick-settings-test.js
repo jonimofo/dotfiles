@@ -296,7 +296,7 @@ function testListHost() {
     const host = new ListHost.ListHost(view);
     for (const key of ['wifi', 'bluetooth']) {
         host.register(key, {
-            anchor: `${key}-row`,
+            anchor: () => `${key}-row`,
             build: () => ({ title: key, items: [], settings: null }),
             onExpanded: value => {
                 expanded[key] = value;
@@ -517,6 +517,60 @@ function testMicMute() {
     input.destroy();
 }
 
+function testSchemaMatchesDeclarations() {
+    // Lets the test read the schema generator's functions without it printing.
+    globalThis.QUICK_SETTINGS_SCHEMA_AS_MODULE = true;
+    const generatorPath = `${GLib.path_get_dirname(fixturesRoot)}/cinnamon-quick-settings-schema.js`;
+    const generator = new Function(`${readText(generatorPath)}\nreturn { schemaText, buildSchema, loadConstants };`)();
+    const committed = readText(`${appletDir}/settings-schema.json`);
+    check('settings dialog: settings-schema.json equals the one generated from constants.js',
+        committed === generator.schemaText(appletDir));
+    const schema = JSON.parse(committed);
+    const Constants = load('./constants');
+    const tabs = schema.layout.pages.map(page => schema.layout[page].title);
+    check(`settings dialog: four tabs (${tabs})`, `${tabs}` === 'Tiles,Sliders,Header,Panel');
+    const groups = [
+        ['tiles', Constants.TILES], ['sliders', Constants.SLIDERS], ['header', Constants.HEADER_ITEMS], ['panel-icons', Constants.PANEL_ICON_ITEMS],
+    ];
+    for (const [key, declared] of groups) {
+        check(`settings dialog: ${key} defaults are every element shown, in declaration order`,
+            JSON.stringify(schema[key].default) === JSON.stringify(declared.map(item => ({ show: true, id: item.id }))));
+    }
+    check('settings dialog: rows show names, store ids',
+        schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
+    check('settings dialog: mockup names',
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute'
+        && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness'
+        && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
+        && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume');
+}
+
+function testLayoutModel() {
+    const Model = load('./layoutModel');
+    const declared = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+    check('layout: nothing stored gives the declaration order, all shown', `${Model.visibleIds(null, declared)}` === 'a,b,c,d');
+    check('layout: the stored order wins', `${Model.visibleIds(Model.defaults(declared).reverse(), declared)}` === 'd,c,b,a');
+    const hidden = [{ show: true, id: 'b' }, { show: false, id: 'a' }, { show: true, id: 'c' }, { show: true, id: 'd' }];
+    check('layout: a hidden row is left out', `${Model.visibleIds(hidden, declared)}` === 'b,c,d');
+    const messy = [{ show: true, id: 'zz' }, { show: true, id: 'c' }, { show: false, id: 'c' }, null, { show: true }, { show: true, id: 'a' }];
+    check(`layout: unknown ids ignored, first duplicate kept, missing appended shown (${Model.visibleIds(messy, declared)})`,
+        `${Model.visibleIds(messy, declared)}` === 'c,a,b,d');
+    check('layout: an emptied list brings everything back', `${Model.visibleIds([], declared)}` === 'a,b,c,d');
+    check('layout: odd count leaves one tile on the last row',
+        JSON.stringify(Model.rows(['a', 'b', 'c'], 2)) === '[["a","b"],["c"]]');
+    const all = { wifi: true, bluetooth: false, vpn: false, volume: true };
+    const shown = Model.panelIconVisibility(['volume', 'wifi'], all);
+    check('panel: allowed icons follow their state, no fallback', shown.visible.wifi && shown.visible.volume && !shown.fallback);
+    check('panel: the settings never force an icon on', !Model.panelIconVisibility(['bluetooth'], all).visible.bluetooth);
+    check('panel: every icon hidden gives the fallback', Model.panelIconVisibility([], all).fallback);
+    check('panel: allowed icons all absent by state gives the fallback', Model.panelIconVisibility(['bluetooth', 'vpn'], all).fallback);
+    const header = (ids, present) => JSON.stringify(Model.headerVisibility(ids, 'battery', present));
+    check('header: battery shows only when allowed and present',
+        header(['battery', 'lock'], true) === '{"battery":true,"line":true}' && header(['lock'], true) === '{"battery":false,"line":true}');
+    check('header: everything hidden removes the line', header([], true) === '{"battery":false,"line":false}');
+    check('header: battery alone on a machine without battery removes the line', header(['battery'], false) === '{"battery":false,"line":false}');
+}
+
 async function main() {
     await testDarkStyle();
     await testWifi();
@@ -535,6 +589,8 @@ async function main() {
     await testBooleanSettings();
     testBatteryModel();
     testMicMute();
+    testSchemaMatchesDeclarations();
+    testLayoutModel();
 }
 
 const loop = GLib.MainLoop.new(null, false);

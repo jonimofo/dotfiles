@@ -27,35 +27,51 @@ const PANEL_ICONS = {
     vpn: 'network-vpn-symbolic',
     volume: 'audio-volume-high-symbolic',
 };
+// Shown alone when every panel icon is hidden or absent, so the button never disappears.
+const PANEL_FALLBACK_ICON = 'preferences-system-symbolic';
 
-// Header buttons, left to right. The label is the tooltip and the accessible name.
+// Panel icons, left to right: this array is the only place that sets their order.
+const PANEL_ICON_ITEMS = [
+    { id: 'wifi', name: 'Wi-Fi' },
+    { id: 'bluetooth', name: 'Bluetooth' },
+    { id: 'vpn', name: 'VPN' },
+    { id: 'volume', name: 'Volume' },
+];
+
+// Header elements as the settings dialog lists them: the battery figure (always on the
+// left), then the buttons. Left to right: this array is the only place that sets the order.
+const HEADER_BATTERY_ID = 'battery';
+const HEADER_BATTERY_ITEM = { id: HEADER_BATTERY_ID, name: 'Battery' };
+
+// Header buttons, left to right. The label is the tooltip and the accessible name; the name
+// is what the settings dialog shows (as for every list below).
 const HEADER_BUTTONS = [
-    { id: 'screenshot', icon: 'applets-screenshooter-symbolic', label: 'Screenshot' },
-    { id: 'settings', icon: 'preferences-system-symbolic', label: 'System Settings' },
-    { id: 'lock', icon: 'system-lock-screen-symbolic', label: 'Lock Screen' },
-    { id: 'power', icon: 'system-shutdown-symbolic', label: 'Power Off...' },
+    { id: 'screenshot', icon: 'applets-screenshooter-symbolic', label: 'Screenshot', name: 'Screenshot' },
+    { id: 'settings', icon: 'preferences-system-symbolic', label: 'System Settings', name: 'Settings' },
+    { id: 'lock', icon: 'system-lock-screen-symbolic', label: 'Lock Screen', name: 'Lock' },
+    { id: 'power', icon: 'system-shutdown-symbolic', label: 'Power Off...', name: 'Power' },
 ];
 
 // Slider rows, top to bottom: this array is the only place that sets their order.
 const SLIDERS = [
-    { id: 'output', label: 'Sound', icon: 'audio-volume-high-symbolic', hasMenu: true },
-    { id: 'input', label: 'Microphone', icon: 'audio-input-microphone-symbolic', hasMenu: true },
-    { id: 'monitors', label: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
+    { id: 'output', label: 'Sound', name: 'Sound', icon: 'audio-volume-high-symbolic', hasMenu: true },
+    { id: 'input', label: 'Microphone', name: 'Microphone', icon: 'audio-input-microphone-symbolic', hasMenu: true },
+    { id: 'monitors', label: 'Brightness', name: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
 ];
 
 // Tiles, left to right then top to bottom, two per row: this array is the only place that
 // sets their order.
 const TILES = [
-    { id: 'wifi', label: 'Wi-Fi', icon: WIFI_ON_ICON, hasMenu: true },
-    { id: 'bluetooth', label: 'Bluetooth', icon: 'bluetooth-active-symbolic', hasMenu: true },
-    { id: 'vpn', label: 'VPN SEB', icon: 'network-vpn-symbolic', hasMenu: true },
-    { id: 'nordvpn', label: 'NordVPN', icon: 'globe-symbolic', hasMenu: true },
-    { id: 'power-profile', label: 'Balanced', icon: 'power-profile-balanced-symbolic', hasMenu: true },
-    { id: 'night-light', label: 'Night Light', icon: 'night-light-symbolic', hasMenu: false },
-    { id: 'dark-style', label: 'Dark style', icon: 'dark-mode-symbolic', hasMenu: false },
-    { id: 'do-not-disturb', label: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
-    { id: 'keep-awake', label: 'Keep awake', icon: 'my-caffeine-on-symbolic', hasMenu: false },
-    { id: 'mic-mute', label: 'Mic mute', icon: 'microphone-sensitivity-muted-symbolic', hasMenu: false },
+    { id: 'wifi', label: 'Wi-Fi', icon: WIFI_ON_ICON, name: 'Wi-Fi', hasMenu: true },
+    { id: 'bluetooth', label: 'Bluetooth', icon: 'bluetooth-active-symbolic', name: 'Bluetooth', hasMenu: true },
+    { id: 'vpn', label: 'VPN SEB', name: 'VPN', icon: 'network-vpn-symbolic', hasMenu: true },
+    { id: 'nordvpn', label: 'NordVPN', name: 'NordVPN', icon: 'globe-symbolic', hasMenu: true },
+    { id: 'power-profile', label: 'Balanced', name: 'Power profile', icon: 'power-profile-balanced-symbolic', hasMenu: true },
+    { id: 'night-light', label: 'Night Light', name: 'Night Light', icon: 'night-light-symbolic', hasMenu: false },
+    { id: 'dark-style', label: 'Dark style', name: 'Dark style', icon: 'dark-mode-symbolic', hasMenu: false },
+    { id: 'do-not-disturb', label: 'Do Not Disturb', name: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
+    { id: 'keep-awake', label: 'Keep awake', name: 'Keep awake', icon: 'my-caffeine-on-symbolic', hasMenu: false },
+    { id: 'mic-mute', label: 'Mic mute', name: 'Mic mute', icon: 'microphone-sensitivity-muted-symbolic', hasMenu: false },
 ];
 
 const TILES_PER_ROW = 2;
@@ -204,3 +220,14 @@ const SESSION_MANAGER_INTERFACE = 'org.gnome.SessionManager';
 // GSM_INHIBITOR_FLAG_IDLE, as INHIBIT_IDLE_FLAG in the stock inhibit applet.
 const INHIBIT_IDLE_FLAG = 8;
 const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming';
+
+// Settings dialog (settings-schema.json): one list per group, rows { show, id }.
+const LAYOUT_KEYS = {
+    tiles: 'tiles',
+    sliders: 'sliders',
+    header: 'header',
+    panelIcons: 'panel-icons',
+};
+
+// The header as the settings dialog lists it.
+const HEADER_ITEMS = [HEADER_BATTERY_ITEM, ...HEADER_BUTTONS];

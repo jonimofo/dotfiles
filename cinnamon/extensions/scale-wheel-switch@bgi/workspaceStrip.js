@@ -14,6 +14,8 @@ const THUMBNAIL_SCALE = 0.12;
 const DROP_TARGET_STYLE_CLASS = 'scale-strip-thumbnail-drop-target';
 // Stylesheet property of a thumbnail: free space kept around each window of its grid.
 const WINDOW_GAP_PROPERTY = '-scale-window-gap';
+// The whole monitor, given back to Scale's big view when the strip goes.
+const NO_INSETS = { top: 0, bottom: 0 };
 // Flags value of WorkspaceMonitor.positionWindows (its flag names are private to workspace.js).
 const POSITION_WITHOUT_ANIMATION = 0;
 
@@ -104,28 +106,11 @@ class WorkspaceThumbnail {
         this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
         this.actor._delegate = this;
         this._dropHover = new UiHelpers.DragHover(
+            this.actor,
             () => this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS),
             () => this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS));
         this.actor.connect('destroy', () => this._dropHover.leave());
-        this._pressed = false;
-        this.actor.connect('button-press-event', this._onButtonPress.bind(this));
-        this.actor.connect('button-release-event', this._onButtonRelease.bind(this));
-        this.actor.connect('leave-event', () => { this._pressed = false; });
-    }
-
-    // Stopped here on purpose: a press that reaches Scale's background starts its swipe,
-    // and a click there closes Scale when the workspace is empty.
-    _onButtonPress(actor, event) {
-        this._pressed = event.get_button() === Clutter.BUTTON_PRIMARY;
-        return Clutter.EVENT_STOP;
-    }
-
-    _onButtonRelease(actor, event) {
-        const isClick = this._pressed && event.get_button() === Clutter.BUTTON_PRIMARY;
-        this._pressed = false;
-        if (isClick)
-            this._activateWorkspace();
-        return Clutter.EVENT_STOP;
+        UiHelpers.connectClick(this.actor, [Clutter.BUTTON_PRIMARY], () => this._activateWorkspace());
     }
 
     _activateWorkspace() {
@@ -227,10 +212,10 @@ class WorkspaceThumbnail {
 
     // A window already on this workspace and this monitor has nowhere to go.
     _canDrop(source) {
-        const metaWindow = source && source.metaWindow;
-        if (!metaWindow)
+        if (!UiHelpers.isScaleWindow(source))
             return false;
 
+        const metaWindow = source.metaWindow;
         return this._changesWorkspace(metaWindow) || this._changesMonitor(metaWindow);
     }
 
@@ -252,11 +237,12 @@ class WorkspaceThumbnail {
 }
 
 // Strip of workspace thumbnails, shown on monitor @monitorIndex while Scale is open, @topOffset
-// pixels below the top of the monitor. The big Scale view is pushed below it for as long
-// as the strip exists.
+// pixels below the top of the monitor. For as long as the strip exists, the big Scale view
+// is pushed below it and ends @bottomInset pixels above the bottom of the monitor.
 var WorkspaceStrip = class WorkspaceStrip {
-    constructor(monitorIndex, topOffset = 0) {
+    constructor(monitorIndex, topOffset = 0, bottomInset = 0) {
         this._topOffset = topOffset;
+        this._bottomInset = bottomInset;
         this._monitorIndex = monitorIndex;
         this._monitor = Main.layoutManager.monitors[monitorIndex];
         this._signals = new SignalManager.SignalManager(null);
@@ -273,12 +259,15 @@ var WorkspaceStrip = class WorkspaceStrip {
         this.actor.set_position(this._monitor.x, this._monitor.y + topOffset);
         this.actor.set_width(this._monitor.width);
 
+        UiHelpers.destroyOnFailure(this, () => this._show());
+    }
+
+    _show() {
         // Below the cover pane, which blocks input during the Scale open and close animations.
-        const overviewGroup = Main.overview._group;
-        overviewGroup.insert_child_below(this.actor, Main.overview._coverPane);
+        Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
 
         this._buildThumbnails();
-        this._insetBigView(this._getInset());
+        this._insetBigView(this._getInsets());
         activeStrips.add(this);
 
         const display = global.display;
@@ -293,22 +282,26 @@ var WorkspaceStrip = class WorkspaceStrip {
         return Math.round(this._monitor.height * this.thumbnailScale);
     }
 
-    // Height taken at the top of the monitor, down to the bottom edge of the strip.
-    _getInset() {
-        return this._topOffset + UiHelpers.getNaturalHeight(this.actor);
+    // Heights taken at the top of the monitor, down to the bottom edge of the strip,
+    // and at its bottom.
+    _getInsets() {
+        return {
+            top: this._topOffset + UiHelpers.getNaturalHeight(this.actor),
+            bottom: this._bottomInset,
+        };
     }
 
     // What is left of the monitor for Scale's big view.
     getBigViewArea() {
-        return this._getAreaBelow(this._getInset());
+        return this._getArea(this._getInsets());
     }
 
-    _getAreaBelow(topInset) {
+    _getArea({ top, bottom }) {
         return {
             x: this._monitor.x,
-            y: this._monitor.y + topInset,
+            y: this._monitor.y + top,
             width: this._monitor.width,
-            height: this._monitor.height - topInset,
+            height: this._monitor.height - top - bottom,
         };
     }
 
@@ -325,17 +318,13 @@ var WorkspaceStrip = class WorkspaceStrip {
         }
     }
 
-    // The strip's natural width is its thumbnails plus what the stylesheet adds (padding,
-    // spacing, borders): only the thumbnails can shrink.
     _getFittingScale() {
-        const count = this._thumbnails.length;
-        const naturalWidth = UiHelpers.getNaturalWidth(this.actor);
-        if (count === 0 || naturalWidth <= this._monitor.width)
-            return this.thumbnailScale;
-
-        const thumbnailsWidth = count * Math.round(this._monitor.width * this.thumbnailScale);
-        const fixedWidth = naturalWidth - thumbnailsWidth;
-        return Math.floor((this._monitor.width - fixedWidth) / count) / this._monitor.width;
+        const fittingWidth = UiHelpers.getFittingItemWidth(
+            UiHelpers.getNaturalWidth(this.actor),
+            this._monitor.width,
+            this._thumbnails.length,
+            Math.round(this._monitor.width * this.thumbnailScale));
+        return fittingWidth === null ? this.thumbnailScale : fittingWidth / this._monitor.width;
     }
 
     _buildThumbnailsAtScale() {
@@ -365,7 +354,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
     _onWorkspacesChanged() {
         this._buildThumbnails();
-        this._insetBigView(this._getInset());
+        this._insetBigView(this._getInsets());
     }
 
     // Several window signals fire for one change: refresh once, when idle.
@@ -384,18 +373,19 @@ var WorkspaceStrip = class WorkspaceStrip {
     // Scale lays windows out in the geometry of each workspace's per-monitor object,
     // and centers its "no windows" placeholder on that object's monitor rectangle.
     // WorkspacesView.updateWindowPositions() is broken in Cinnamon 6.4, hence @reposition.
-    _insetBigView(topInset, reposition = false) {
+    _insetBigView(insets, reposition = false) {
         const view = Main.overview.workspacesView;
         if (!view)
             return;
 
-        const area = this._getAreaBelow(topInset);
+        const area = this._getArea(insets);
+        const isInset = insets.top > 0 || insets.bottom > 0;
         for (const workspace of view._workspaces) {
             const workspaceMonitor = workspace._monitors[this._monitorIndex];
             if (!workspaceMonitor)
                 continue;
             workspaceMonitor.setGeometry(area.x, area.y, area.width, area.height, workspaceMonitor._margin);
-            workspaceMonitor._monitor = topInset > 0 ? area : this._monitor;
+            workspaceMonitor._monitor = isInset ? area : this._monitor;
             if (reposition) {
                 workspaceMonitor.positionWindows(POSITION_WITHOUT_ANIMATION);
                 workspaceMonitor._updateEmptyPlaceholder();
@@ -405,7 +395,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
     // For a strip created while Scale is already open: Scale has laid its windows out full height.
     repositionBigView() {
-        this._insetBigView(this._getInset(), true);
+        this._insetBigView(this._getInsets(), true);
     }
 
     destroy() {
@@ -421,6 +411,6 @@ var WorkspaceStrip = class WorkspaceStrip {
         this.actor.destroy();
 
         // Scale destroys its view when it closes; this only matters when the strip goes first.
-        this._insetBigView(0, !Main.overview._hideInProgress);
+        this._insetBigView(NO_INSETS, !Main.overview._hideInProgress);
     }
 };

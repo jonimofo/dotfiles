@@ -1,7 +1,7 @@
 {
     "uuid": "scale-wheel-switch@bgi",
     "name": "Scale Wheel Switch",
-    "description": "GNOME-style overview for Scale: Super toggles it, type to search and launch apps, a workspace strip to switch (click, wheel) and to move windows (drag and drop).",
+    "description": "GNOME-style overview for Scale: Super toggles it, type to search and launch apps, a workspace strip on every screen to switch (click, wheel) and to move windows (drag and drop, also to another screen), a dock of pinned and running apps.",
     "cinnamon-version": ["6.4"],
     "version": "1.0.0",
     "url": "https://github.com/jonimofo/dotfiles"

@@ -99,6 +99,8 @@ The "Enter -> launch first" line is an annotation, not text in the interface.
    A sticky drop-down terminal such as Guake is therefore left out.
 7. Sticky windows and a window's own workspace refuse a drop. Clicks in the strip's empty
    area are swallowed, so they never close Scale.
+   Changed later: sticky windows can change screen, see decision 6 of
+   [`2026-11-12-cinnamon-scale-second-screen.md`](2026-11-12-cinnamon-scale-second-screen.md).
 8. Super toggles Scale. The Menu applet moves to Super+A, set by hand in its settings.
 9. Search covers the applications of the Menu, by name, generic name and keywords. Typing
    needs no click. Arrows select, Enter or a click launches and closes Scale, Escape clears
@@ -114,8 +116,10 @@ The "Enter -> launch first" line is an annotation, not text in the interface.
 | `workspaceStrip.js` | Strip, thumbnails, grid layout, click, drop target, big view inset |
 | `windowDrag.js` | Makes Scale's window clones draggable |
 | `monitorDrop.js` | Drop target on each screen's window area, moves a window to that screen |
+| `appDock.js` | Dock of pinned and running apps at the bottom of the primary monitor |
+| `windowClick.js` | Middle click does nothing, right click opens the window |
 | `superKey.js` | Super hotkey |
-| `uiHelpers.js` | Shared constants, click swallowing, natural sizes, modal checks |
+| `uiHelpers.js` | Shared constants, click handling and swallowing, natural sizes, fit to width, icon size from the stylesheet, modal checks, `openNewWindow`, `DragHover` drop highlight, cleanup of a failed constructor |
 | `stylesheet.css` | Colors, paddings, sizes |
 
 Findings worth keeping:

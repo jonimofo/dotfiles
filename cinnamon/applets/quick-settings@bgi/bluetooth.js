@@ -94,7 +94,12 @@ class Bluetooth {
             }
         }
         adapters.sort((one, two) => one.path.localeCompare(two.path));
-        this.summary = BluetoothModel.summarize(adapters, devices);
+        // BlueZ also reports signal strength changes while a scan runs: the tile and the
+        // open list are only redrawn when what they show changed.
+        const summary = BluetoothModel.summarize(adapters, devices);
+        if (JSON.stringify(summary) === JSON.stringify(this.summary))
+            return;
+        this.summary = summary;
         this._onChange();
     }
 

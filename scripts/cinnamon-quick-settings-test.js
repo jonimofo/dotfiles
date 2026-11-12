@@ -1049,6 +1049,38 @@ async function testSubprocess() {
     check(`subprocess: a missing command rejects and names it (${missing})`, missing !== null && missing.includes('/nonexistent/quick-settings-test'));
 }
 
+const FakeObjectManager = GObject.registerClass({
+    Signals: { 'object-added': {}, 'object-removed': {}, 'interface-added': {}, 'interface-removed': {}, 'interface-proxy-properties-changed': {} },
+}, class FakeObjectManager extends GObject.Object {
+    _init(objects) {
+        super._init();
+        this.objects = objects;
+    }
+
+    get_objects() {
+        return this.objects;
+    }
+});
+
+// A BlueZ object with one interface whose cached properties come from @values.
+function fakeBluezObject(path, iface, values) {
+    const proxy = {
+        get_cached_property: name => {
+            if (!(name in proxy.values))
+                return null;
+            const value = proxy.values[name];
+            const type = typeof value === 'boolean' ? 'b' : typeof value === 'number' ? 'n' : 's';
+            return new GLib.Variant(type, value);
+        },
+        values,
+    };
+    return {
+        values,
+        get_object_path: () => path,
+        get_interface: name => (name === iface ? proxy : null),
+    };
+}
+
 function testBluetoothCalls() {
     const Bluetooth = load('./bluetooth');
     const calls = [];
@@ -1066,6 +1098,24 @@ function testBluetoothCalls() {
     check(`bluetooth: power off sets Adapter1.Powered, devices connect and disconnect (${calls})`,
         `${calls}` === '/org/bluez/hci0 Properties Set false,/dev/a Device1 Connect,/dev/b Device1 Disconnect');
     bluetooth.destroy();
+
+    // A signal strength update changes nothing shown: no redraw of the tile or the list.
+    const objects = [];
+    const manager = new FakeObjectManager(objects);
+    let changes = 0;
+    const watched = new Bluetooth.Bluetooth(() => changes++, { bus: system.bus, newManager: (cancellable, onReady) => onReady(manager, null) });
+    objects.push(fakeBluezObject('/org/bluez/hci0', 'org.bluez.Adapter1', { Powered: true }));
+    objects.push(fakeBluezObject('/org/bluez/hci0/dev_1', 'org.bluez.Device1',
+        { Adapter: '/org/bluez/hci0', Alias: 'Speaker', Paired: true, Connected: false, RSSI: -60 }));
+    manager.emit('object-added');
+    const afterAdd = changes;
+    objects[1].values.RSSI = -40;
+    manager.emit('interface-proxy-properties-changed');
+    check('bluetooth: a signal strength update does not redraw', changes === afterAdd);
+    objects[1].values.Connected = true;
+    manager.emit('interface-proxy-properties-changed');
+    check('bluetooth: a connection change redraws', changes === afterAdd + 1 && watched.summary.connectedNames[0] === 'Speaker');
+    watched.destroy();
 }
 
 async function main() {

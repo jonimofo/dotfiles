@@ -81,6 +81,7 @@ another list closes it.
 | Brightness | One linked slider for both Acer CB241HY monitors (DDC/CI through `ddcutil`), value sent on release. The laptop panel uses `intel_backlight` when it is the active screen |
 | Stock applets | Kept on the panel until the user validates the new applet |
 | Preview | Live on the panel: layout first with two working tiles, the rest after the look is validated |
+| Power tile label | The active profile's name alone ("Balanced", "Power Saver", "Performance"), no "Power:" prefix, so it fits. Highlighted when not balanced. A click goes back to balanced, or from balanced to the last other profile used (power saver the first time) |
 
 ## Facts checked on the machine (2026-11-12)
 
@@ -107,8 +108,23 @@ another list closes it.
   signal handlers on NetworkManager objects are removed with `GObject.signal_handler_disconnect`.
 - Night Light: `org.cinnamon.settings-daemon.plugins.color night-light-enabled`.
 - Dark style: `org.x.apps.portal color-scheme` (`prefer-dark` today).
-- Do Not Disturb and Keep awake: mechanism to read from the stock `notifications@cinnamon.org`
-  and `inhibit@cinnamon.org` applets, not guessed.
+- Power profiles: power-profiles-daemon 0.30 answers on `net.hadess.PowerProfiles` (the stock
+  power applet's first choice) and `org.freedesktop.UPower.PowerProfiles`; profiles
+  power-saver, balanced, performance. Power settings page: `cinnamon-settings power`.
+- Do Not Disturb: `org.cinnamon.desktop.notifications display-notifications`, the key
+  Cinnamon's message tray reads (`messageTray.js`) and Settings > Notifications writes. The
+  tile is on while the key is false.
+- Keep awake: `org.gnome.SessionManager` `Inhibit` with the idle flag (8), as the stock inhibit
+  applet. The tile follows `IsInhibited(8)` on each `InhibitorAdded` / `InhibitorRemoved`, so
+  it also shows the stock applet's or another program's inhibit.
+- Battery: `org.cinnamon.SettingsDaemon.Power` `GetDevices` (the stock power applet's source);
+  there is no primary device here, so the first battery is used. Its icon string carries the
+  charging state.
+- Header actions, as the stock applets: `cinnamon-settings` (user applet), lock through
+  `cinnamon-screensaver-command --lock` or `cinnamon-screensaver-lock-dialog` when
+  `ask-for-away-message` is set (menu applet), power through the session manager's
+  `Shutdown`, which opens Cinnamon's end-session dialog (menu applet), screenshot through
+  `flameshot gui`.
 
 ## Steps
 
@@ -117,4 +133,5 @@ another list closes it.
 3. Network tiles and submenus: Wi-Fi, Bluetooth, VPN SEB, NordVPN.
 4. System tiles and header buttons: power profile, Night Light, Do Not Disturb, Keep awake,
    Mic mute, screenshot, settings, lock, power.
-5. README, install script, checks on the panel, PR ready for review.
+5. Settings dialog: show, hide and reorder the slider rows and the tiles.
+6. README, install script, checks on the panel, PR ready for review.

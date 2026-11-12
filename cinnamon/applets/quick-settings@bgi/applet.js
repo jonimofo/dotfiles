@@ -1,8 +1,11 @@
+const Gio = imports.gi.Gio;
 const St = imports.gi.St;
 const Applet = imports.ui.applet;
 const PopupMenu = imports.ui.popupMenu;
 const Main = imports.ui.main;
 const Util = imports.misc.util;
+const GnomeSession = imports.misc.gnomeSession;
+const ScreenSaver = imports.misc.screenSaver;
 const Constants = require('./constants');
 const PanelIcons = require('./panelIcons');
 const MenuContent = require('./menuContent');
@@ -19,10 +22,16 @@ const BluetoothModel = require('./bluetoothModel');
 const VpnState = require('./vpnState');
 const Nordvpn = require('./nordvpn');
 const ListSpecs = require('./listSpecs');
+const Battery = require('./battery');
+const BooleanSetting = require('./booleanSetting');
+const KeepAwake = require('./keepAwake');
+const PowerProfiles = require('./powerProfiles');
+const PowerProfileModel = require('./powerProfileModel');
 
 class QuickSettingsApplet extends Applet.Applet {
     constructor(metadata, orientation, panelHeight, instanceId) {
         super(orientation, panelHeight, instanceId);
+        this._uuid = metadata.uuid;
         this.set_applet_tooltip(Constants.TOOLTIP);
 
         this._panelIcons = new PanelIcons.PanelIcons();
@@ -55,6 +64,11 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpBluetooth();
         this._setUpVpn();
         this._setUpNordvpn();
+        this._setUpPowerProfile();
+        this._setUpSettingTiles();
+        this._setUpKeepAwake();
+        this._setUpMicMute();
+        this._setUpHeader();
     }
 
     on_applet_added_to_panel() {
@@ -76,6 +90,11 @@ class QuickSettingsApplet extends Applet.Applet {
         this._bluetooth.destroy();
         this._vpn.destroy();
         this._nordvpn.destroy();
+        this._powerProfiles.destroy();
+        this._nightLight.destroy();
+        this._doNotDisturb.destroy();
+        this._keepAwake.destroy();
+        this._battery.destroy();
         this._content.destroy();
         this._wifi.destroy();
         this._darkStyle.destroy();
@@ -202,6 +221,106 @@ class QuickSettingsApplet extends Applet.Applet {
         Util.spawn(argv);
     }
 
+    _setUpPowerProfile() {
+        const tile = this._content.tiles['power-profile'];
+        this._powerProfiles = new PowerProfiles.PowerProfiles(() => this._syncPowerProfile());
+        tile.setOnToggle(() => this._powerProfiles.toggle());
+        this._registerList('power-profile', tile, this._tileAnchor('power-profile'),
+            () => ListSpecs.powerProfileSpec(this._powerProfiles.profiles, this._powerProfiles.active, {
+                select: profile => this._powerProfiles.select(profile),
+                openSettings: () => this._openSettings(Constants.POWER_SETTINGS_COMMAND),
+            }));
+        tile.setAvailable(false);
+    }
+
+    // The label is the active profile's name alone; highlighted when not balanced.
+    _syncPowerProfile() {
+        const tile = this._content.tiles['power-profile'];
+        const active = this._powerProfiles.active;
+        tile.setAvailable(this._powerProfiles.available);
+        tile.setChecked(PowerProfileModel.isHighlighted(active));
+        if (active) {
+            tile.setLabel(PowerProfileModel.label(active));
+            tile.setIconName(PowerProfileModel.iconName(active));
+        }
+        this._content.lists.refresh('power-profile');
+    }
+
+    _setUpSettingTiles() {
+        this._nightLight = this._wireSettingTile('night-light',
+            Constants.NIGHT_LIGHT_SCHEMA, Constants.NIGHT_LIGHT_KEY, false);
+        this._doNotDisturb = this._wireSettingTile('do-not-disturb',
+            Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, true);
+    }
+
+    _wireSettingTile(tileId, schema, key, inverted) {
+        const tile = this._content.tiles[tileId];
+        const setting = new BooleanSetting.BooleanSetting(schema, key, inverted, () => tile.setChecked(setting.enabled));
+        tile.setOnToggle(() => setting.toggle());
+        tile.setChecked(setting.enabled);
+        return setting;
+    }
+
+    _setUpKeepAwake() {
+        const tile = this._content.tiles['keep-awake'];
+        this._keepAwake = new KeepAwake.KeepAwake(this._uuid, () => {
+            tile.setAvailable(this._keepAwake.available);
+            tile.setChecked(this._keepAwake.inhibited);
+        });
+        tile.setOnToggle(() => this._keepAwake.toggle());
+        tile.setAvailable(false);
+    }
+
+    // Same stream as the Microphone row: dimmed while there is no source.
+    _setUpMicMute() {
+        const tile = this._content.tiles['mic-mute'];
+        tile.setOnToggle(() => this._volume.input.toggleMute());
+        this._syncMicMute();
+    }
+
+    _syncMicMute() {
+        const tile = this._content.tiles['mic-mute'];
+        if (!tile || !this._volume)
+            return;
+        tile.setAvailable(this._volume.input.available);
+        tile.setChecked(this._volume.input.muted);
+    }
+
+    // Each button closes the menu first, then acts as the stock applets do.
+    _setUpHeader() {
+        const header = this._content.header;
+        this._battery = new Battery.Battery(battery => header.setBattery(battery));
+        header.setOnButton('screenshot', () => this._closeThen(() => Util.spawn(Constants.SCREENSHOT_COMMAND)));
+        header.setOnButton('settings', () => this._closeThen(() => Util.spawn(Constants.SYSTEM_SETTINGS_COMMAND)));
+        header.setOnButton('lock', () => this._closeThen(() => this._lockScreen()));
+        header.setOnButton('power', () => this._closeThen(() => this._session().ShutdownRemote()));
+    }
+
+    _closeThen(action) {
+        this.menu.close(false);
+        action();
+    }
+
+    // As the stock menu applet's Lock Screen button.
+    _lockScreen() {
+        if (!Gio.File.new_for_path(Constants.SCREENSAVER_COMMAND).query_exists(null)) {
+            new ScreenSaver.ScreenSaverProxy().LockRemote('');
+            return;
+        }
+        const settings = new Gio.Settings({ schema_id: Constants.SCREENSAVER_SCHEMA });
+        Util.spawn(settings.get_boolean(Constants.SCREENSAVER_AWAY_MESSAGE_KEY)
+            ? Constants.LOCK_WITH_MESSAGE_COMMAND
+            : Constants.LOCK_COMMAND);
+    }
+
+    // The stock menu applet's session proxy: ShutdownRemote() opens Cinnamon's end-session
+    // dialog, which offers suspend, restart and shut down.
+    _session() {
+        if (!this._sessionManager)
+            this._sessionManager = new GnomeSession.SessionManager();
+        return this._sessionManager;
+    }
+
     // One value for every DDC monitor, sent on release: a DDC write takes about half a second.
     _setUpBrightness() {
         const row = this._content.sliders.monitors;
@@ -231,6 +350,7 @@ class QuickSettingsApplet extends Applet.Applet {
                 input.setAvailable(available);
                 input.showValue(value);
                 input.setIconName(available ? VolumeMapping.inputIconName(value) : null);
+                this._syncMicMute();
             },
             kind => this._content.lists.refresh(kind));
         output.onLiveChange(value => this._volume.output.set(value));

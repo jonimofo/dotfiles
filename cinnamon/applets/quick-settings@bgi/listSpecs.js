@@ -1,5 +1,6 @@
 const Constants = require('./constants');
 const WifiNetworks = require('./wifiNetworks');
+const PowerProfileModel = require('./powerProfileModel');
 
 // What each in-place list shows, built from plain state. @actions holds the callbacks.
 // Every spec: { title, items: [...], settings: { label, onActivate } or null }.
@@ -66,6 +67,20 @@ function nordvpnSpec(status, countries, actions) {
             })),
         ],
         settings: null,
+    };
+}
+
+// @profiles: the daemon's profile names, in its order; @active: the active one.
+function powerProfileSpec(profiles, active, actions) {
+    return {
+        title: Constants.LIST_TITLES['power-profile'],
+        items: profiles.map(profile => ({
+            label: PowerProfileModel.label(profile),
+            active: profile === active,
+            iconName: PowerProfileModel.iconName(profile),
+            onActivate: () => actions.select(profile),
+        })),
+        settings: settingsEntry('power-profile', actions.openSettings),
     };
 }
 

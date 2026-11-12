@@ -40,8 +40,18 @@ class StreamVolume {
         this.notify();
     }
 
+    get muted() {
+        return this._stream !== null && this._stream.is_muted;
+    }
+
     notify() {
         this._onValue(this.available, this.value);
+    }
+
+    // The Mic mute tile: same stream and same call as the stock sound applet's mute switch.
+    toggleMute() {
+        if (this._stream)
+            this._stream.change_is_muted(!this._stream.is_muted);
     }
 
     // Same steps as the stock sound applet's slider: set the volume, push it, then mute or

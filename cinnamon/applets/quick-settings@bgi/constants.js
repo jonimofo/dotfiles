@@ -28,11 +28,12 @@ const PANEL_ICONS = {
     volume: 'audio-volume-high-symbolic',
 };
 
+// Header buttons, left to right. The label is the tooltip and the accessible name.
 const HEADER_BUTTONS = [
-    { id: 'screenshot', icon: 'applets-screenshooter-symbolic' },
-    { id: 'settings', icon: 'preferences-system-symbolic' },
-    { id: 'lock', icon: 'system-lock-screen-symbolic' },
-    { id: 'power', icon: 'system-shutdown-symbolic' },
+    { id: 'screenshot', icon: 'applets-screenshooter-symbolic', label: 'Screenshot' },
+    { id: 'settings', icon: 'preferences-system-symbolic', label: 'System Settings' },
+    { id: 'lock', icon: 'system-lock-screen-symbolic', label: 'Lock Screen' },
+    { id: 'power', icon: 'system-shutdown-symbolic', label: 'Power Off...' },
 ];
 
 // Slider rows, top to bottom: this array is the only place that sets their order.
@@ -42,13 +43,14 @@ const SLIDERS = [
     { id: 'monitors', label: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
 ];
 
-// Grid order: left to right, then top to bottom, two per row.
+// Tiles, left to right then top to bottom, two per row: this array is the only place that
+// sets their order.
 const TILES = [
     { id: 'wifi', label: 'Wi-Fi', icon: WIFI_ON_ICON, hasMenu: true },
     { id: 'bluetooth', label: 'Bluetooth', icon: 'bluetooth-active-symbolic', hasMenu: true },
     { id: 'vpn', label: 'VPN SEB', icon: 'network-vpn-symbolic', hasMenu: true },
     { id: 'nordvpn', label: 'NordVPN', icon: 'globe-symbolic', hasMenu: true },
-    { id: 'power-profile', label: 'Power: Balanced', icon: 'power-profile-balanced-symbolic', hasMenu: true },
+    { id: 'power-profile', label: 'Balanced', icon: 'power-profile-balanced-symbolic', hasMenu: true },
     { id: 'night-light', label: 'Night Light', icon: 'night-light-symbolic', hasMenu: false },
     { id: 'dark-style', label: 'Dark style', icon: 'dark-mode-symbolic', hasMenu: false },
     { id: 'do-not-disturb', label: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
@@ -64,12 +66,8 @@ const DARK_STYLE_KEY = 'color-scheme';
 const DARK_STYLE_ON = 'prefer-dark';
 const DARK_STYLE_OFF = 'default';
 
-const POWER_SUPPLY_DIR = '/sys/class/power_supply';
-const BATTERY_TYPE = 'Battery';
-// Battery icons exist in steps of ten: battery-level-0-symbolic to battery-level-100-symbolic.
-const BATTERY_ICON_STEP = 10;
-const BATTERY_ICON_PREFIX = 'battery-level-';
-const BATTERY_ICON_SUFFIX = '-symbolic';
+// Battery, from cinnamon-settings-daemon like the stock power applet.
+const POWER_PROXY = 'org.cinnamon.SettingsDaemon.Power';
 const BATTERY_LABEL_SUFFIX = '%';
 
 // Brightness of the external monitors, through DDC/CI. Buses are detected at runtime: they
@@ -108,6 +106,7 @@ const LIST_TITLES = {
     nordvpn: 'NordVPN',
     output: 'Sound',
     input: 'Microphone',
+    'power-profile': 'Power Mode',
 };
 const LIST_SETTINGS_LABELS = {
     wifi: 'All networks...',
@@ -115,6 +114,7 @@ const LIST_SETTINGS_LABELS = {
     vpn: 'Network settings...',
     output: 'Sound settings...',
     input: 'Sound settings...',
+    'power-profile': 'Power settings...',
 };
 // The commands the stock applets and the installed tools use for each settings page.
 const SETTINGS_COMMANDS = {
@@ -161,3 +161,46 @@ const NORDVPN_QUICK_CONNECT = 'Quick connect';
 
 // Slider row icons that follow the level, as in the stock sound applet.
 const INPUT_ICON_PREFIX = 'microphone-sensitivity-';
+
+// Header button actions, as the stock applets run them.
+const SCREENSHOT_COMMAND = ['flameshot', 'gui'];
+const SYSTEM_SETTINGS_COMMAND = ['cinnamon-settings'];
+// Lock, as the stock menu applet does it: the screensaver command when installed.
+const SCREENSAVER_COMMAND = '/usr/bin/cinnamon-screensaver-command';
+const SCREENSAVER_SCHEMA = 'org.cinnamon.desktop.screensaver';
+const SCREENSAVER_AWAY_MESSAGE_KEY = 'ask-for-away-message';
+const LOCK_COMMAND = ['cinnamon-screensaver-command', '--lock'];
+const LOCK_WITH_MESSAGE_COMMAND = ['cinnamon-screensaver-lock-dialog'];
+
+// Power profiles, through power-profiles-daemon. Same bus names, order and labels as the
+// stock power applet.
+const POWER_PROFILES_BUSES = [
+    { name: 'net.hadess.PowerProfiles', path: '/net/hadess/PowerProfiles' },
+    { name: 'org.freedesktop.UPower.PowerProfiles', path: '/org/freedesktop/UPower/PowerProfiles' },
+];
+const POWER_PROFILE_LABELS = {
+    'power-saver': 'Power Saver',
+    'balanced': 'Balanced',
+    'performance': 'Performance',
+};
+const POWER_PROFILE_BALANCED = 'balanced';
+const POWER_PROFILE_FIRST_OTHER = 'power-saver';
+const POWER_PROFILE_ICON_PREFIX = 'power-profile-';
+const POWER_SETTINGS_COMMAND = ['cinnamon-settings', 'power'];
+
+// Night Light: the key of Cinnamon Settings > Night Light.
+const NIGHT_LIGHT_SCHEMA = 'org.cinnamon.settings-daemon.plugins.color';
+const NIGHT_LIGHT_KEY = 'night-light-enabled';
+
+// Do Not Disturb: the key Cinnamon's message tray reads (Settings > Notifications >
+// Enable notifications). The tile is on when notifications are off.
+const NOTIFICATIONS_SCHEMA = 'org.cinnamon.desktop.notifications';
+const NOTIFICATIONS_KEY = 'display-notifications';
+
+// Keep awake: a session manager inhibit, as the stock inhibit applet takes it.
+const SESSION_MANAGER_NAME = 'org.gnome.SessionManager';
+const SESSION_MANAGER_PATH = '/org/gnome/SessionManager';
+const SESSION_MANAGER_INTERFACE = 'org.gnome.SessionManager';
+// GSM_INHIBITOR_FLAG_IDLE, as INHIBIT_IDLE_FLAG in the stock inhibit applet.
+const INHIBIT_IDLE_FLAG = 8;
+const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming';

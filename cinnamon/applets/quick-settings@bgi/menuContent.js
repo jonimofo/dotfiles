@@ -51,11 +51,11 @@ class MenuContent {
 
     // Called each time the menu opens, when every actor has its style.
     refresh() {
-        this.header.refreshBattery();
         this.refreshColors();
     }
 
     destroy() {
+        this.header.destroy();
         for (const row of Object.values(this.sliders))
             row.destroy();
     }

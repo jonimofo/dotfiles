@@ -3,7 +3,8 @@
 // and never writes it (the D-Bus write is intercepted); brightness runs against fake ddcutil
 // and laptop backends fed with captured ddcutil output; NordVPN runs against a fake client
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
-// models run on plain data. No real setting is changed.
+// models run on plain data; Night Light and Do Not Disturb run on the memory GSettings backend.
+// No real setting is changed.
 // Usage: GSETTINGS_BACKEND=memory gjs cinnamon-quick-settings-test.js <applet folder> <fixtures folder>
 const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
@@ -19,6 +20,7 @@ if (GLib.getenv('GSETTINGS_BACKEND') !== 'memory') {
 const [appletDir, fixturesRoot] = ARGV;
 const fixturesDir = `${fixturesRoot}/ddcutil`;
 const nordvpnFixtures = `${fixturesRoot}/nordvpn`;
+const powerFixtures = `${fixturesRoot}/power`;
 const SCROLL_DELAY_MS = 30;
 const VOLUME_NORM = 65536;
 let failures = 0;
@@ -438,6 +440,83 @@ async function testNordvpn() {
     errors = [];
 }
 
+function testPowerProfileModel() {
+    const Model = load('./powerProfileModel');
+    const all = ['power-saver', 'balanced', 'performance'];
+    check('power: from balanced, the first click goes to power saver', Model.toggleTarget('balanced', null, all) === 'power-saver');
+    check('power: from balanced, back to the last other profile', Model.toggleTarget('balanced', 'performance', all) === 'performance');
+    check('power: from any other profile, back to balanced',
+        Model.toggleTarget('performance', 'performance', all) === 'balanced' && Model.toggleTarget('power-saver', null, all) === 'balanced');
+    check('power: no power saver offered, no target', Model.toggleTarget('balanced', null, ['balanced', 'performance']) === null);
+    check('power: labels are the stock names, without a prefix',
+        Model.label('power-saver') === 'Power Saver' && Model.label('balanced') === 'Balanced' && Model.label('performance') === 'Performance');
+    check('power: highlighted only when not balanced', !Model.isHighlighted('balanced') && Model.isHighlighted('power-saver'));
+    const ListSpecs = load('./listSpecs');
+    const picked = [];
+    const spec = ListSpecs.powerProfileSpec(all, 'balanced', { select: p => picked.push(p), openSettings: () => picked.push('settings') });
+    spec.items[2].onActivate();
+    spec.settings.onActivate();
+    check('power list: daemon order, active marked, click selects, last entry opens power settings',
+        `${spec.items.map(i => i.label)}` === 'Power Saver,Balanced,Performance' && spec.items[1].active
+        && `${picked}` === 'performance,settings' && spec.settings.label === 'Power settings...');
+}
+
+async function testBooleanSettings() {
+    const BooleanSetting = load('./booleanSetting');
+    const color = new Gio.Settings({ schema_id: 'org.cinnamon.settings-daemon.plugins.color' });
+    const notifications = new Gio.Settings({ schema_id: 'org.cinnamon.desktop.notifications' });
+    color.set_boolean('night-light-enabled', true);
+    notifications.set_boolean('display-notifications', true);
+    let changes = 0;
+    const night = new BooleanSetting.BooleanSetting('org.cinnamon.settings-daemon.plugins.color', 'night-light-enabled', false, () => changes++);
+    const dnd = new BooleanSetting.BooleanSetting('org.cinnamon.desktop.notifications', 'display-notifications', true, () => changes++);
+    check('night light: on while the key is true', night.enabled);
+    night.toggle();
+    check('night light: toggle writes false', !color.get_boolean('night-light-enabled') && !night.enabled);
+    check('do not disturb: off while notifications are shown', !dnd.enabled);
+    dnd.toggle();
+    check('do not disturb: toggle turns notifications off', !notifications.get_boolean('display-notifications') && dnd.enabled);
+    notifications.set_boolean('display-notifications', true);
+    check('do not disturb: follows a change made elsewhere', !dnd.enabled);
+    await wait(0);
+    check(`settings tiles: every change notifies (${changes})`, changes >= 3);
+    night.destroy();
+    dnd.destroy();
+}
+
+function testBatteryModel() {
+    const Model = load('./batteryModel');
+    const kinds = { battery: 2, unknownState: 0 };
+    const text = readText(`${powerFixtures}/get-devices.txt`);
+    const devices = GLib.Variant.parse(new GLib.VariantType('(a(sssusduut))'), text, null, null).deepUnpack()[0];
+    const battery = Model.pickBattery(devices, null, kinds);
+    check(`battery: captured devices give the laptop battery (${battery && battery.percent}%)`,
+        battery !== null && battery.percent === 100 && battery.iconString.includes('battery-level-100-charged-symbolic'));
+    check('battery: no battery hides the figure', Model.pickBattery(devices.filter(d => d[3] !== 2), null, kinds) === null);
+    check('battery: label', Model.label(87) === '87%');
+}
+
+function testMicMute() {
+    const Volume = load('./volume');
+    const values = [];
+    const stream = { volume: 30000, is_muted: false, connect: () => 1, disconnect: () => {} };
+    stream.change_is_muted = muted => {
+        stream.is_muted = muted;
+    };
+    const input = new Volume.StreamVolume((available, value) => values.push([available, value]));
+    input.setLimits(VOLUME_NORM, VOLUME_NORM);
+    input.toggleMute();
+    check('mic mute: no source, nothing to mute', input.available === false && input.muted === false);
+    input.setStream(stream);
+    input.toggleMute();
+    input.notify();
+    check('mic mute: mutes the default source, the Microphone row then shows 0',
+        stream.is_muted && input.muted && values[values.length - 1][1] === 0);
+    input.toggleMute();
+    check('mic mute: a second click unmutes', !stream.is_muted);
+    input.destroy();
+}
+
 async function main() {
     await testDarkStyle();
     await testWifi();
@@ -452,6 +531,10 @@ async function main() {
     testVpnModel();
     testNordvpnParser();
     await testNordvpn();
+    testPowerProfileModel();
+    await testBooleanSettings();
+    testBatteryModel();
+    testMicMute();
 }
 
 const loop = GLib.MainLoop.new(null, false);

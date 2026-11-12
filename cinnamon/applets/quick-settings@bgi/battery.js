@@ -1,52 +1,60 @@
-const Gio = imports.gi.Gio;
-const GLib = imports.gi.GLib;
-const ByteArray = imports.byteArray;
+const UPowerGlib = imports.gi.UPowerGlib;
+const Interfaces = imports.misc.interfaces;
 const Constants = require('./constants');
+const BatteryModel = require('./batteryModel');
 
-const MAX_PERCENT = 100;
+const KINDS = { battery: UPowerGlib.DeviceKind.BATTERY, unknownState: UPowerGlib.DeviceState.UNKNOWN };
 
-function readSysfsValue(path) {
-    const [ok, bytes] = GLib.file_get_contents(path);
-    return ok ? ByteArray.toString(bytes).trim() : null;
-}
-
-// The first power supply of type Battery, or null on a machine without one.
-function findBatteryDir() {
-    const dir = Gio.File.new_for_path(Constants.POWER_SUPPLY_DIR);
-    const children = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
-    try {
-        let info;
-        while ((info = children.next_file(null)) !== null) {
-            const path = GLib.build_filenamev([Constants.POWER_SUPPLY_DIR, info.get_name()]);
-            if (readSysfsValue(GLib.build_filenamev([path, 'type'])) === Constants.BATTERY_TYPE)
-                return path;
-        }
-    } finally {
-        children.close(null);
+// The laptop battery through cinnamon-settings-daemon, the stock power applet's source. Its
+// icon string carries the charging state. @onChange(battery) gets the value of
+// BatteryModel.pickBattery(), null without a battery; it runs on every daemon change.
+class Battery {
+    constructor(onChange) {
+        this._onChange = onChange;
+        this._proxy = null;
+        this._changedId = 0;
+        this._destroyed = false;
+        Interfaces.getDBusProxyAsync(Constants.POWER_PROXY, (proxy, error) => {
+            if (this._destroyed)
+                return;
+            if (error) {
+                global.logError(`${Constants.LOG_PREFIX}: connecting to ${Constants.POWER_PROXY} failed, battery hidden`, error);
+                this._onChange(null);
+                return;
+            }
+            this._proxy = proxy;
+            this._changedId = proxy.connect('g-properties-changed', () => this.refresh());
+            this.refresh();
+        });
     }
-    return null;
-}
 
-// Battery level in percent, read from sysfs, or null when there is no battery or it
-// cannot be read. Live updates come with the system tiles step.
-function readPercent() {
-    try {
-        const batteryDir = findBatteryDir();
-        if (!batteryDir)
-            return null;
-        const capacity = parseInt(readSysfsValue(GLib.build_filenamev([batteryDir, 'capacity'])), 10);
-        return Number.isNaN(capacity) ? null : Math.min(Math.max(capacity, 0), MAX_PERCENT);
-    } catch (e) {
-        global.logError(`${Constants.LOG_PREFIX}: reading the battery level under ${Constants.POWER_SUPPLY_DIR} failed`, e);
-        return null;
+    refresh() {
+        if (!this._proxy)
+            return;
+        this._proxy.GetPrimaryDeviceRemote((primary, primaryError) => {
+            // "There is no primary device" is a normal answer: any battery is used then.
+            const primaryId = primaryError ? null : this._deviceId(primary);
+            this._proxy.GetDevicesRemote((result, error) => {
+                if (this._destroyed)
+                    return;
+                if (error) {
+                    global.logError(`${Constants.LOG_PREFIX}: reading the power devices failed`, error);
+                    return;
+                }
+                this._onChange(BatteryModel.pickBattery(result[0], primaryId, KINDS));
+            });
+        });
     }
-}
 
-function iconName(percent) {
-    const level = Math.round(percent / Constants.BATTERY_ICON_STEP) * Constants.BATTERY_ICON_STEP;
-    return `${Constants.BATTERY_ICON_PREFIX}${level}${Constants.BATTERY_ICON_SUFFIX}`;
-}
+    destroy() {
+        this._destroyed = true;
+        if (this._changedId)
+            this._proxy.disconnect(this._changedId);
+    }
 
-function label(percent) {
-    return `${percent}${Constants.BATTERY_LABEL_SUFFIX}`;
+    // GetPrimaryDevice() may return the tuple or an array holding it (stock applet comment).
+    _deviceId(primary) {
+        const device = primary.length === 1 ? primary[0] : primary;
+        return device[0];
+    }
 }

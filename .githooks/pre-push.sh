@@ -22,7 +22,7 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
     done
 done
 
-# Every test, the Cinnamon checks and shellcheck (scripts/check-all.sh, about 20 s).
+# Every test, the Cinnamon checks and shellcheck (scripts/check-all.sh, under a minute).
 # --no-verify skips this hook, as any other.
 repo_root="$(git rev-parse --show-toplevel)"
 if [ -x "$repo_root/scripts/check-all.sh" ]; then

@@ -171,9 +171,9 @@ git config pull.ff only      # a pull that cannot fast-forward fails (no surpris
 
 ## Checks
 
-`scripts/check-all.sh` runs every check of the repo in about 20 s: each `scripts/*-test.sh`,
-`scripts/cinnamon-extension-check.sh`, and shellcheck (warnings and errors) on every tracked
-`*.sh` except the tmux-powerline configuration files. It needs `git`, `node`, `jq`, `gjs` and
+`scripts/check-all.sh` runs every check of the repo in under a minute (20 to 55 s here):
+each `scripts/*-test.sh`, `scripts/cinnamon-extension-check.sh`, and shellcheck (warnings
+and errors) on every tracked `*.sh` except the tmux-powerline configuration files. It needs `git`, `node`, `jq`, `gjs` and
 `shellcheck`. It is safe on the live desktop: the tests use stubs, fakes, throwaway repos and
 the memory GSettings backend.
 

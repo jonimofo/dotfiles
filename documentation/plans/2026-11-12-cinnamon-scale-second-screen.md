@@ -85,10 +85,13 @@ Findings worth keeping:
   workspace and the view. A drag monitor sees every motion instead; the highlight it shows is
   on top, so it is the actor under the pointer and takes the drop.
 - Returning `SUCCESS` from a drag monitor's `dragDrop` returns before `drag-end` and the
-  drag cleanup, so only `dragMotion` is used.
+  drag cleanup. Changed later: the drag monitor's `dragDrop` returns `CONTINUE` and clears
+  the highlights of the targets that do not take the drop (see `cinnamon/README.md`).
 - On a thumbnail drop, `move_to_monitor` runs before `change_workspace`, while the window is
-  still on the active workspace, as in Cinnamon's own "Move to monitor" menu item. The
-  order could not be checked against muffin's source, which is not installed.
+  still on the active workspace. Cinnamon's "Move to monitor" menu item only calls
+  `move_to_monitor`; Expo (`expoThumbnail.js`) calls `change_workspace` first, except with
+  "workspaces only on primary" on. The order used here worked in testing; it could not be
+  checked against muffin's source, which is not installed.
 
 ## Known limitations
 

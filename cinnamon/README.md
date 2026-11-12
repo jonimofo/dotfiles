@@ -32,12 +32,11 @@ own strip at its very top.
 - A click on a dock icon goes to the app's most recent window, switching workspace if
   needed, or launches the app when it has no window. Scale closes. A middle click always
   opens a new window; a right click does the same as a left click.
-- The dock follows apps opening their first window and closing their last one while
-  Scale is open.
+- The dock follows apps starting and stopping while Scale is open.
 
 ## Choose the apps of the dock
 
-The dock's first part is the pinned apps of the top panel's window list, in the panel's
+The dock's first part is the pinned apps of the panel's window list, in the panel's
 order. Right-click an app's icon in the panel > "Pin to Panel" or "Unpin from Panel".
 The dock reads that list each time Scale opens.
 
@@ -98,15 +97,19 @@ Then give Super back to the Menu (see above).
 - The search field and the application grid are drawn on the primary monitor only.
 - With Cinnamon's "workspaces only on primary" setting on, the other screens still show one
   thumbnail per workspace. Untested: the setting is off here.
+- With that setting on, a window of another screen is on every workspace: dropped on a
+  thumbnail of the primary screen, it lands on the current workspace, not the thumbnail's.
 - Tested on two monitors side by side. Three or more are untested.
-- Thumbnails follow windows opening, closing and changing workspace, not a window being
-  moved or resized while Scale is open. Workspace renames show at the next opening.
+- Thumbnails follow windows opening, closing, changing workspace and changing screen, not a
+  window being moved within its screen or resized while Scale is open. Workspace renames show at the next opening.
 - Cinnamon hides hot corners over a fullscreen window. Super still works there.
 - With the extension disabled, Super does nothing until the Menu shortcut is set back.
 - The dock is drawn on the primary monitor only.
 - Windows with no `.desktop` application are left out of the dock.
-- A dot can stay under an icon when the app closes its last visible window but keeps
-  running, until the next change of a running app or the next opening of Scale.
+- The dock updates when an app starts or stops. An app that closes its last visible window
+  but keeps running keeps its dot, and an app already running with no window gets no icon
+  or dot when it opens one, until the next change of a running app or the next opening of
+  Scale.
 - With several grouped window list applets on the panels, the dock uses the first one.
   With none, or none of its pinned apps installed, and no other app running, no dock is
   drawn until the next opening of Scale.
@@ -120,6 +123,8 @@ then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
+`scripts/cinnamon-extension-check.sh` checks the syntax, `metadata.json` and the references
+between the extension's files; it does not check Cinnamon's private parts.
 
 Prototype patches (3):
 
@@ -132,7 +137,7 @@ Private fields and methods read, called or written:
 | Object | Members | Used for |
 |---|---|---|
 | `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the header and the dock are inserted, close animation in progress |
-| `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written), `getActiveWorkspace()` | reach each workspace, hide the windows during a search, the workspace a drag happens on |
+| `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written) | reach each workspace, hide the windows during a search |
 | `Workspace` | `_monitors` | the per-monitor objects, one per screen |
 | `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
 | `WorkspaceMonitor` | `_x`, `_y`, `_width`, `_height`, `monitorIndex` | each screen's window area, as a drop target |
@@ -140,6 +145,7 @@ Private fields and methods read, called or written:
 | `WindowClone` | `getDragActor`, `getDragActorSource`, `_draggable` (added to each instance) | the drag picture |
 | dnd `Draggable` | `buttonPressEventId`, `destroyEventId` | removing the drag handlers on disable |
 | `imports.ui.dnd` | `addDragMonitor`, `removeDragMonitor`, a monitor's `dragMotion(event)` with `event.x`, `event.y`, `event.source` | seeing every drag motion, to highlight a screen's window area |
+| `imports.ui.dnd` | a monitor's `dragDrop(event)` with `event.targetActor`, returning `DragDropResult.CONTINUE` | clearing the highlights of the targets that do not take a drop |
 | `Main` | `modalCount` | is Scale the only modal |
 | `Main.AppletManager` | `getRunningInstancesForUuid('grouped-window-list@cinnamon.org')` | the panel's window list applet |
 | grouped window list applet | `settings` (its `AppletSettings`), key `pinned-apps` | the pinned apps of the dock |
@@ -155,8 +161,10 @@ Assumptions about behaviour:
   siblings: over a window clone, the screen's `WorkspaceMonitor` is out of reach. Its
   `_dropRect` has no size and no drop handlers. The highlight is therefore its own actor,
   shown on top, which then takes the drop.
-- Returning `SUCCESS` from a drag monitor's `dragDrop` ends the drop without `drag-end` or
-  cleanup, so drag monitors here only implement `dragMotion`.
+- Returning `SUCCESS` or `FAILURE` from a drag monitor's `dragDrop` ends the drop without
+  `drag-end` or cleanup, so the drag monitor's `dragDrop` always returns `CONTINUE`. It runs
+  before any target takes the drop and clears the other targets' highlights: the window that
+  moves can be destroyed with its draggable before `drag-end` is emitted.
 - `Main.activateWindow` does not close Scale when it has to switch workspace, so the dock
   switches to the window's workspace first, then activates it.
 - `Cinnamon.AppSystem`'s `app-state-changed` signal drives the dock's live update.

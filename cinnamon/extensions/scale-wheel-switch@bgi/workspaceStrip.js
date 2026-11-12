@@ -277,9 +277,12 @@ var WorkspaceStrip = class WorkspaceStrip {
         this.actor.set_position(this._monitor.x, this._monitor.y + topOffset);
         this.actor.set_width(this._monitor.width);
 
+        UiHelpers.destroyOnFailure(this, () => this._show());
+    }
+
+    _show() {
         // Below the cover pane, which blocks input during the Scale open and close animations.
-        const overviewGroup = Main.overview._group;
-        overviewGroup.insert_child_below(this.actor, Main.overview._coverPane);
+        Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
 
         this._buildThumbnails();
         this._insetBigView(this._getInsets());

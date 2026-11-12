@@ -105,6 +105,10 @@ var AppDock = class AppDock {
         UiHelpers.swallowClicks(this.actor);
         this.actor.set_width(this._monitor.width);
 
+        UiHelpers.destroyOnFailure(this, () => this._show(dockApps));
+    }
+
+    _show(dockApps) {
         // Below the cover pane, which blocks input during the Scale open and close animations.
         Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
 

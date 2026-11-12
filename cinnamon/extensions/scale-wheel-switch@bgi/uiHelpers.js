@@ -13,6 +13,17 @@ function swallowClicks(actor) {
     actor.connect('button-release-event', () => Clutter.EVENT_STOP);
 }
 
+// A constructor that puts @object's actors on screen calls this for that part: when it
+// fails, @object is destroyed, so nothing stays on screen, and the error goes on.
+function destroyOnFailure(object, build) {
+    try {
+        build();
+    } catch (e) {
+        object.destroy();
+        throw e;
+    }
+}
+
 // Only valid once the actor is on the stage: its theme gives the paddings and borders.
 function getNaturalHeight(actor) {
     const [, naturalHeight] = actor.get_preferred_height(-1);

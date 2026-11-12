@@ -111,6 +111,7 @@ var AppSearch = class AppSearch {
         this._tiles = [];
         this._columns = MAX_RESULT_COLUMNS;
         this._selected = 0;
+        this._hidingId = 0;
 
         // Not reactive: a click must not move the keyboard focus away from Scale.
         this._entry = new St.Entry({
@@ -124,18 +125,22 @@ var AppSearch = class AppSearch {
         UiHelpers.swallowClicks(this.actor);
         this.actor.set_position(this._monitor.x, this._monitor.y);
         this.actor.set_width(this._monitor.width);
-        Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
 
-        // Above Scale's windows, which live in the overlay group: it covers them and takes their clicks.
         this._results = new St.BoxLayout({ style_class: 'scale-search-grid', vertical: true, reactive: true });
         UiHelpers.swallowClicks(this._results);
         this._results.hide();
+
+        UiHelpers.destroyOnFailure(this, () => this._show());
+        activeSearch = this;
+    }
+
+    _show() {
+        Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
+        // Above Scale's windows, which live in the overlay group: it covers them and takes their clicks.
         global.overlay_group.add_actor(this._results);
 
         // Scale closing with text in the field (launch, Super): the windows come back for its animation.
         this._hidingId = Main.overview.connect('hiding', () => this._entry.set_text(''));
-
-        activeSearch = this;
     }
 
     getHeight() {
@@ -315,7 +320,8 @@ var AppSearch = class AppSearch {
     destroy() {
         if (activeSearch === this)
             activeSearch = null;
-        Main.overview.disconnect(this._hidingId);
+        if (this._hidingId)
+            Main.overview.disconnect(this._hidingId);
         this._setWindowsVisible(true);
         this._results.destroy();
         this.actor.destroy();

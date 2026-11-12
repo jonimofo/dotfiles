@@ -350,13 +350,13 @@ function testBluetoothModel() {
     const Model = load('./bluetoothModel');
     const adapter = '/org/bluez/hci0';
     const devices = [
-        { path: 'b', adapter, name: 'WH-1000XM5', icon: 'audio-headset', paired: true, connected: false },
+        { path: 'b', adapter, name: 'Headset', icon: 'audio-headset', paired: true, connected: false },
         { path: 'a', adapter, name: 'Speaker', icon: 'audio-card', paired: true, connected: true },
         { path: 'c', adapter, name: 'Stranger', icon: null, paired: false, connected: false },
     ];
     const on = Model.summarize([{ path: adapter, powered: true }], devices);
     check(`bluetooth: paired devices only, connected first (${on.devices.map(d => d.name)})`,
-        `${on.devices.map(d => d.name)}` === 'Speaker,WH-1000XM5');
+        `${on.devices.map(d => d.name)}` === 'Speaker,Headset');
     check('bluetooth: one connected device names the tile', Model.tileLabel(on, 'Bluetooth') === 'Speaker');
     check('bluetooth: panel icon active while a device is connected', Model.panelIconName(on) === 'bluetooth-active-symbolic');
     const idle = Model.summarize([{ path: adapter, powered: true }], devices.map(d => ({ ...d, connected: false })));
@@ -369,20 +369,20 @@ function testBluetoothModel() {
 
 function testVpnModel() {
     const Model = load('./vpnModel');
-    const seb = { uuid: 'u1', id: 'SEB', type: 'vpn', iface: null, timestamp: 0 };
+    const office = { uuid: 'u1', id: 'Office', type: 'vpn', iface: null, timestamp: 0 };
     const wifi = { uuid: 'u2', id: 'HomeBox', type: '802-11-wireless', iface: null, timestamp: 9 };
     const nordlynx = { uuid: 'u3', id: 'nordlynx', type: 'wireguard', iface: 'nordlynx', timestamp: 9 };
-    const today = Model.summarize([seb, wifi, nordlynx], []);
+    const today = Model.summarize([office, wifi, nordlynx], []);
     check(`vpn: only VPN profiles, NordVPN's own left out (${today.profiles.map(p => p.id)})`,
-        `${today.profiles.map(p => p.id)}` === 'SEB');
-    check('vpn: a single profile names the tile "VPN SEB" and is the toggle target',
-        today.label === 'VPN SEB' && today.target.id === 'SEB' && today.active === null);
+        `${today.profiles.map(p => p.id)}` === 'Office');
+    check('vpn: a single profile names the tile "VPN Office" and is the toggle target',
+        today.label === 'VPN Office' && today.target.id === 'Office' && today.active === null);
     const work = { uuid: 'u4', id: 'Work', type: 'wireguard', iface: 'wg0', timestamp: 5 };
-    const two = Model.summarize([seb, work], []);
+    const two = Model.summarize([office, work], []);
     check('vpn: several profiles, none up: "VPN", last used is the target', two.label === 'VPN' && two.target.id === 'Work');
-    const up = Model.summarize([seb, work], ['u1']);
+    const up = Model.summarize([office, work], ['u1']);
     check('vpn: the active profile names the tile and is marked',
-        up.label === 'VPN SEB' && up.target.id === 'SEB' && up.profiles.find(p => p.id === 'SEB').active);
+        up.label === 'VPN Office' && up.target.id === 'Office' && up.profiles.find(p => p.id === 'Office').active);
     check('vpn: no profile means unavailable', Model.summarize([wifi], []).available === false);
 }
 

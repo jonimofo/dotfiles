@@ -64,7 +64,7 @@ const SLIDERS = [
 const TILES = [
     { id: 'wifi', label: 'Wi-Fi', icon: WIFI_ON_ICON, name: 'Wi-Fi', hasMenu: true },
     { id: 'bluetooth', label: 'Bluetooth', icon: 'bluetooth-active-symbolic', name: 'Bluetooth', hasMenu: true },
-    { id: 'vpn', label: 'VPN SEB', name: 'VPN', icon: 'network-vpn-symbolic', hasMenu: true },
+    { id: 'vpn', label: 'VPN', name: 'VPN', icon: 'network-vpn-symbolic', hasMenu: true },
     { id: 'nordvpn', label: 'NordVPN', name: 'NordVPN', icon: 'globe-symbolic', hasMenu: true },
     { id: 'power-profile', label: 'Balanced', name: 'Power profile', icon: 'power-profile-balanced-symbolic', hasMenu: true },
     { id: 'night-light', label: 'Night Light', name: 'Night Light', icon: 'night-light-symbolic', hasMenu: false },

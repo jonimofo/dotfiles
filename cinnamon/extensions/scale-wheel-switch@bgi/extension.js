@@ -17,7 +17,8 @@ const SMOOTH_STEP = 1.0;
 
 let scrollId = 0;
 let overviewSignalIds = [];
-let strip = null;
+// One workspace strip per monitor while Scale is open.
+let strips = [];
 let search = null;
 let lastSwitchTime = 0;
 let smoothAccumulator = 0;
@@ -73,30 +74,35 @@ function onCapturedEvent(actor, event) {
 }
 
 // Top of the primary monitor, in order: search field, workspace strip, then Scale's windows.
+// Top of every other monitor: its workspace strip, then Scale's windows.
+// Built from the monitor list at each opening: monitors may come and go while Scale is closed.
 function showHeader() {
-    if (search || strip)
+    if (search || strips.length > 0)
         return;
 
     try {
         search = new AppSearch.AppSearch();
-        strip = new WorkspaceStrip.WorkspaceStrip(search.getHeight());
-        search.setResultsArea(strip.getBigViewArea());
+        const primaryIndex = Main.layoutManager.primaryIndex;
+        Main.layoutManager.monitors.forEach((monitor, index) => {
+            const topOffset = index === primaryIndex ? search.getHeight() : 0;
+            strips.push(new WorkspaceStrip.WorkspaceStrip(index, topOffset));
+        });
+        search.setResultsArea(strips[primaryIndex].getBigViewArea());
     } catch (e) {
         hideHeader();
         throw e;
     }
 }
 
-// Each part is torn down on its own: one may exist without the other after a failure.
+// Each part is torn down on its own: some may exist without the others after a failure.
 function hideHeader() {
     if (search) {
         search.destroy();
         search = null;
     }
-    if (strip) {
+    for (const strip of strips)
         strip.destroy();
-        strip = null;
-    }
+    strips = [];
 }
 
 function init(metadata) {}
@@ -129,7 +135,8 @@ function enableAll() {
     AppSearch.enable();
     if (Main.overview.visible && !Main.overview._hideInProgress) {
         showHeader();
-        strip.repositionBigView();
+        for (const strip of strips)
+            strip.repositionBigView();
     }
 }
 

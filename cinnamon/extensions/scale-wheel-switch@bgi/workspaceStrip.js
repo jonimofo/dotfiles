@@ -8,7 +8,7 @@ const SignalManager = imports.misc.signalManager;
 const WindowUtils = imports.misc.windowUtils;
 const UiHelpers = require('./uiHelpers');
 
-// Thumbnail size as a fraction of the primary monitor, reduced when the workspaces do not
+// Thumbnail size as a fraction of the strip's own monitor, reduced when the workspaces do not
 // fit in the monitor's width. Colors and spacing are in stylesheet.css.
 const THUMBNAIL_SCALE = 0.12;
 const DROP_TARGET_STYLE_CLASS = 'scale-strip-thumbnail-drop-target';
@@ -60,13 +60,16 @@ function computeGridCells(count, width, height) {
     return cells;
 }
 
-// The strip of the Scale view currently open, if any.
-let activeStrip = null;
+// The strips of the Scale view currently open, one per monitor.
+const activeStrips = new Set();
 
-// Height of a strip thumbnail, for the modules that size things after it.
+// Height of the smallest strip thumbnail, for the modules that size things after it:
+// what fits in it fits in every strip.
 function getThumbnailHeight() {
-    const scale = activeStrip ? activeStrip.thumbnailScale : THUMBNAIL_SCALE;
-    return Math.round(Main.layoutManager.primaryMonitor.height * scale);
+    if (activeStrips.size === 0)
+        return Math.round(Main.layoutManager.primaryMonitor.height * THUMBNAIL_SCALE);
+
+    return Math.min(...[...activeStrips].map(strip => strip.getThumbnailHeight()));
 }
 
 // One workspace: wallpaper, live window clones and the workspace name.
@@ -234,14 +237,14 @@ class WorkspaceThumbnail {
     }
 }
 
-// Strip of workspace thumbnails, shown on the primary monitor while Scale is open, @topOffset
+// Strip of workspace thumbnails, shown on monitor @monitorIndex while Scale is open, @topOffset
 // pixels below the top of the monitor. The big Scale view is pushed below it for as long
 // as the strip exists.
 var WorkspaceStrip = class WorkspaceStrip {
-    constructor(topOffset = 0) {
+    constructor(monitorIndex, topOffset = 0) {
         this._topOffset = topOffset;
-        this._monitorIndex = Main.layoutManager.primaryIndex;
-        this._monitor = Main.layoutManager.primaryMonitor;
+        this._monitorIndex = monitorIndex;
+        this._monitor = Main.layoutManager.monitors[monitorIndex];
         this._signals = new SignalManager.SignalManager(null);
         this._workspaceSignals = new SignalManager.SignalManager(null);
         this._refreshIdleId = 0;
@@ -262,7 +265,7 @@ var WorkspaceStrip = class WorkspaceStrip {
 
         this._buildThumbnails();
         this._insetBigView(this._getInset());
-        activeStrip = this;
+        activeStrips.add(this);
 
         const display = global.display;
         this._signals.connect(display, 'restacked', this._queueRefresh, this);
@@ -270,6 +273,10 @@ var WorkspaceStrip = class WorkspaceStrip {
         this._signals.connect(display, 'window-left-monitor', this._queueRefresh, this);
         this._signals.connect(global.window_manager, 'switch-workspace', this._syncActive, this);
         this._signals.connect(global.workspace_manager, 'notify::n-workspaces', this._onWorkspacesChanged, this);
+    }
+
+    getThumbnailHeight() {
+        return Math.round(this._monitor.height * this.thumbnailScale);
     }
 
     // Height taken at the top of the monitor, down to the bottom edge of the strip.
@@ -388,8 +395,7 @@ var WorkspaceStrip = class WorkspaceStrip {
     }
 
     destroy() {
-        if (activeStrip === this)
-            activeStrip = null;
+        activeStrips.delete(this);
         this._signals.disconnectAllSignals();
         this._workspaceSignals.disconnectAllSignals();
         if (this._refreshIdleId) {

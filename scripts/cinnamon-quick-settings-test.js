@@ -626,6 +626,240 @@ function testLayoutModel() {
     check('header: battery alone on a machine without battery removes the line', header(['battery'], false) === '{"battery":false,"line":false}');
 }
 
+// The session manager on a fake bus: calls wait until answer() runs them, in order. As on
+// the real bus, a cancelled call still acts on the server; only its reply is lost.
+class FakeSessionBus {
+    constructor() {
+        this.pending = [];
+        this.inhibitors = new Set();
+        this.nextCookie = 41;
+        this.subscriptions = new Map();
+        this.nextSubscription = 1;
+    }
+
+    signal_subscribe(name, iface, signal, path, arg0, flags, callback) {
+        const id = this.nextSubscription++;
+        this.subscriptions.set(id, callback);
+        return id;
+    }
+
+    signal_unsubscribe(id) {
+        this.subscriptions.delete(id);
+    }
+
+    call(name, path, iface, method, parameters, replyType, flags, timeout, cancellable, callback) {
+        this.pending.push({ method, args: parameters ? parameters.deepUnpack() : [], cancellable, callback });
+    }
+
+    // Answers every pending call, including those the answers start.
+    answerAll() {
+        while (this.pending.length > 0) {
+            const call = this.pending.shift();
+            call.reply = this._serve(call);
+            call.callback(this, call);
+        }
+    }
+
+    call_finish(call) {
+        if (call.cancellable && call.cancellable.is_cancelled())
+            throw new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED, 'Operation was cancelled');
+        return call.reply;
+    }
+
+    emitInhibitorChange() {
+        for (const callback of this.subscriptions.values())
+            callback();
+    }
+
+    _serve(call) {
+        if (call.method === 'Inhibit') {
+            const cookie = this.nextCookie++;
+            this.inhibitors.add(cookie);
+            return new GLib.Variant('(u)', [cookie]);
+        }
+        if (call.method === 'Uninhibit') {
+            this.inhibitors.delete(call.args[0]);
+            return null;
+        }
+        return new GLib.Variant('(b)', [this.inhibitors.size > 0]);
+    }
+}
+
+function testKeepAwake() {
+    const KeepAwake = load('./keepAwake');
+    errors = [];
+    let bus = new FakeSessionBus();
+    let keepAwake = new KeepAwake.KeepAwake('test@quick', () => {}, bus);
+    bus.answerAll();
+    check('keep awake: reads the idle inhibit at start', keepAwake.available && !keepAwake.inhibited);
+    keepAwake.toggle();
+    bus.answerAll();
+    check(`keep awake: a click takes one idle inhibit (${[...bus.inhibitors]})`, keepAwake.inhibited && bus.inhibitors.size === 1);
+    keepAwake.toggle();
+    bus.answerAll();
+    check('keep awake: a second click releases it', !keepAwake.inhibited && bus.inhibitors.size === 0);
+    bus.inhibitors.add(7);
+    bus.emitInhibitorChange();
+    bus.answerAll();
+    check('keep awake: follows an inhibit taken by another program', keepAwake.inhibited);
+    bus.inhibitors.delete(7);
+    keepAwake.toggle();
+    bus.answerAll();
+    keepAwake.destroy();
+    bus.answerAll();
+    check('keep awake: destroy releases our inhibit and unsubscribes',
+        bus.inhibitors.size === 0 && bus.subscriptions.size === 0);
+
+    bus = new FakeSessionBus();
+    keepAwake = new KeepAwake.KeepAwake('test@quick', () => {}, bus);
+    bus.answerAll();
+    keepAwake.toggle();
+    keepAwake.toggle();
+    bus.answerAll();
+    keepAwake.destroy();
+    bus.answerAll();
+    check(`keep awake: two quick clicks leave no inhibit behind after destroy (${[...bus.inhibitors]})`, bus.inhibitors.size === 0);
+
+    bus = new FakeSessionBus();
+    keepAwake = new KeepAwake.KeepAwake('test@quick', () => {}, bus);
+    bus.answerAll();
+    keepAwake.toggle();
+    keepAwake.destroy();
+    bus.answerAll();
+    check(`keep awake: a reload during the Inhibit call leaves no inhibit behind (${[...bus.inhibitors]})`, bus.inhibitors.size === 0);
+    check('keep awake: no logged error', errors.length === 0);
+    errors = [];
+}
+
+// A promise and the functions that settle it later, to hold a fake command or call open.
+function deferred() {
+    let resolve, reject;
+    const promise = new Promise((ok, fail) => {
+        resolve = ok;
+        reject = fail;
+    });
+    return { promise, resolve, reject };
+}
+
+function cancelledError() {
+    return new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED, 'Operation was cancelled');
+}
+
+// M2: nothing reaches the menu once the applet is destroyed.
+async function testNoCallbackAfterDestroy() {
+    const Wifi = load('./wifiState');
+    const device = new FakeNmDevice();
+    const client = new FakeNmClient(device);
+    let pendingActivation = null;
+    client.get_connections = () => ['saved'];
+    device.filter_connections = connections => connections;
+    client.activate_connection_async = (connection, dev, path, cancellable, callback) => {
+        pendingActivation = { cancellable, callback };
+    };
+    client.activate_connection_finish = () => {
+        if (pendingActivation.cancellable.is_cancelled())
+            throw cancelledError();
+        return true;
+    };
+    let changes = 0;
+    const wifi = new Wifi.WifiState(() => changes++, (cancellable, onReady) => onReady(client, null));
+    const accessPoint = { filter_connections: connections => connections, get_path: () => '/ap/1' };
+    wifi.connect({ ssid: 'Net', active: false, accessPoint });
+    wifi.destroy();
+    const changesAtDestroy = changes;
+    pendingActivation.callback(client, null);
+    check('wifi: a connection cancelled by destroy does not touch the tile', changes === changesAtDestroy);
+
+    const DdcBrightness = load('./ddcBrightness');
+    const Brightness = load('./brightness');
+    const write = deferred();
+    const run = argv => {
+        const args = argv.slice(1).join(' ');
+        if (args === 'detect --terse')
+            return Promise.resolve(readText(`${fixturesDir}/detect-terse.txt`));
+        if (args.includes('getvcp'))
+            return Promise.resolve('VCP 10 C 50 100\n');
+        return write.promise;
+    };
+    const shown = [];
+    const brightness = new Brightness.Brightness({
+        ddc: new DdcBrightness.DdcBrightness(run), screen: null,
+        onValue: value => shown.push(value), onAvailable: () => {},
+    });
+    await brightness.detect();
+    const setting = brightness.set(0.9);
+    brightness.destroy();
+    errors = [];
+    write.reject(new Error('DDC communication failed'));
+    await setting;
+    check(`brightness: a write failing after destroy does not touch the slider (${shown})`, `${shown}` === '0.5');
+    errors = [];
+}
+
+// M4: detections overlapping on a dock change; the newest one wins.
+async function testBrightnessDetectionRace() {
+    const DdcBrightness = load('./ddcBrightness');
+    const Brightness = load('./brightness');
+    const detections = [];
+    let vcp = 'VCP 10 C 50 100\n';
+    const writes = [];
+    let failBus = null;
+    let writeGate = null;
+    const run = argv => {
+        const args = argv.slice(1).join(' ');
+        if (args === 'detect --terse') {
+            const call = deferred();
+            detections.push(call);
+            return call.promise;
+        }
+        if (args.includes('getvcp'))
+            return Promise.resolve(vcp);
+        const write = args.match(/^--bus (\d+) setvcp 10 (\d+)$/);
+        writes.push(`${write[1]}=${write[2]}`);
+        const settle = () => (Number(write[1]) === failBus ? Promise.reject(new Error('DDC communication failed')) : Promise.resolve(''));
+        return writeGate ? writeGate.promise.then(settle) : settle();
+    };
+    const twoMonitors = readText(`${fixturesDir}/detect-terse.txt`);
+    const oneMonitor = 'Display 1\n   I2C bus:          /dev/i2c-20\n';
+
+    const ddc = new DdcBrightness.DdcBrightness(run);
+    const brightness = new Brightness.Brightness({ ddc, screen: null, onValue: () => {}, onAvailable: () => {} });
+    const first = brightness.detect();
+    const second = brightness.detect();
+    detections[1].resolve(oneMonitor);
+    await wait(0);
+    detections[0].resolve(twoMonitors);
+    await Promise.all([first, second]);
+    await brightness.set(1);
+    check(`brightness: the newest detection wins over an older one finishing last (${writes})`, `${writes}` === '20=100');
+
+    writes.length = 0;
+    detections.length = 0;
+    const reDetect = ddc.detect();
+    detections[0].resolve(twoMonitors);
+    await reDetect;
+    await ddc.read();
+    vcp = 'VCP 10 C 25 50\n';
+    const again = ddc.detect();
+    detections[1].resolve(twoMonitors);
+    await again;
+    await ddc.write(1);
+    check(`brightness: a new detection forgets the old maximum (${writes})`, `${writes}` === '18=50,19=50');
+
+    writes.length = 0;
+    detections.length = 0;
+    failBus = 19;
+    writeGate = deferred();
+    const writing = ddc.write(1).then(() => null, e => e.message);
+    const changed = ddc.detect();
+    detections[0].resolve(oneMonitor);
+    await changed;
+    writeGate.resolve();
+    const message = await writing;
+    check(`brightness: a failure names the bus that was written (${message})`, message !== null && message.includes('bus 19, value 50'));
+    failBus = null;
+}
+
 async function main() {
     await testDarkStyle();
     testWifi();
@@ -646,6 +880,9 @@ async function main() {
     testMicMute();
     testSchemaMatchesDeclarations();
     testLayoutModel();
+    testKeepAwake();
+    await testNoCallbackAfterDestroy();
+    await testBrightnessDetectionRace();
 }
 
 // No test may hang: a stuck promise fails the run instead.

@@ -92,6 +92,8 @@ const DDCUTIL = 'ddcutil';
 const DDC_BRIGHTNESS_FEATURE = '10';
 // A scroll on the slider has no release: the value is sent once the wheel stops this long.
 const BRIGHTNESS_SCROLL_COMMIT_MS = 400;
+// Monitor changes closer than this are one dock event: one ddcutil detection.
+const BRIGHTNESS_DETECT_DELAY_MS = 1000;
 
 // Laptop panel brightness, through cinnamon-settings-daemon like the stock power applet.
 const SCREEN_BRIGHTNESS_PROXY = 'org.cinnamon.SettingsDaemon.Power.Screen';

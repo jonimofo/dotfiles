@@ -8,15 +8,22 @@ class DdcBrightness {
         this._run = runCommand;
         this._buses = [];
         this._max = null;
+        this._detectGeneration = 0;
     }
 
     get available() {
         return this._buses.length > 0;
     }
 
+    // Only the newest detection counts: an older one finishing later is dropped. The new
+    // monitors may have another maximum: it is read again before the next write.
     async detect() {
+        const generation = ++this._detectGeneration;
         const output = await this._run([Constants.DDCUTIL, 'detect', '--terse']);
-        this._buses = DdcutilParser.parseDetectBuses(output);
+        if (generation === this._detectGeneration) {
+            this._buses = DdcutilParser.parseDetectBuses(output);
+            this._max = null;
+        }
         return this._buses;
     }
 
@@ -37,12 +44,14 @@ class DdcBrightness {
     async write(fraction) {
         if (this._max === null)
             await this.read();
+        // A detection may change the buses while the writes run: report the ones written.
+        const buses = [...this._buses];
         const value = Math.round(fraction * this._max);
-        const results = await Promise.allSettled(this._buses.map(bus => this._run([
+        const results = await Promise.allSettled(buses.map(bus => this._run([
             Constants.DDCUTIL, '--bus', `${bus}`, 'setvcp', Constants.DDC_BRIGHTNESS_FEATURE, `${value}`,
         ])));
         const failures = results
-            .map((result, index) => ({ result, bus: this._buses[index] }))
+            .map((result, index) => ({ result, bus: buses[index] }))
             .filter(({ result }) => result.status === 'rejected')
             .map(({ result, bus }) => `bus ${bus}, value ${value}: ${result.reason.message}`);
         if (failures.length > 0)

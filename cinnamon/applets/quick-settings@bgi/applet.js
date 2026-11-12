@@ -371,7 +371,7 @@ class QuickSettingsApplet extends Applet.Applet {
             onAvailable: available => row.setAvailable(available),
         });
         row.onRelease(Constants.BRIGHTNESS_SCROLL_COMMIT_MS, value => this._brightness.set(value));
-        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => this._brightness.detect());
+        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => this._brightness.detectSoon());
         this._brightness.detect();
     }
 

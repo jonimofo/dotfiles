@@ -168,12 +168,14 @@ class WifiState {
         this._client = null;
     }
 
+    // A cancelled call means destroy() ran: the tile is gone, nothing to update.
     _finish(finishCall, ssid) {
         try {
             finishCall();
         } catch (e) {
-            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                global.logError(`${Constants.LOG_PREFIX}: connecting to Wi-Fi network ${ssid} failed`, e);
+            if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                return;
+            global.logError(`${Constants.LOG_PREFIX}: connecting to Wi-Fi network ${ssid} failed`, e);
         }
         this._onChange();
     }

@@ -129,7 +129,11 @@ const FakeNmDevice = GObject.registerClass({
 });
 
 const FakeNmClient = GObject.registerClass({
-    Signals: { 'device-added': {}, 'device-removed': {} },
+    Signals: {
+        'device-added': {}, 'device-removed': {},
+        'connection-added': {}, 'connection-removed': {},
+        'active-connection-added': {}, 'active-connection-removed': {},
+    },
 }, class FakeNmClient extends GObject.Object {
     _init(device) {
         super._init();
@@ -862,6 +866,208 @@ async function testBrightnessDetectionRace() {
     failBus = null;
 }
 
+// M9: the modules whose break would go unnoticed.
+
+function fakeAccessPoint({ privacy = false, wpa = 0, rsn = 0, saved = [] } = {}) {
+    const NM = imports.gi.NM;
+    return {
+        get_flags: () => (privacy ? NM['80211ApFlags'].PRIVACY : NM['80211ApFlags'].NONE),
+        get_wpa_flags: () => wpa,
+        get_rsn_flags: () => rsn,
+        filter_connections: () => saved,
+        get_path: () => '/ap/1',
+    };
+}
+
+function testWifiConnectChoice() {
+    const NM = imports.gi.NM;
+    const Sec = NM['80211ApSecurityFlags'];
+    const Wifi = load('./wifiState');
+    const psk = fakeAccessPoint({ privacy: true, rsn: Sec.KEY_MGMT_PSK });
+    const wep = fakeAccessPoint({ privacy: true });
+    const enterprise = fakeAccessPoint({ privacy: true, rsn: Sec.KEY_MGMT_802_1X });
+    const open = fakeAccessPoint();
+    check('wifi secrets: WPA asks the agent for a passphrase', Wifi.agentOwnedSecret(psk).psk_flags === NM.SettingSecretFlags.AGENT_OWNED);
+    check('wifi secrets: WEP asks the agent for a key', Wifi.agentOwnedSecret(wep).wep_key_flags === NM.SettingSecretFlags.AGENT_OWNED);
+    check('wifi secrets: open and 802.1x networks get no agent secret',
+        Wifi.agentOwnedSecret(open) === null && Wifi.agentOwnedSecret(enterprise) === null);
+
+    const device = new FakeNmDevice();
+    const client = new FakeNmClient(device);
+    const calls = [];
+    client.get_connections = () => [];
+    device.filter_connections = connections => connections;
+    device.get_path = () => '/device/1';
+    client.get_permission_result = () => NM.ClientPermissionResult.NO;
+    client.activate_connection_async = connection => calls.push(`activate ${connection}`);
+    client.add_and_activate_connection_async = connection => calls.push(`add ${connection.get_id()} ${connection.get_setting_wireless_security() ? 'secured' : 'open'}`);
+    spawned.length = 0;
+    const wifi = new Wifi.WifiState(() => {}, (cancellable, onReady) => onReady(client, null));
+    wifi.connect({ ssid: 'Saved', active: false, accessPoint: fakeAccessPoint({ saved: ['profile'] }) });
+    wifi.connect({ ssid: 'Corp', active: false, accessPoint: enterprise });
+    wifi.connect({ ssid: 'Home', active: false, accessPoint: psk });
+    wifi.connect({ ssid: 'Cafe', active: false, accessPoint: open });
+    wifi.connect({ ssid: 'Here', active: true, accessPoint: psk });
+    check(`wifi connect: saved profile reused, new network added like the stock applet (${calls})`,
+        `${calls}` === 'activate profile,add Auto Home secured,add Auto Cafe open');
+    check(`wifi connect: 802.1x goes to the stock wizard (${spawned.map(a => a.join(' '))})`,
+        spawned.length === 1 && spawned[0].join(' ') === 'cinnamon-settings network connect-8021x-wifi /device/1 /ap/1');
+    wifi.destroy();
+}
+
+function testVolumeSet() {
+    const Volume = load('./volume');
+    const stream = { volume: 0, is_muted: true, pushes: 0, connect: () => 1, disconnect: () => {} };
+    stream.push_volume = () => stream.pushes++;
+    stream.change_is_muted = muted => {
+        stream.is_muted = muted;
+    };
+    const output = new Volume.StreamVolume(() => {});
+    output.setLimits(VOLUME_NORM, VOLUME_NORM * 1.5);
+    output.setStream(stream);
+    output.set(0.5);
+    check(`volume set: half of the amplified range, pushed, unmuted (${stream.volume})`,
+        stream.volume === Math.round(0.5 * VOLUME_NORM * 1.5) && stream.pushes === 1 && !stream.is_muted);
+    output.set(0.001);
+    check('volume set: near 0 mutes at volume 0', stream.volume === 0 && stream.is_muted);
+    output.set(0.665);
+    check('volume set: near 100% snaps to 100%', stream.volume === VOLUME_NORM && !stream.is_muted);
+    output.destroy();
+}
+
+const FakeProxy = GObject.registerClass({ Signals: { 'g-properties-changed': {} } }, class FakeProxy extends GObject.Object {});
+
+const FakeActiveConnection = GObject.registerClass(class FakeActiveConnection extends GObject.Object {
+    get_uuid() {
+        return 'u1';
+    }
+
+    get_state() {
+        return imports.gi.NM.ActiveConnectionState.ACTIVATED;
+    }
+});
+
+function testVpnToggleRule() {
+    const Vpn = load('./vpnState');
+    const calls = [];
+    let pending = null;
+    let active = [];
+    const client = new FakeNmClient(new FakeNmDevice());
+    const office = { get_uuid: () => 'u1', get_id: () => 'Office', get_connection_type: () => 'vpn', get_interface_name: () => null, get_setting_connection: () => ({ get_timestamp: () => 0 }) };
+    client.get_connections = () => [office];
+    client.get_active_connections = () => active;
+    client.get_connection_by_uuid = uuid => (uuid === 'u1' ? office : null);
+    client.activate_connection_async = (connection, device, specific, cancellable, callback) => {
+        calls.push(`activate ${connection.get_id()} device=${device} specific=${specific}`);
+        pending = callback;
+    };
+    client.activate_connection_finish = () => true;
+    client.deactivate_connection_async = (activeConnection, cancellable, callback) => {
+        calls.push(`deactivate ${activeConnection.get_uuid()}`);
+        pending = callback;
+    };
+    client.deactivate_connection_finish = () => true;
+    const vpn = new Vpn.VpnState(() => {}, (cancellable, onReady) => onReady(client, null));
+    vpn.toggle();
+    vpn.toggle();
+    check(`vpn: a click activates the profile with no device, as the stock applet; a second click during the call is ignored (${calls})`,
+        `${calls}` === 'activate Office device=null specific=null');
+    const activeConnection = new FakeActiveConnection();
+    active = [activeConnection];
+    pending(client, null);
+    check('vpn: activated profile shows as up', vpn.summary.active !== null && vpn.summary.label === 'VPN Office');
+    vpn.toggle();
+    check(`vpn: a click on the active profile deactivates it (${calls[1]})`, calls[1] === 'deactivate u1');
+    active = [];
+    pending(client, null);
+    check('vpn: after deactivation the tile is off', vpn.summary.active === null);
+    vpn.destroy();
+}
+
+function fakeProxy(name, active, profiles) {
+    const proxy = new FakeProxy();
+    proxy.g_name = name;
+    proxy.g_object_path = '/power';
+    proxy.g_interface_name = name;
+    proxy.values = { ActiveProfile: active, Profiles: profiles };
+    proxy.get_cached_property = property => {
+        if (property === 'ActiveProfile')
+            return proxy.values.ActiveProfile === null ? null : new GLib.Variant('s', proxy.values.ActiveProfile);
+        if (property === 'Profiles' && proxy.values.Profiles)
+            return new GLib.Variant('aa{sv}', proxy.values.Profiles.map(p => ({ Profile: new GLib.Variant('s', p) })));
+        return null;
+    };
+    return proxy;
+}
+
+function testPowerProfiles() {
+    const PowerProfiles = load('./powerProfiles');
+    const sets = [];
+    const watched = new Map();
+    const withoutProfiles = fakeProxy('net.hadess.PowerProfiles', 'balanced', null);
+    const withProfiles = fakeProxy('org.freedesktop.UPower.PowerProfiles', 'balanced', ['power-saver', 'balanced', 'performance']);
+    const system = {
+        bus: { call: (name, path, iface, method, value, type, flags, timeout, cancellable, callback) => {
+            sets.push(`${name} ${value.deepUnpack()[2].unpack()}`);
+            callback({ call_finish: () => null }, null);
+        } },
+        newProxy: (target, cancellable, onReady) => onReady(target.name === 'net.hadess.PowerProfiles' ? withoutProfiles : withProfiles, null),
+        watchName: (name, appeared, vanished) => {
+            watched.set(name, { appeared, vanished });
+            return watched.size;
+        },
+        unwatchName: () => {},
+    };
+    let changes = 0;
+    const power = new PowerProfiles.PowerProfiles(() => changes++, system);
+    check('power: a bus name without Profiles falls back to the next one, as the stock applet',
+        power.available && power.profiles.length === 3);
+    power.toggle();
+    check(`power: first click from balanced asks for power saver (${sets})`, `${sets}` === 'org.freedesktop.UPower.PowerProfiles power-saver');
+    withProfiles.values.ActiveProfile = 'performance';
+    withProfiles.emit('g-properties-changed');
+    withProfiles.values.ActiveProfile = 'balanced';
+    withProfiles.emit('g-properties-changed');
+    sets.length = 0;
+    power.toggle();
+    check(`power: from balanced, back to the last other profile set anywhere (${sets})`, `${sets}` === 'org.freedesktop.UPower.PowerProfiles performance');
+    watched.get('org.freedesktop.UPower.PowerProfiles').vanished();
+    check('power: the daemon stopping dims the tile', !power.available);
+    watched.get('org.freedesktop.UPower.PowerProfiles').appeared();
+    check('power: the daemon coming back is picked up', power.available);
+    power.destroy();
+}
+
+async function testSubprocess() {
+    const Subprocess = load('./subprocess');
+    const ok = await Subprocess.runCommand(['/bin/echo', 'hello']);
+    check('subprocess: resolves with the standard output', ok === 'hello\n');
+    const failed = await Subprocess.runCommand(['/bin/sh', '-c', 'echo boom >&2; exit 3']).then(() => null, e => e.message);
+    check(`subprocess: a failing command rejects with its status and standard error (${failed})`,
+        failed !== null && failed.includes('exited with 3') && failed.includes('boom'));
+    const missing = await Subprocess.runCommand(['/nonexistent/quick-settings-test']).then(() => null, e => e.message);
+    check(`subprocess: a missing command rejects and names it (${missing})`, missing !== null && missing.includes('/nonexistent/quick-settings-test'));
+}
+
+function testBluetoothCalls() {
+    const Bluetooth = load('./bluetooth');
+    const calls = [];
+    const system = {
+        bus: { call: (name, path, iface, method, parameters) => {
+            calls.push(`${path} ${iface.replace('org.bluez.', '').replace('org.freedesktop.DBus.', '')} ${method}${parameters ? ' ' + JSON.stringify(parameters.deepUnpack()[2].unpack()) : ''}`);
+        } },
+        newManager: () => {},
+    };
+    const bluetooth = new Bluetooth.Bluetooth(() => {}, system);
+    bluetooth.summary = { available: true, powered: true, adapterPath: '/org/bluez/hci0', devices: [], connectedNames: [] };
+    bluetooth.toggle();
+    bluetooth.toggleDevice({ path: '/dev/a', name: 'A', connected: false });
+    bluetooth.toggleDevice({ path: '/dev/b', name: 'B', connected: true });
+    check(`bluetooth: power off sets Adapter1.Powered, devices connect and disconnect (${calls})`,
+        `${calls}` === '/org/bluez/hci0 Properties Set false,/dev/a Device1 Connect,/dev/b Device1 Disconnect');
+    bluetooth.destroy();
+}
+
 async function main() {
     await testDarkStyle();
     testWifi();
@@ -885,6 +1091,12 @@ async function main() {
     testKeepAwake();
     await testNoCallbackAfterDestroy();
     await testBrightnessDetectionRace();
+    testWifiConnectChoice();
+    testVolumeSet();
+    testVpnToggleRule();
+    testPowerProfiles();
+    await testSubprocess();
+    testBluetoothCalls();
 }
 
 // No test may hang: a stuck promise fails the run instead.

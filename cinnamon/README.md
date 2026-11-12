@@ -12,8 +12,9 @@ My Cinnamon extensions, versioned. Each one is symlinked into
 ## What scale-wheel-switch does
 
 In Scale (hot corner or Super), from top to bottom: a search field, a strip with one
-thumbnail per workspace, both centered, then Scale's windows. The search field is on the
-primary screen only; every other screen has its own strip at its very top.
+thumbnail per workspace, both centered, then Scale's windows, then a dock of applications.
+The search field and the dock are on the primary screen only; every other screen has its
+own strip at its very top.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
@@ -26,6 +27,19 @@ primary screen only; every other screen has its own strip at its very top.
 - The mouse wheel switches workspace.
 - A middle click on a window does nothing (stock Scale closes the application).
 - A right click on a window opens it, like a left click (stock Scale shows the window menu).
+- The dock shows the apps pinned in the panel's window list, then, after a separator, the
+  other running apps. A dot under an icon means the app has a window open.
+- A click on a dock icon goes to the app's most recent window, switching workspace if
+  needed, or launches the app when it has no window. Scale closes. A middle click always
+  opens a new window; a right click does the same as a left click.
+- The dock follows apps opening their first window and closing their last one while
+  Scale is open.
+
+## Choose the apps of the dock
+
+The dock's first part is the pinned apps of the top panel's window list, in the panel's
+order. Right-click an app's icon in the panel > "Pin to Panel" or "Unpin from Panel".
+The dock reads that list each time Scale opens.
 
 ## Install
 
@@ -89,11 +103,20 @@ Then give Super back to the Menu (see above).
   moved or resized while Scale is open. Workspace renames show at the next opening.
 - Cinnamon hides hot corners over a fullscreen window. Super still works there.
 - With the extension disabled, Super does nothing until the Menu shortcut is set back.
+- The dock is drawn on the primary monitor only.
+- Windows with no `.desktop` application are left out of the dock.
+- A dot can stay under an icon when the app closes its last visible window but keeps
+  running, until the next change of a running app or the next opening of Scale.
+- With several grouped window list applets on the panels, the dock uses the first one.
+  With none, or none of its pinned apps installed, and no other app running, no dock is
+  drawn until the next opening of Scale.
+- Many apps make the dock icons smaller to fit the screen's width. Untested.
 
 ## How it is built
 
 Design records: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../documentation/plans/2026-11-11-cinnamon-scale-overview.md),
-then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../documentation/plans/2026-11-12-cinnamon-scale-second-screen.md) for several screens.
+then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../documentation/plans/2026-11-12-cinnamon-scale-second-screen.md) for several screens,
+then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/plans/2026-11-12-cinnamon-scale-dock.md) for the dock.
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
@@ -108,7 +131,7 @@ Private fields and methods read, called or written:
 
 | Object | Members | Used for |
 |---|---|---|
-| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the header is inserted, close animation in progress |
+| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the header and the dock are inserted, close animation in progress |
 | `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written), `getActiveWorkspace()` | reach each workspace, hide the windows during a search, the workspace a drag happens on |
 | `Workspace` | `_monitors` | the per-monitor objects, one per screen |
 | `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
@@ -118,6 +141,8 @@ Private fields and methods read, called or written:
 | dnd `Draggable` | `buttonPressEventId`, `destroyEventId` | removing the drag handlers on disable |
 | `imports.ui.dnd` | `addDragMonitor`, `removeDragMonitor`, a monitor's `dragMotion(event)` with `event.x`, `event.y`, `event.source` | seeing every drag motion, to highlight a screen's window area |
 | `Main` | `modalCount` | is Scale the only modal |
+| `Main.AppletManager` | `getRunningInstancesForUuid('grouped-window-list@cinnamon.org')` | the panel's window list applet |
+| grouped window list applet | `settings` (its `AppletSettings`), key `pinned-apps` | the pinned apps of the dock |
 
 Assumptions about behaviour:
 
@@ -132,4 +157,7 @@ Assumptions about behaviour:
   shown on top, which then takes the drop.
 - Returning `SUCCESS` from a drag monitor's `dragDrop` ends the drop without `drag-end` or
   cleanup, so drag monitors here only implement `dragMotion`.
+- `Main.activateWindow` does not close Scale when it has to switch workspace, so the dock
+  switches to the window's workspace first, then activates it.
+- `Cinnamon.AppSystem`'s `app-state-changed` signal drives the dock's live update.
 - `extension.sh reload` calls the D-Bus method `org.Cinnamon.ReloadXlet(uuid, "EXTENSION")`.

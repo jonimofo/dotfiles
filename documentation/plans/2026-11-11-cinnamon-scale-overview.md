@@ -114,6 +114,7 @@ The "Enter -> launch first" line is an annotation, not text in the interface.
 | `workspaceStrip.js` | Strip, thumbnails, grid layout, click, drop target, big view inset |
 | `windowDrag.js` | Makes Scale's window clones draggable |
 | `monitorDrop.js` | Drop target on each screen's window area, moves a window to that screen |
+| `appDock.js` | Dock of pinned and running apps at the bottom of the primary monitor |
 | `superKey.js` | Super hotkey |
 | `uiHelpers.js` | Shared constants, click swallowing, natural sizes, modal checks |
 | `stylesheet.css` | Colors, paddings, sizes |

@@ -1,15 +1,16 @@
 # cinnamon/
 
-My Cinnamon extensions, versioned. Each one is symlinked into
-`~/.local/share/cinnamon/extensions/`.
+My Cinnamon extensions and applets, versioned. Each one is symlinked into
+`~/.local/share/cinnamon/extensions/` or `~/.local/share/cinnamon/applets/`.
 
 ## What lives here
 
 - `extensions/scale-wheel-switch@bgi/`: turns Scale into a GNOME-style overview.
   Tested on Cinnamon 6.4 (X11).
 - `extension.sh`: enable, disable or reload one extension, keeping the others enabled.
-- `applets/quick-settings@bgi/`: GNOME-style Quick Settings menu, work in progress
-  (plan: [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md)).
+- `applets/quick-settings@bgi/`: one panel button that opens a GNOME-style Quick Settings
+  menu (sound, microphone, brightness, network, Bluetooth, VPN, power and session).
+  Tested on Cinnamon 6.4 (X11). See [Quick Settings](#quick-settings-what-it-does) below.
 - `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
   Enable adds it at the right end of panel1's right zone.
 
@@ -179,3 +180,132 @@ Assumptions about behaviour:
   switches to the window's workspace first, then activates it.
 - `Cinnamon.AppSystem`'s `app-state-changed` signal drives the dock's live update.
 - `extension.sh reload` calls the D-Bus method `org.Cinnamon.ReloadXlet(uuid, "EXTENSION")`.
+
+## Quick Settings: what it does
+
+One button on the panel. Its icons, left to right: Wi-Fi, Bluetooth (only while the adapter
+is on), VPN (only while a NetworkManager VPN or NordVPN is up), volume. A click opens the menu:
+
+- Header: battery level and charging state on the left (hidden without a battery), then
+  four round buttons. Screenshot starts `flameshot gui`, Settings opens System Settings,
+  Lock locks the screen, Power opens Cinnamon's end-session dialog (suspend, restart, shut
+  down). Each closes the menu first.
+- Sliders: Sound (default output), Microphone (default input), Brightness. Sound and
+  Microphone follow the handle live, like the stock sound applet. Brightness sets every
+  external monitor that answers DDC/CI to the same value when the handle is released, or
+  the laptop panel when no such monitor is connected.
+- Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
+  - Wi-Fi: wireless on or off. Shows the network in use.
+  - Bluetooth: adapter on or off. Shows the device when exactly one is connected.
+  - VPN: the active NetworkManager VPN or WireGuard profile, else the last used one. Shows
+    its name.
+  - NordVPN: connect (quick connect) or disconnect. Shows the country while connected.
+  - Power profile: shows the active profile. A click goes back to Balanced, or from
+    Balanced to the last other profile used (Power Saver the first time).
+  - Night Light, Dark style, Do Not Disturb (notifications off), Keep awake (no screen
+    blanking or dimming), Mic mute.
+- '>' on a tile or a slider opens its list under that row, in the menu: networks, paired
+  devices, VPN profiles, NordVPN countries, power profiles, output and input devices. The
+  active entry has a check mark; a click switches to that entry. The last entry opens the
+  matching settings page. One list is open at a time; a second click on '>' closes it.
+
+A Wi-Fi network without a saved profile is joined the stock network applet's way: Cinnamon
+asks for the password. An 802.1x network opens the network settings wizard.
+
+The stock network, sound and power applets can be removed from the panel once this one
+does what you need: right-click each > Remove from panel.
+
+## Quick Settings: settings dialog
+
+Right-click the button > Configure... Four tabs, Tiles, Sliders, Header and Panel, each a
+list with a Show checkbox per row. Move up and Move down change the order. Changes apply at
+once, without a reload.
+
+- The battery stays on the left of the header; the order applies to the buttons.
+- With every panel icon hidden or absent, one settings icon keeps the button on the panel.
+  A checkbox can hide an icon, never show one its state hides.
+- Add, Remove and Edit come with the stock list and cannot be hidden. Edit only picks a
+  name from the list; an added row repeating an element is ignored; a removed element comes
+  back at the end, shown. An emptied list shows everything again.
+
+The tabs and their defaults come from the ordered lists in
+`applets/quick-settings@bgi/constants.js`. After changing one of them, generate the schema
+again (the tests fail until then):
+
+```bash
+gjs scripts/cinnamon-quick-settings-schema.js cinnamon/applets/quick-settings@bgi \
+  > cinnamon/applets/quick-settings@bgi/settings-schema.json
+```
+
+## Quick Settings: install
+
+The link must point to the main checkout, not to a git worktree.
+
+```bash
+ln -s ~/Repos/dotfiles/cinnamon/applets/quick-settings@bgi \
+  ~/.local/share/cinnamon/applets/quick-settings@bgi
+~/Repos/dotfiles/cinnamon/applet.sh enable quick-settings@bgi
+```
+
+`applet.sh enable` adds the applet at the right end of panel1's right zone and prints
+"unchanged" when it is already there. A changed size in `stylesheet.css` shows after the
+next login (see [Reload after an edit](#reload-after-an-edit)).
+
+Reload after an edit:
+
+```bash
+~/Repos/dotfiles/cinnamon/applet.sh reload quick-settings@bgi
+journalctl --user -b --since "-2 min" --no-pager | grep -E 'quick-settings|JS ERROR'
+```
+
+## Quick Settings: uninstall
+
+```bash
+~/Repos/dotfiles/cinnamon/applet.sh disable quick-settings@bgi
+rm ~/.local/share/cinnamon/applets/quick-settings@bgi
+```
+
+## Quick Settings: dependencies
+
+All already on this machine; nothing to install. Without one, the matching part is dimmed
+or does nothing, and the reason goes to the journal once:
+
+| Tool | Used for | When absent |
+|---|---|---|
+| `ddcutil` | external monitor brightness | the laptop panel is used, through cinnamon-settings-daemon; with no laptop panel either, the Brightness row is dimmed |
+| `power-profiles-daemon` | Power profile tile and list | tile dimmed |
+| `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed |
+| `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
+| `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
+
+NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon and the session
+manager come with the desktop.
+
+## Quick Settings: known limitations
+
+- Microphone and Mic mute are dimmed while there is no input source (the internal microphone
+  is disabled on this machine).
+- A brightness change takes about 1.5 s to reach both monitors; on opening, the slider shows
+  the previous value for about 1.3 s while it reads the monitor.
+- The laptop-panel brightness fallback is only tested with fakes: the DDC monitors were
+  always connected.
+- With the NordVPN tile hidden, its status is not read, so a NordVPN connection no longer
+  shows the VPN panel icon.
+- The hover and list tints are white overlays that suit dark themes.
+- A size changed in `stylesheet.css` shows after the next login.
+- NordVPN's own NetworkManager connection (interface `nordlynx`) is left out of the VPN
+  tile; it was only checked while NordVPN was disconnected.
+
+## Quick Settings: tests
+
+```bash
+scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema.json, module references
+scripts/cinnamon-applet-test.sh         # applet.sh, against a stub gsettings
+scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting changed
+```
+
+`cinnamon-quick-settings-test.sh` runs on the memory GSettings backend and fakes for ddcutil,
+nordvpn, BlueZ and NetworkManager writes, fed with output captured on this machine
+(`scripts/fixtures/`). It reads the real NetworkManager state without changing it.
+
+Design record: [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md).

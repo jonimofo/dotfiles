@@ -1,4 +1,4 @@
-Status: VALIDATED
+Status: DONE
 
 # Cinnamon Quick Settings applet
 
@@ -176,10 +176,29 @@ another list closes it.
 
 ## Steps
 
+All done, in PR #32.
+
 1. Layout with every tile visible, Wi-Fi and Dark style working. Look validated live on the panel.
 2. Sliders: monitor brightness, output volume, microphone.
 3. Network tiles and submenus: Wi-Fi, Bluetooth, VPN SEB, NordVPN.
 4. System tiles and header buttons: power profile, Night Light, Do Not Disturb, Keep awake,
    Mic mute, screenshot, settings, lock, power.
-5. Settings dialog: show, hide and reorder the slider rows and the tiles.
+5. Settings dialog: show, hide and reorder the tiles, slider rows, header elements and panel
+   icons.
 6. README, install script, checks on the panel, PR ready for review.
+
+Built differently from the first decisions:
+
+- Brightness falls back to the laptop panel through cinnamon-settings-daemon (as the stock
+  power applet), not `intel_backlight` directly, and only when no DDC monitor answers.
+- The '>' lists open in place in the menu (step 3 answer), not as separate submenus.
+
+## Postponed
+
+| Item | Issue |
+|---|---|
+| VPN tiles misbehave on connect | #33 |
+| Media controls (play, pause, next, previous) in the menu, to design with the user first | #34 |
+| Hover and list tints taken from the theme, for light themes | #35 |
+| Keep awake: automated tests, and the inhibit left behind by a reload during an `Inhibit` call | #36 |
+| Brightness slider shows the old value for about 1.3 s on opening | #37 |

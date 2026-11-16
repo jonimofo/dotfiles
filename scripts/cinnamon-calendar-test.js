@@ -41,6 +41,7 @@ const SecondZone = load('./secondZone');
 const DayMarker = load('./dayMarker');
 const DayCell = load('./dayCell');
 const DaySummary = load('./daySummary');
+const Appearance = load('./appearance');
 const EventsHeight = load('./eventsHeight');
 
 const PARIS = GLib.TimeZone.new_identifier('Europe/Paris');
@@ -182,6 +183,7 @@ function testDayCell() {
         `${S.day} ${S.dayToday} ${S.daySelected}`);
     checkEqual('day: other month', style({ outside: true }), `${S.day} ${S.dayOutside}`);
     checkEqual('day: weekend', style({ weekend: true }), `${S.day} ${S.dayWeekend}`);
+    checkEqual('day: markers shown, room under the digit', style({ marked: true }), `${S.day} ${S.dayMarked}`);
 }
 
 // Fabricated events of one day, in minutes from midnight.
@@ -231,6 +233,39 @@ function testEventsHeight() {
     checkEqual('events cap: NaN height, no cap', EventsHeight.eventsMaxHeight(NaN, ratio, 1), null);
 }
 
+function testAppearance() {
+    const days = Constants.TEXT_SCALES.days;
+    checkEqual('scale: default', Appearance.clampSetting(100, days), 100);
+    checkEqual('scale: below the range', Appearance.clampSetting(20, days), 70);
+    checkEqual('scale: above the range', Appearance.clampSetting(300, days), 160);
+    checkEqual('scale: rounded to the step', Appearance.clampSetting(103, days), 105);
+    checkEqual('scale: float from the dialog', Appearance.clampSetting(115.0000001, days), 115);
+    checkEqual('scale: numeric string', Appearance.clampSetting('120', days), 120);
+    checkEqual('scale: text falls back to the default', Appearance.clampSetting('big', days), 100);
+    checkEqual('scale: empty string falls back to the default', Appearance.clampSetting('', days), 100);
+    checkEqual('scale: undefined falls back to the default', Appearance.clampSetting(undefined, days), 100);
+    checkEqual('scale: null falls back to the default', Appearance.clampSetting(null, days), 100);
+    checkEqual('scale: NaN falls back to the default', Appearance.clampSetting(NaN, days), 100);
+    checkEqual('scale: Infinity falls back to the default', Appearance.clampSetting(Infinity, days), 100);
+    checkEqual('days and header style at 100%', Appearance.percentFontStyle(100, days), 'font-size: 100%;');
+    checkEqual('days style clamped', Appearance.percentFontStyle(400, days), 'font-size: 160%;');
+    checkEqual('event list style at the defaults', Appearance.eventListStyle(100, 8), 'font-size: 12px; spacing: 8px;');
+    checkEqual('event list style, 150% and gap clamped', Appearance.eventListStyle(150, 40),
+        'font-size: 18px; spacing: 24px;');
+    checkEqual('event list style, bad values', Appearance.eventListStyle('x', -3), 'font-size: 12px; spacing: 0px;');
+
+    // At 100%, the event texts in em of the 12px list give the design's px sizes.
+    const css = readText(`${appletDir}/stylesheet.css`);
+    const designPx = { eventTime: 13, eventTitle: 14, eventMeta: 12, eventCountdown: 11 };
+    for (const [name, px] of Object.entries(designPx)) {
+        const rule = css.match(new RegExp(`\\.${Constants.STYLE[name]}\\s*\\{[^}]*font-size:\\s*([0-9.]+)em`));
+        const size = rule ? Number(rule[1]) * Constants.EVENTS_BASE_FONT_PX : NaN;
+        check(`100% look: ${Constants.STYLE[name]} is ${size.toFixed(3)}px, design ${px}px`, Math.abs(size - px) < 0.01);
+    }
+    const gap = css.match(/\.calendar-bgi-event-list\s*\{[^}]*spacing:\s*(\d+)px/);
+    check('100% look: stylesheet gap is the default gap', gap !== null && Number(gap[1]) === Constants.EVENT_GAP.default);
+}
+
 function testSchema() {
     const schema = JSON.parse(readText(`${appletDir}/settings-schema.json`));
     checkEqual('schema: show second zone default', schema[Constants.SHOW_SECOND_ZONE_KEY].default, true);
@@ -239,6 +274,38 @@ function testSchema() {
     checkEqual('schema: stock keybinding kept', schema.keyOpen.default, '<Super>c');
     check('schema: stock switches kept', ['show-events', 'show-week-numbers', 'use-custom-format']
         .every(key => schema[key] && schema[key].type === 'switch'));
+    const specs = [...Object.values(Constants.TEXT_SCALES), Constants.EVENT_GAP,
+        ...Object.values(Constants.ELEMENT_SWITCHES)];
+    for (const spec of specs) {
+        const entry = schema[spec.key];
+        const range = ['min', 'max', 'step'].every(field => spec[field] === undefined || entry[field] === spec[field]);
+        check(`schema: ${spec.key} default, range and label as in constants.js`,
+            entry !== undefined && entry.default === spec.default && entry.description === spec.label && range);
+    }
+    const layout = schema.layout;
+    check('schema: layout is the first key', Object.keys(schema)[0] === 'layout');
+    checkEqual('schema: tabs', JSON.stringify(layout.pages.map(page => layout[page].title)),
+        JSON.stringify(Constants.SETTINGS_PAGES.map(page => page.title)));
+    checkEqual('schema: sections', JSON.stringify(layout.pages.map(page => layout[page].sections.map(section =>
+        layout[section].title))), JSON.stringify(Constants.SETTINGS_PAGES.map(page => page.sections)));
+    const placed = layout.pages.flatMap(page => layout[page].sections.flatMap(section => layout[section].keys));
+    const settingKeys = Object.keys(schema).filter(key => key !== 'layout');
+    check('schema: every setting in one tab', settingKeys.every(key => placed.filter(k => k === key).length === 1) &&
+        placed.every(key => settingKeys.includes(key)));
+    // Every key the code reads: string literals given to bind(), bindWithObject() or
+    // getValue(), and every key of constants.js.
+    const used = new Set();
+    for (const file of listJs()) {
+        const source = readText(`${appletDir}/${file}`);
+        for (const match of source.matchAll(/\b(?:bind|bindWithObject|getValue)\((?:this, )?["']([A-Za-z-]+)["']/g))
+            used.add(match[1]);
+    }
+    for (const spec of specs)
+        used.add(spec.key);
+    [Constants.SHOW_SECOND_ZONE_KEY, Constants.SECOND_ZONE_ID_KEY, Constants.SECOND_ZONE_LABEL_KEY].forEach(k => used.add(k));
+    const missing = [...used].filter(key => schema[key] === undefined);
+    check(`schema: every key used by the code exists (${used.size} keys${missing.length ? `, missing ${missing.join(', ')}` : ''})`,
+        missing.length === 0);
     const metadata = JSON.parse(readText(`${appletDir}/metadata.json`));
     checkEqual('metadata: uuid', metadata.uuid, Constants.UUID);
 }
@@ -248,7 +315,7 @@ function testSchema() {
 const PALETTE = ['#151B2B', '#1C2436', '#202B40', '#29364D', '#2F405B', '#394761', '#F1F4FB', '#B5BED0',
     '#818CA4', '#9274DD', '#BAA3F0', '#DDE3F0', '#FFFFFF'];
 // Day cells grow with the theme's font: their sizes are in em or %, not px.
-const DAY_RULES = ['day', 'dayHeading', 'dayMarkerBox', 'dayMarker', 'weekNumber', 'monthRow', 'monthLabel'];
+const DAY_RULES = ['day', 'dayMarked', 'dayHeading', 'dayMarkerBox', 'dayMarker', 'weekNumber', 'monthRow', 'monthLabel'];
 
 function listJs() {
     const names = [];
@@ -300,6 +367,7 @@ testSecondZone();
 testDayMarker();
 testEventsHeight();
 testDayCell();
+testAppearance();
 testDaySummary();
 testSchema();
 testStylesheet();

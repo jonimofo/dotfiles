@@ -69,7 +69,7 @@ Owner's answers:
   Bluetooth (BlueZ) code. Turning a radio back on by hand while it is checked unchecks it.
 - Touchpad: `org.cinnamon.desktop.peripherals.touchpad` `send-events`. The schema range is
   `enabled`, `disabled`, `disabled-on-external-mouse`: checked unless `disabled`; a click
-  writes `disabled` or `enabled`.
+  writes `disabled` or `enabled`. Removed afterwards (see the second review round).
 - CPU line: `CPU  <process> <percent>%`, the process using the most CPU, read only when the
   menu opens, through `top` in batch mode (two frames half a second apart, the second one
   measured), run asynchronously with an argv array. The parser is a pure function tested on a
@@ -77,8 +77,9 @@ Owner's answers:
   Show and hide: one more row, `CPU line`, at the end of the Tiles tab (the line sits under the
   tiles); its place in that list does not move it, as with the header's battery.
 - New tiles are appended to `TILES`; a saved configuration without the new ids gets them
-  appended, shown (`layoutModel.normalize`).
-- Dark style and Touchpad share one string-setting toggle (`stringSetting.js`).
+  appended, shown (`layoutModel.normalize`). Both changed in the second review round.
+- Dark style and Touchpad share one string-setting toggle (`stringSetting.js`); Dark style
+  alone uses it since the Touchpad tile was removed.
 
 ## Night Light tile removed (review round)
 
@@ -94,6 +95,28 @@ NordVPN are tiles 3 and 4, one row. Tests cover both.
 | [ NordVPN         > ] [ VPN             > ] |
 | [ Balanced        > ] [ Airplane mode     ] |
 ```
+
+## Last tile rows reordered, Touchpad removed (second review round)
+
+Request: "for the last two rows of tiles, from left to right : Airplane Mode, Performance,
+other row : Keyboard, -> Remove Touchpad," (Performance is the Power profile tile, whose
+label is the active profile.)
+
+```
+| [ Wi-Fi           > ] [ Bluetooth       > ] |
+| [ NordVPN         > ] [ VPN             > ] |
+| [ Airplane mode     ] [ Performance     > ] |
+| [ Keyboard  Low     ]                       |
+```
+
+- The Touchpad tile is removed, with its keys and test.
+- Default `TILES` order: wifi, bluetooth, vpn, nordvpn, airplane-mode, power-profile,
+  keyboard-light, dark-style, do-not-disturb, keep-awake, mic-mute.
+- A declared element missing from a saved list is no longer appended: it goes just before the
+  first of its declared successors that the saved list holds, else at the end
+  (`layoutModel.insertMissing`). So the grid above shows for a saved Tiles list made before
+  these tiles existed, without editing it. Warmth still comes after Brightness, Battery after
+  the panel icons, the CPU line at the end of the Tiles list.
 
 ## Out of scope
 

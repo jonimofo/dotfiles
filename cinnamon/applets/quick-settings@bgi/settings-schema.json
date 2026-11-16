@@ -83,14 +83,13 @@
                     "Bluetooth": "bluetooth",
                     "VPN": "vpn",
                     "NordVPN": "nordvpn",
+                    "Airplane mode": "airplane-mode",
                     "Power profile": "power-profile",
+                    "Keyboard light": "keyboard-light",
                     "Dark style": "dark-style",
                     "Do Not Disturb": "do-not-disturb",
                     "Keep awake": "keep-awake",
                     "Mic mute": "mic-mute",
-                    "Keyboard light": "keyboard-light",
-                    "Airplane mode": "airplane-mode",
-                    "Touchpad": "touchpad",
                     "CPU line": "cpu-line"
                 }
             }
@@ -114,7 +113,15 @@
             },
             {
                 "show": true,
+                "id": "airplane-mode"
+            },
+            {
+                "show": true,
                 "id": "power-profile"
+            },
+            {
+                "show": true,
+                "id": "keyboard-light"
             },
             {
                 "show": true,
@@ -131,18 +138,6 @@
             {
                 "show": true,
                 "id": "mic-mute"
-            },
-            {
-                "show": true,
-                "id": "keyboard-light"
-            },
-            {
-                "show": true,
-                "id": "airplane-mode"
-            },
-            {
-                "show": true,
-                "id": "touchpad"
             },
             {
                 "show": true,

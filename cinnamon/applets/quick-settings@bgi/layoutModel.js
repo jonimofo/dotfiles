@@ -1,8 +1,8 @@
 // What the settings dialog stored, made safe to apply. The dialog's list widget also has
 // Add, Remove and Edit buttons that cannot be hidden without hiding the moves, so a stored
 // list can hold anything: unknown ids are ignored, a repeated id keeps its first row, and a
-// declared element missing from the list is appended at the end, shown. Nothing can be lost
-// for good, and an element added in a later version appears by itself.
+// declared element missing from the list comes back shown, see insertMissing(). Nothing can
+// be lost for good, and an element added in a later version appears by itself.
 //
 // @stored: [{ show, id }] or anything else; @declared: [{ id }] in the default order.
 // Returns [{ id, show }] holding every declared id exactly once.
@@ -16,11 +16,23 @@ function normalize(stored, declared) {
         seen.add(row.id);
         result.push({ id: row.id, show: row.show !== false });
     }
-    for (const item of declared) {
-        if (!seen.has(item.id))
-            result.push({ id: item.id, show: true });
-    }
+    insertMissing(result, declared, seen);
     return result;
+}
+
+// Puts each declared element missing from @result just before the first of its declared
+// successors that @result holds, so it lands where the defaults put it relative to the
+// stored order; with no such successor, at the end. Handled in declaration order, so several
+// missing in a row keep their declared order. @seen: the ids @result holds, updated.
+function insertMissing(result, declared, seen) {
+    declared.forEach((item, index) => {
+        if (seen.has(item.id))
+            return;
+        const successor = declared.slice(index + 1).find(next => seen.has(next.id));
+        const at = successor ? result.findIndex(row => row.id === successor.id) : result.length;
+        result.splice(at, 0, { id: item.id, show: true });
+        seen.add(item.id);
+    });
 }
 
 // The ids to show, in the stored order.

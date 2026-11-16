@@ -236,18 +236,16 @@ level as text, like `87%` (only with a battery). A click opens the menu:
   - VPN: the active NetworkManager VPN or WireGuard profile, else the last used one. Shows
     its name.
   - NordVPN: connect (quick connect) or disconnect. Shows the country while connected.
+  - Airplane mode: a click turns Wi-Fi and Bluetooth off; a second click turns back on the
+    ones that were on. Turning one back on by hand ends airplane mode.
   - Power profile: shows the active profile. A click goes back to Balanced, or from
     Balanced to the last other profile used (Power Saver the first time).
-  - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
-    dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
   - Keyboard light: a click goes to the next backlight level, back to off after the
     brightest, through UPower. Shows the level: Off, Low, High for a two-level light (On
     for a one-level light, Medium above half on a light with more levels). Follows the
     keyboard's own hotkey. Dimmed without a keyboard backlight.
-  - Airplane mode: a click turns Wi-Fi and Bluetooth off; a second click turns back on the
-    ones that were on. Turning one back on by hand ends airplane mode.
-  - Touchpad: on or off (Settings > Mouse and Touchpad). "Disabled when an external mouse is
-    plugged in" counts as on; a click from there turns the touchpad off.
+  - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
+    dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
 - CPU line, under the tiles: the process using the most CPU and its share, like
   `CPU  php 212%` (per core, as `top` counts: 212% is a bit over two cores). Read each time
   the menu opens, with `top` over half a second, never in the background.
@@ -266,8 +264,8 @@ does what you need: right-click each > Remove from panel.
 
 Right-click the button > Configure... Four tabs, Tiles, Sliders, Header and Panel, each a
 list with a Show checkbox per row. Move up and Move down change the order. Changes apply at
-once, without a reload. Elements added in a later version appear at the end of a saved
-list, shown.
+once, without a reload. An element added in a later version appears in a saved list, shown,
+just before the first element that follows it in the default order, or at the end.
 
 - The battery stays on the left of the header; the order applies to the buttons.
 - The Tiles tab ends with the CPU line: its checkbox shows or hides it, its place in the

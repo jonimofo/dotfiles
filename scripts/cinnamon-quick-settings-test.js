@@ -3,7 +3,7 @@
 // (no test touches the real NetworkManager); brightness runs against fake ddcutil
 // and laptop backends fed with captured ddcutil output; NordVPN runs against a fake client
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
-// models run on plain data; Night Light (the Warmth row), Do Not Disturb and Touchpad run on the memory
+// models run on plain data; Night Light (the Warmth row) and Do Not Disturb run on the memory
 // GSettings backend; the keyboard light runs on a fake UPower bus; Airplane mode on fake radios
 // and on the Wi-Fi and Bluetooth fakes; the CPU line parser on captured top output.
 // No real setting is changed.
@@ -89,7 +89,7 @@ async function testDarkStyle() {
     settings.set_string('color-scheme', 'prefer-dark');
     let changes = 0;
     const dark = new StringSetting.StringSetting('org.x.apps.portal', 'color-scheme',
-        { on: 'prefer-dark', off: 'default', onUnlessOff: false }, () => changes++);
+        { on: 'prefer-dark', off: 'default' }, () => changes++);
     check('dark: prefer-dark reads as on', dark.enabled === true);
     dark.toggle();
     check('dark: toggle off writes default', settings.get_string('color-scheme') === 'default' && !dark.enabled);
@@ -660,32 +660,6 @@ async function testNightLight() {
     night.destroy();
 }
 
-async function testTouchpad() {
-    const StringSetting = load('./stringSetting');
-    const Constants = load('./constants');
-    const settings = new Gio.Settings({ schema_id: Constants.TOUCHPAD_SCHEMA });
-    const [, range] = settings.get_range(Constants.TOUCHPAD_KEY).deepUnpack();
-    const allowed = range.deepUnpack();
-    check(`touchpad: on and off values are in the key's range (${allowed})`,
-        allowed.includes(Constants.TOUCHPAD_ON) && allowed.includes(Constants.TOUCHPAD_OFF));
-    settings.set_string('send-events', 'enabled');
-    let changes = 0;
-    const touchpad = new StringSetting.StringSetting(Constants.TOUCHPAD_SCHEMA, Constants.TOUCHPAD_KEY,
-        { on: Constants.TOUCHPAD_ON, off: Constants.TOUCHPAD_OFF, onUnlessOff: true }, () => changes++);
-    check('touchpad: enabled reads as on', touchpad.enabled);
-    touchpad.toggle();
-    check('touchpad: a click writes disabled', settings.get_string('send-events') === 'disabled' && !touchpad.enabled);
-    touchpad.toggle();
-    check('touchpad: a second click writes enabled', settings.get_string('send-events') === 'enabled');
-    settings.set_string('send-events', 'disabled-on-external-mouse');
-    check('touchpad: disabled-on-external-mouse reads as on', touchpad.enabled);
-    touchpad.toggle();
-    check('touchpad: from disabled-on-external-mouse a click writes disabled', settings.get_string('send-events') === 'disabled');
-    await wait(0);
-    check(`touchpad: every change notifies (${changes})`, changes >= 4);
-    touchpad.destroy();
-}
-
 // UPower's KbdBacklight on a fake system bus: calls are answered at once, or fail when the
 // object is absent.
 class FakeKbdBus {
@@ -955,7 +929,7 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Dark style,Do Not Disturb,Keep awake,Mic mute,Keyboard light,Airplane mode,Touchpad,CPU line'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Airplane mode,Power profile,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,CPU line'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
         && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume,Battery');
@@ -969,11 +943,23 @@ function testLayoutModel() {
     const hidden = [{ show: true, id: 'b' }, { show: false, id: 'a' }, { show: true, id: 'c' }, { show: true, id: 'd' }];
     check('layout: a hidden row is left out', `${Model.visibleIds(hidden, declared)}` === 'b,c,d');
     const messy = [{ show: true, id: 'zz' }, { show: true, id: 'c' }, { show: false, id: 'c' }, null, { show: true }, { show: true, id: 'a' }];
-    check(`layout: unknown ids ignored, first duplicate kept, missing appended shown (${Model.visibleIds(messy, declared)})`,
-        `${Model.visibleIds(messy, declared)}` === 'c,a,b,d');
+    check(`layout: unknown ids ignored, first duplicate kept, missing ones back shown (${Model.visibleIds(messy, declared)})`,
+        `${Model.visibleIds(messy, declared)}` === 'b,c,a,d');
     check('layout: an emptied list brings everything back', `${Model.visibleIds([], declared)}` === 'a,b,c,d');
-    // A configuration saved before the extras, reordered and with a tile hidden: it keeps its
-    // own order and the new elements come at the end, shown.
+    // A declared element missing from the stored list goes just before its first declared
+    // successor the list holds, else at the end.
+    const ids = stored => stored.map(id => ({ show: true, id }));
+    check(`layout: a missing element goes before its successor (${Model.visibleIds(ids(['a', 'c', 'd']), declared)})`,
+        `${Model.visibleIds(ids(['a', 'c', 'd']), declared)}` === 'a,b,c,d'
+        && `${Model.visibleIds(ids(['d', 'c', 'a']), declared)}` === 'd,b,c,a');
+    check(`layout: a missing element with no successor stored is appended (${Model.visibleIds(ids(['b', 'a', 'c']), declared)})`,
+        `${Model.visibleIds(ids(['b', 'a', 'c']), declared)}` === 'b,a,c,d');
+    check(`layout: several missing in a row keep their declared order (${Model.visibleIds(ids(['a', 'd']), declared)})`,
+        `${Model.visibleIds(ids(['a', 'd']), declared)}` === 'a,b,c,d'
+        && `${Model.visibleIds(ids(['c']), declared)}` === 'a,b,c,d');
+    check('layout: a missing element keeps the hidden state of the others',
+        JSON.stringify(Model.normalize([{ show: false, id: 'c' }], declared))
+        === '[{"id":"a","show":true},{"id":"b","show":true},{"id":"c","show":false},{"id":"d","show":true}]');
     const Constants = load('./constants');
     // The owner's saved Tiles list: it still holds night-light, a tile that no longer exists.
     const saved = [
@@ -981,19 +967,26 @@ function testLayoutModel() {
         ...['dark-style', 'do-not-disturb', 'keep-awake', 'mic-mute'].map(id => ({ show: false, id })),
     ];
     const ownerTiles = Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS);
-    check(`layout: a saved Tiles list drops the removed night-light and gets the new tiles and the CPU line appended (${ownerTiles})`,
-        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,keyboard-light,airplane-mode,touchpad,cpu-line');
+    check(`layout: the owner's saved Tiles list drops night-light and places the new tiles by the defaults (${ownerTiles})`,
+        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,airplane-mode,power-profile,keyboard-light,cpu-line');
     const ownerRows = Model.rows(ownerTiles.filter(id => id !== Constants.CPU_LINE_ID), Constants.TILES_PER_ROW);
-    check(`layout: with that saved list, NordVPN and VPN share the second row (${JSON.stringify(ownerRows[1])})`,
-        JSON.stringify(ownerRows[1]) === '["nordvpn","vpn"]');
+    check(`layout: the owner's tile rows (${JSON.stringify(ownerRows)})`,
+        JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["airplane-mode","power-profile"],["keyboard-light"]]');
+    check('layout: the owner\'s hidden tiles stay hidden',
+        Model.normalize(saved, Constants.TILE_LAYOUT_ITEMS).filter(row => !row.show).map(row => row.id).join() === 'dark-style,do-not-disturb,keep-awake,mic-mute');
+    check(`layout: default tile order (${Constants.TILES.map(item => item.id)})`,
+        `${Constants.TILES.map(item => item.id)}` === 'wifi,bluetooth,vpn,nordvpn,airplane-mode,power-profile,keyboard-light,dark-style,do-not-disturb,keep-awake,mic-mute');
+    check('layout: no touchpad tile is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'touchpad'));
     const defaultRows = Model.rows(Constants.TILES.map(item => item.id), Constants.TILES_PER_ROW);
     check(`layout: in the default order VPN and NordVPN share one row (${JSON.stringify(defaultRows[1])})`,
         defaultRows.some(row => row.includes('vpn') && row.includes('nordvpn'))
         && JSON.stringify(defaultRows[1]) === '["vpn","nordvpn"]');
     check('layout: no night-light tile is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'night-light'));
-    check('layout: a saved Sliders list gets Warmth, a saved Panel list gets Battery',
+    check('layout: a saved Sliders list gets Warmth after Brightness, a saved Panel list gets Battery after the icons',
         `${Model.visibleIds(Model.defaults(Constants.SLIDERS.slice(0, 3)), Constants.SLIDERS)}` === 'output,input,monitors,warmth'
-        && `${Model.visibleIds(Model.defaults(Constants.PANEL_ICON_ITEMS.slice(0, 4)), Constants.PANEL_ICON_ITEMS)}` === 'wifi,bluetooth,vpn,volume,battery');
+        && `${Model.visibleIds(Model.defaults(Constants.PANEL_ICON_ITEMS.slice(0, 4)).reverse(), Constants.PANEL_ICON_ITEMS)}` === 'volume,vpn,bluetooth,wifi,battery');
+    check('layout: a saved Header list is kept as stored',
+        `${Model.visibleIds(Model.defaults(Constants.HEADER_ITEMS).reverse(), Constants.HEADER_ITEMS)}` === 'power,lock,settings,screenshot,battery');
     check('layout: odd count leaves one tile on the last row',
         JSON.stringify(Model.rows(['a', 'b', 'c'], 2)) === '[["a","b"],["c"]]');
     const all = { wifi: true, bluetooth: false, vpn: false, volume: true };
@@ -1519,7 +1512,6 @@ async function main() {
     testPowerProfileModel();
     await testBooleanSettings();
     await testNightLight();
-    await testTouchpad();
     testKeyboardLight();
     testAirplaneMode();
     await testTopProcess();

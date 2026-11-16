@@ -117,7 +117,6 @@ class QuickSettingsApplet extends Applet.Applet {
         this._wifi.destroy();
         this._nmClient.destroy();
         this._darkStyle.destroy();
-        this._touchpad.destroy();
         this._keyboardLight.destroy();
         this._topProcess.destroy();
         this._content.destroy();
@@ -280,10 +279,7 @@ class QuickSettingsApplet extends Applet.Applet {
             Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, true, onChange));
         this._darkStyle = this._wireSettingTile('dark-style', onChange => new StringSetting.StringSetting(
             Constants.DARK_STYLE_SCHEMA, Constants.DARK_STYLE_KEY,
-            { on: Constants.DARK_STYLE_ON, off: Constants.DARK_STYLE_OFF, onUnlessOff: false }, onChange));
-        this._touchpad = this._wireSettingTile('touchpad', onChange => new StringSetting.StringSetting(
-            Constants.TOUCHPAD_SCHEMA, Constants.TOUCHPAD_KEY,
-            { on: Constants.TOUCHPAD_ON, off: Constants.TOUCHPAD_OFF, onUnlessOff: true }, onChange));
+            { on: Constants.DARK_STYLE_ON, off: Constants.DARK_STYLE_OFF }, onChange));
     }
 
     // @create(onChange): a BooleanSetting or a StringSetting calling onChange on each change.

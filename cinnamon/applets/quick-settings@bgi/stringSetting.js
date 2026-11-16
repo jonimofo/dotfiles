@@ -1,11 +1,10 @@
 const Gio = imports.gi.Gio;
 const Constants = require('./constants');
 
-// A tile backed by one string GSettings key with an on value and an off value: Dark style,
-// Touchpad. @values: { on, off, onUnlessOff }. With onUnlessOff, every value but off reads
-// as on (the touchpad's disabled-on-external-mouse); else only on does (Dark style's
-// prefer-light reads as off). toggle() writes off, or on. @onChange runs on every change of
-// the key, made here or anywhere else.
+// A tile backed by one string GSettings key with an on value and an off value: Dark style.
+// @values: { on, off }. Only on reads as on (Dark style's prefer-light reads as off);
+// toggle() writes off, or on. @onChange runs on every change of the key, made here or
+// anywhere else.
 class StringSetting {
     constructor(schema, key, values, onChange) {
         this._schema = schema;
@@ -16,8 +15,7 @@ class StringSetting {
     }
 
     get enabled() {
-        const value = this._settings.get_string(this._key);
-        return this._values.onUnlessOff ? value !== this._values.off : value === this._values.on;
+        return this._settings.get_string(this._key) === this._values.on;
     }
 
     toggle() {

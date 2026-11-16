@@ -183,6 +183,31 @@ function testWifi() {
         && clientIds.every(id => !GObject.signal_handler_is_connected(client, id)));
 }
 
+// The hardware switch (rfkill) off: Wi-Fi reads as off and blocked even with the software
+// switch on, so the applet dims the tile, and no scan starts. Flipping it back clears it.
+function testWifiHardwareSwitch() {
+    const Wifi = load('./wifiState');
+    const device = new FakeNmDevice();
+    let scans = 0;
+    device.request_scan_async = () => scans++;
+    const client = new FakeNmClient(device);
+    client.wireless_hardware_enabled = false;
+    let changes = 0;
+    const wifi = new Wifi.WifiState(() => changes++, (cancellable, onReady) => onReady(client, null));
+    check('wifi: hardware switch off reads as blocked and off, software switch on',
+        wifi.hardwareBlocked && !wifi.enabled && client.wireless_enabled);
+    wifi.requestScan();
+    check('wifi: no scan while the hardware switch is off', scans === 0);
+    const changesBeforeFlip = changes;
+    client.wireless_hardware_enabled = true;
+    client.emit('notify::wireless-hardware-enabled', null);
+    check('wifi: hardware switch back on clears the block, Wi-Fi on, the applet is told',
+        !wifi.hardwareBlocked && wifi.enabled && changes === changesBeforeFlip + 1);
+    wifi.requestScan();
+    check('wifi: a scan starts once the hardware switch is on', scans === 1);
+    wifi.destroy();
+}
+
 function testVolumeMapping() {
     const Mapping = load('./volumeMapping');
     const amplified = VOLUME_NORM * 1.5;
@@ -498,6 +523,57 @@ async function testNordvpn() {
     await missing.refresh();
     await missing.refresh();
     check('nordvpn: missing client means unavailable, logged once', !missing.available && errors.length === 1);
+    errors = [];
+
+    // A-M1: the daemon stops while connected. The status read fails: the tile must not stay
+    // checked with the country, nor the VPN panel icon on (both read status.connected).
+    let daemonRunning = true;
+    const stopped = new Nordvpn.Nordvpn(() => (daemonRunning
+        ? Promise.resolve(readText(`${nordvpnFixtures}/status-connected-constructed.txt`))
+        : Promise.reject(new Error('nordvpn: daemon not running'))), () => {});
+    await stopped.refresh();
+    const wasConnected = stopped.available && stopped.connectedCountry === 'United States';
+    daemonRunning = false;
+    await stopped.refresh();
+    check('nordvpn: a failed status read after a connected one shows unavailable, off, no country',
+        wasConnected && !stopped.available && !stopped.status.connected
+        && stopped.status.country === null && stopped.connectedCountry === null);
+    check('nordvpn: the failed status read is logged once', errors.length === 1);
+    errors = [];
+}
+
+// While a connect or disconnect runs, busy is set and any other action is ignored; busy is
+// cleared once the action settles, whether it succeeded or failed.
+async function testNordvpnBusyGuard() {
+    const Nordvpn = load('./nordvpn');
+    errors = [];
+    const calls = [];
+    let action = deferred();
+    const run = argv => {
+        calls.push(argv.slice(1).join(' '));
+        if (argv[1] === 'status')
+            return Promise.resolve(readText(`${nordvpnFixtures}/status-disconnected.txt`));
+        return action.promise;
+    };
+    const nordvpn = new Nordvpn.Nordvpn(run, () => {});
+    const first = nordvpn.toggle();
+    check('nordvpn: busy while an action runs', nordvpn.busy);
+    // Not awaited: without the guard they would wait on the same open command.
+    nordvpn.connectTo('France');
+    nordvpn.toggle();
+    check(`nordvpn: a second action while one runs is ignored (${calls})`, `${calls}` === 'connect');
+    action.resolve('');
+    await first;
+    check(`nordvpn: busy cleared once the action succeeds, then the status is read (${calls})`,
+        !nordvpn.busy && `${calls}` === 'connect,status');
+
+    calls.length = 0;
+    action = deferred();
+    const failing = nordvpn.toggle();
+    action.reject(new Error('nordvpn: connect timed out'));
+    await failing;
+    check(`nordvpn: busy cleared once the action fails, failure logged (${calls})`,
+        !nordvpn.busy && `${calls}` === 'connect,status' && errors.length === 1);
     errors = [];
 }
 
@@ -1121,6 +1197,7 @@ function testBluetoothCalls() {
 async function main() {
     await testDarkStyle();
     testWifi();
+    testWifiHardwareSwitch();
     testVolumeMapping();
     testDdcutilParser();
     await testReleaseCommit();
@@ -1132,6 +1209,7 @@ async function main() {
     testVpnModel();
     testNordvpnParser();
     await testNordvpn();
+    await testNordvpnBusyGuard();
     testPowerProfileModel();
     await testBooleanSettings();
     testBatteryModel();

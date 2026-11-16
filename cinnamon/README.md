@@ -144,7 +144,6 @@ Then give Super back to the Menu (see above).
 - Tested on two monitors side by side. Three or more are untested.
 - Thumbnails follow windows opening, closing, changing workspace and changing screen, not a
   window being moved within its screen or resized while Scale is open. Workspace renames show at the next opening.
-- Cinnamon hides hot corners over a fullscreen window. Super still works there.
 - With the extension disabled, Super does nothing until the Menu shortcut is set back.
 - The dock is drawn on the primary monitor only.
 - Windows with no `.desktop` application are left out of the dock.

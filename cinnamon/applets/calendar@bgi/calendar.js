@@ -161,6 +161,7 @@ class Calendar {
         this._set_date_idle_id = 0;
 
         this.settings.bindWithObject(this, "show-week-numbers", "show_week_numbers", this._onSettingsChange);
+        this.settings.bindWithObject(this, Constants.ELEMENT_SWITCHES.dayMarker.key, "show_day_marker", this._onSettingsChange);
         this.desktop_settings = new Gio.Settings({ schema_id: DESKTOP_SCHEMA });
         this.desktop_settings.connect("changed::" + FIRST_WEEKDAY_KEY, Lang.bind(this, this._onSettingsChange));
 
@@ -434,7 +435,8 @@ class Calendar {
                 today: _today(iter),
                 selected: _sameDay(this._selectedDate, iter),
                 outside: iter.getMonth() != this._selectedDate.getMonth(),
-                weekend: !_isWorkDay(iter)
+                weekend: !_isWorkDay(iter),
+                marked: this.show_day_marker
             });
 
             if (_sameDay(this._selectedDate, iter)) {
@@ -455,7 +457,7 @@ class Calendar {
             }
 
             let color_set = this.events_manager.get_colors_for_date(iter);
-            let marker_count = DayMarker.dayMarkerCount(this.events_enabled, color_set);
+            let marker_count = DayMarker.dayMarkerCount(this.events_enabled && this.show_day_marker, color_set);
 
             for (let i = 0; i < marker_count; i++) {
                 let marker = new St.Label(

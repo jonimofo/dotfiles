@@ -17,6 +17,7 @@ const Constants = require('./constants');
 const DateText = require('./dateText');
 const SecondZone = require('./secondZone');
 const DaySummary = require('./daySummary');
+const Appearance = require('./appearance');
 
 const DATE_FORMAT_FULL = CinnamonDesktop.WallClock.lctime_format("cinnamon", _("%A, %B %-e, %Y"));
 
@@ -52,6 +53,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                     vertical: false
                 }
             );
+            this._header = header;
             this.menu.addActor(header);
 
             let box = new St.BoxLayout(
@@ -180,6 +182,16 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.settings.bind(Constants.SHOW_SECOND_ZONE_KEY, "show_second_zone", this._onSettingsChanged);
             this.settings.bind(Constants.SECOND_ZONE_ID_KEY, "second_zone_id", this._onSettingsChanged);
             this.settings.bind(Constants.SECOND_ZONE_LABEL_KEY, "second_zone_label", this._onSettingsChanged);
+            // Apparence tab: applied live by _applyAppearance(); the day marker switch is
+            // read by the calendar grid itself.
+            this.settings.bind(Constants.TEXT_SCALES.events.key, "events_text_scale", this._onSettingsChanged);
+            this.settings.bind(Constants.TEXT_SCALES.days.key, "days_text_scale", this._onSettingsChanged);
+            this.settings.bind(Constants.TEXT_SCALES.header.key, "header_text_scale", this._onSettingsChanged);
+            this.settings.bind(Constants.EVENT_GAP.key, "event_gap", this._onSettingsChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.headerClocks.key, "show_header_clocks", this._onSettingsChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.eventMeta.key, "show_event_meta", this._onSettingsChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.eventCountdown.key, "show_event_countdown", this._onSettingsChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.daySummary.key, "show_day_summary", this._onSettingsChanged);
             this.settings.bind("keyOpen", "keyOpen", this._setKeybinding);
             this._setKeybinding();
 
@@ -224,6 +236,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
     _onSettingsChanged() {
         this._updateSecondZone();
+        this._applyAppearance();
         this._updateFormatString();
         this._updateClockAndDate();
         this.event_list.actor.visible = this.events_manager.is_active();
@@ -279,6 +292,16 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this._updateDaySummary();
     }
 
+    // Text sizes, gap and element switches of the Apparence tab. The event list rebuilds its
+    // rows on the next select_date(), which _onSettingsChanged() forces.
+    _applyAppearance() {
+        this.event_list.set_appearance(Appearance.eventListStyle(this.events_text_scale, this.event_gap),
+                                       this.show_event_meta, this.show_event_countdown);
+        this._calendar.actor.style = Appearance.percentFontStyle(this.days_text_scale, Constants.TEXT_SCALES.days);
+        this._header.style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);
+        this.go_home_button.visible = this.show_header_clocks;
+    }
+
     _buildClock() {
         let clock = {
             actor: new St.BoxLayout({ style_class: Constants.STYLE.clock }),
@@ -315,7 +338,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             end: DaySummary.minutesFrom(day_start, event.end)
         })));
 
-        this._daySummary.visible = summary.count > 0;
+        this._daySummary.visible = this.show_day_summary && summary.count > 0;
         if (!this._daySummary.visible) {
             return;
         }

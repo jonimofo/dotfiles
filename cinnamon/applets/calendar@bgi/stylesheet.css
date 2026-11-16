@@ -5,8 +5,10 @@
    over earlier ones for selectors of the same weight: keep the order. The event accent bar
    takes the colour of the event's calendar, set by the code from the event data.
 
-   Sizes: further down, without any colour. Day cells are in em, relative to the theme's
-   font; event rows, header band and summary card in px, as the design spec gives them. */
+   Sizes: further down, without any colour. Texts are in em or % of three containers whose
+   font size the applet sets from the Apparence settings (appearance.js): the event list
+   (12px at 100%), the calendar grid and the header band (100% of the theme's font). Paddings
+   and borders stay in px, as the design spec gives them. */
 
 /* ---- Backgrounds ---- */
 
@@ -173,7 +175,8 @@
     border-radius: 3px;
 }
 
-/* One event: accent bar, time block, title over metadata. */
+/* One event: accent bar, time block, title over metadata. Texts in em of the event list's
+   12px at 100%: 13px, 14px, 12px and 11px, the design spec's sizes. */
 .calendar-bgi-event-row {
     border-width: 1px;
     border-radius: 8px;
@@ -189,7 +192,7 @@
 }
 
 .calendar-bgi-event-time {
-    font-size: 13px;
+    font-size: 1.08333em;
     font-weight: 600;
 }
 
@@ -199,16 +202,16 @@
 }
 
 .calendar-bgi-event-title {
-    font-size: 14px;
+    font-size: 1.16667em;
     font-weight: 600;
 }
 
 .calendar-bgi-event-meta {
-    font-size: 12px;
+    font-size: 1em;
 }
 
 .calendar-bgi-event-countdown {
-    font-size: 11px;
+    font-size: 0.91667em;
     padding-left: 6px;
 }
 
@@ -243,17 +246,22 @@
 }
 
 /* Day cells. Before the third review round: 125%, 2.6em by 2.6em. Now 133%, 2.6em wide
-   (+6%) by 2.75em high (+13%). The bottom padding lifts the digit above the marker. */
+   (+6%) by 2.75em high (+13%). They grow with the Jours text size. */
 .calendar-bgi-day {
     font-size: 133%;
     font-weight: 500;
     text-align: center;
     width: 2.6em;
     height: 2.75em;
-    padding: 0 0 0.35em 0;
+    padding: 0;
     margin: 0.1em;
     border-width: 1px;
     border-radius: 8px;
+}
+
+/* With the markers shown, the bottom padding lifts the digit above the marker's space. */
+.calendar-bgi-day-marked {
+    padding-bottom: 0.35em;
 }
 
 .calendar-bgi-day-weekend {

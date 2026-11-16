@@ -103,6 +103,7 @@ const STYLE = {
     monthLabel: 'calendar-bgi-month-label',
     dayHeading: 'calendar-bgi-day-heading',
     day: 'calendar-bgi-day',
+    dayMarked: 'calendar-bgi-day-marked',
     dayToday: 'calendar-bgi-day-today',
     daySelected: 'calendar-bgi-day-selected',
     dayOutside: 'calendar-bgi-day-outside',

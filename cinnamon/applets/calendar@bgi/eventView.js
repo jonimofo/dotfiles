@@ -635,6 +635,8 @@ class EventList {
         this._scroll_to_idle_id = 0;
         this._rows = [];
         this._current_event_data_list_timestamp = 0;
+        this._show_meta = true;
+        this._show_countdown = true;
 
         this.actor = new St.BoxLayout(
             {
@@ -750,6 +752,17 @@ class EventList {
     }
 
     // Caps the column at a share of @monitorHeight (physical pixels); no cap without a height.
+    // Inline style of the event list (text size, gap) and the parts of each row. A change of
+    // parts rebuilds the rows on the next set_events().
+    set_appearance(style, show_meta, show_countdown) {
+        this.events_box.style = style;
+        if (show_meta !== this._show_meta || show_countdown !== this._show_countdown) {
+            this._show_meta = show_meta;
+            this._show_countdown = show_countdown;
+            this._current_event_data_list_timestamp = 0;
+        }
+    }
+
     set_monitor_height(monitorHeight) {
         let max_height = EventsHeight.eventsMaxHeight(monitorHeight, Constants.EVENTS_MAX_HEIGHT_RATIO, global.ui_scale);
         this.actor.style = max_height === null ? null : `max-height: ${max_height}px;`;
@@ -813,7 +826,9 @@ class EventList {
                 event_data,
                 this.selected_date,
                 {
-                    use_24h: this.desktop_settings.get_boolean("clock-use-24h")
+                    use_24h: this.desktop_settings.get_boolean("clock-use-24h"),
+                    show_meta: this._show_meta,
+                    show_countdown: this._show_countdown
                 }
             );
 
@@ -946,11 +961,12 @@ class EventRow {
                 /// text set below
                 y_align: Clutter.ActorAlign.CENTER,
                 style_class: Constants.STYLE.eventCountdown,
+                visible: params.show_countdown
             }
         );
         title_box.add_actor(this.countdown_label);
 
-        if (summary.meta !== "") {
+        if (params.show_meta && summary.meta !== "") {
             let event_meta = new St.Label(
                 {
                     text: summary.meta,

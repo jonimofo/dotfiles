@@ -484,7 +484,8 @@ help), then the second time zone:
 | Label | `VN` | shown before the time on the panel, after it in the popup |
 
 With the custom date format on, it replaces the date part of the panel text only: the times
-and the second zone follow it. The custom formats keep the stock behaviour: they follow the
+and the second zone follow it. Its default is date only, `%a %e %b` (a format saved before
+keeps its value). The custom formats keep the stock behaviour: they follow the
 locale (`LC_TIME`), unlike the rest of the applet.
 
 The stock "Show calendar" keyboard shortcut (`<Super>c`) is removed: the applet registers no
@@ -533,8 +534,12 @@ rm ~/.local/share/cinnamon/applets/calendar@bgi
 - The 12-hour clock's AM/PM marker still comes from the locale (GLib's `%p`).
 - Event times have one colour whether the event is past, in progress or to come; the
   countdown ("Starting in 5 minutes", "In progress") is kept, after the title.
-- The colours are fixed: a light desktop theme keeps the dark popup.
-- The days and the arrows of the month take no keyboard focus, as in the stock applet.
+- The colours are fixed: a light desktop theme keeps the dark popup. The test checks their
+  contrast: 4.5:1 for text, 3:1 for outlines and edges.
+- Clicks on the header date (opens GNOME Calendar) and on the clocks (back to today) have no
+  visible cue, as in the stock applet.
+- The days and the arrows of the month take no keyboard focus, as in the stock applet; the
+  Today and settings buttons do.
 - The day dot is a `•` character: its exact place under the number depends on the font.
 - The events column does not use the theme's `calendar-events-main-box` class (it carries a
   fixed height in some themes), so a theme's border or padding on that column is not drawn.

@@ -140,35 +140,36 @@ copy) at the audit round. Everything else is the stock code.
 |---|---|---|
 | `metadata.json` | | uuid, name, description, `cinnamon-version`, `version`, `url` |
 | `settings-schema.json` | | `section1`, `section2` and `keyOpen` removed; a `layout` with two pages (Appearance: Text size, Shown elements; Panel: Date, Second time zone); eleven appearance keys and three second zone keys added; stock labels "Show calendar events" and "Show week numbers in calendar" reworded `Calendar events` and `Week numbers` |
-| `applet.js` | imports | `DAY_FORMAT`, `DATE_FORMAT_SHORT`, `DATE_FORMAT_FULL` removed; the applet's modules required |
-| `applet.js` | `constructor` | settings uuid; popup class; one `St.Table` for the header band (date, event count, clocks in three equal columns) and the two columns instead of `calendar-main-box`; the event list's date label moved to the header; the clocks inside the "back to today" button; calendar panel; Today button; the settings entry as a button instead of the stock separator and menu item; second zone and appearance bindings; `keyOpen` binding removed; tick clock |
+| `applet.js` | imports | `DAY_FORMAT`, `DATE_FORMAT_SHORT`, `DATE_FORMAT_FULL` and the unused `Separator` removed; the applet's modules required |
+| `applet.js` | `constructor` | settings uuid; popup class; one `St.Table` for the header band (date, event count, clocks in three equal columns) and the two columns instead of `calendar-main-box`; the event list's date label moved to the header; the clocks inside the "back to today" button; calendar panel; Today button; the settings entry as a button instead of the stock separator and menu item; second zone and appearance bindings with light callbacks; handler ids kept for removal; `keyOpen` binding removed; tick clock; accessible name on the clocks button |
 | `applet.js` | `_setKeybinding` | removed (no hotkey) |
-| `applet.js` | `on_applet_added_to_panel`, `on_applet_removed_from_panel` | tick clock connected and disconnected; hotkey removal gone |
+| `applet.js` | `on_applet_added_to_panel`, `on_applet_removed_from_panel` | tick clock connected and disconnected; hotkey removal gone; on removal: zone id timer removed, handlers disconnected, settings finalized, menu destroyed |
+| `applet.js` | `_updateFormatString` | `_inVerticalPanel()` and the desktop keys of `constants.js` |
 | `applet.js` | `_onSettingsChanged` | resolves the second zone, applies the appearance settings |
-| `applet.js` | `_updateClockAndDate` | panel text, clocks, header date, tooltip, event count and Today button from the pure formatters |
+| `applet.js` | `_updateClockAndDate` | panel text, clocks, header date, tooltip and event count from the pure formatters; the redundant first `reactive` line removed |
 | `applet.js` | `_has_calendars_changed` | updates the event count |
 | `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height |
-| `applet.js` | new methods | `_updateSecondZone`, `_inVerticalPanel`, `_timeFormat`, `_secondTime`, `_panelText`, `_applyAppearance`, `_buildClock`, `_updateClocks`, `_updateDaySummary` (the header count), `_updateTodayButton` |
+| `applet.js` | new methods | `_updateSecondZone`, `_inVerticalPanel`, `_timeFormat`, `_secondTime`, `_panelText`, `_applyAppearance`, `_buildClock`, `_updateClocks`, `_updateHeaderCount`, `_onDisplayChanged`, `_onSecondZoneChanged`, `_onZoneIdChanged` |
 | `calendar.js` | imports | `Gettext_gtk30` removed; the applet's modules required |
 | `calendar.js` | `_formatEventTime` | removed (unused, gettext) |
 | `calendar.js` | `_getCalendarDayAbbreviation` | English abbreviation from `constants.js` |
 | `calendar.js` | `constructor` | binds the day dot switch; GTK month/year order detection removed |
-| `calendar.js` | `_buildHeader` | one month row instead of the month and year rows; day heading class |
+| `calendar.js` | `_buildHeader` | one month row instead of the month and year rows; accessible names on the arrows; day heading class; column from `DayCell.weekdayColumn` |
 | `calendar.js` | `_onPrevYearButtonClicked`, `_onNextYearButtonClicked` | removed with the year row |
-| `calendar.js` | `_update` | English month title; own day state classes; week number class; one marker instead of one dot per event |
+| `calendar.js` | `_update` | English month title; own day state classes; `:selected` pseudo-class no longer set; week number class; column from `DayCell.weekdayColumn`; one marker instead of one dot per event |
 | `eventView.js` | imports and constants | `CinnamonDesktop`, `DATE_FORMAT_FULL`, `DAY_FORMAT`, `locale_cap` removed; `Separator` replaced by `Tooltips`; `ARROW_SEPARATOR` is ` – ` |
 | `eventView.js` | `format_timespan` | English countdown from `countdown.js` instead of gettext |
 | `eventView.js` | `EventsManager.eds_service_found`, `log_dbus_error` | log prefix |
 | `eventView.js` | new `EventsManager.get_events_for_date` | the selected day's events, for the header count |
 | `eventView.js` | `EventList.constructor` | own column class instead of `calendar-events-main-box`; own list class; English "No Events" |
-| `eventView.js` | new `EventList.set_appearance`, `EventList.set_monitor_height` | text size and gap of the list, metadata and countdown switches; `max-height` of the column |
+| `eventView.js` | new `EventList.set_appearance`, `EventList.set_monitor_height`, `EventList._apply_column_style` | Events size on the column and the list, gap, metadata and countdown switches; `max-height` of the column |
 | `eventView.js` | `EventList.set_date` | English header date |
 | `eventView.js` | `EventList.set_events` | no separator between two events; row options passed on |
 | `eventView.js` | `EventRow.constructor` | accent bar, time block, title over metadata (summary cut at the first ` \| `), ellipsis, tooltip, switches |
-| `eventView.js` | `EventRow.update_variations` | one time class; English "In progress", "All day", "Today", weekday and date |
+| `eventView.js` | `EventRow.update_variations` | one time class; no pseudo-classes (`:imminent`, `:soon`, `:current`, `:all-day`); the clocks' time format; English "In progress", "All day", "Today", weekday and date |
 
 New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
-`dayCell.js`, `daySummary.js` (the event count wording), `appearance.js`, `countdown.js`,
+`dayCell.js`, `eventCount.js`, `appearance.js`, `countdown.js`,
 `tickClock.js`, `stylesheet.css`.
 
 ## Steps
@@ -632,18 +633,21 @@ Still to look at on the panel after the audit round:
 - Seconds ticking with a custom date format on and seconds shown.
 - The English "No Events", "All day", countdowns and "Date and Time Settings" with a French
   `LANGUAGE` or `LC_MESSAGES`.
+- After the second audit round: the darker selected violet, button edges, the Today button's
+  focus border, month arrows at 160% Days, the events column at 160% Events, removing and
+  adding the applet again.
 
 ## Audit round
 
-The diff audit of 2026-11-16 found 2 HIGH, 9 MEDIUM and 19 LOW findings. The nine MEDIUM are
-fixed here; the HIGH (selected day contrast, events column width at large text sizes) wait for
-the owner's validation, the LOW for the owner's decision.
+The diff audit of 2026-11-16 found 2 HIGH, 9 MEDIUM and 19 LOW findings: 2 HIGH fixed, 9
+MEDIUM fixed, 19 LOW of which 17 fixed and 2 accepted by the owner (L4, L19).
 
 - M1: a second WallClock without a format (`tickClock.js`) drives the updates, so the seconds
   tick with a custom date format without `%S`. Checked on the memory GSettings backend: it
   ticks every second with seconds shown, never more than once in 2.5 s without, while a
   `%a %e` clock ticks at most once (test).
-- M2: the scroll bar handle is violet `#9274DD` (4.71:1 on the popup background `#151B2B`),
+- M2: the scroll bar handle is violet `#9274DD` (4.71:1 on the popup background `#151B2B`;
+  `#7B5CD6`, 3.55:1, since H1),
   light violet `#BAA3F0` on hover (7.83:1, drawn as a 3px border that fills the handle), both
   from the palette.
 - M3: every phrase the applet shows is an English constant (`TEXT` in `constants.js`); no
@@ -654,6 +658,63 @@ the owner's validation, the LOW for the owner's decision.
 - M7, M8, M9: the test derives the palette from the stylesheet's palette block, finds a colour
   in any string of the code, and matches classes exactly both ways; each proven by a
   deliberate break that turned it red.
+
+HIGH, fixed after the owner's decision:
+
+- H1, chosen "Darker violet": the selected day is `#7B5CD6`, white digit 4.83:1 (was 3.64:1).
+  Validated look:
+
+  ```
+  Proposed:
+
+     [ 16 ]   white on #7B5CD6   4.83 : 1
+
+  Same violet family, one step deeper.
+  ```
+
+  The today outline on it is 3.76:1 and the scroll bar handle 3.55:1 on the popup, both
+  above 3:1, so both keep their colours.
+- H2: the events column carries the Events size as a percentage (`eventColumnStyle`), so its
+  `28em` width grows with the text; the list keeps its px base, so nothing scales twice and
+  100% is unchanged (`font-size: 100%`).
+- A contrast test reads the palette block and checks each colour on the backgrounds it is
+  used on: 4.5:1 for text, 3:1 for outlines, edges and the handle; the thin `#394761` lines
+  and the data-coloured accent bar are named exceptions. To allow white as an outline later,
+  a colour is now written once per property, not once in the file.
+
+LOW, 17 fixed, 2 accepted:
+
+- L1: date-only default custom format `%a %e %b`.
+- L2: appearance keys, the zone switch and the label refresh without a forced fetch of the
+  events; the zone id is resolved 500 ms after the last keystroke, so a half-typed id is not
+  logged.
+- L3: removal removes the zone timer, disconnects the events, desktop settings and UPower
+  handlers and both clocks, finalizes the settings (bindings of the applet and the grid) and
+  destroys the menu, as the stock menu and printers applets do.
+- L4: accepted by the owner: the header date and clocks clicks keep no visible cue.
+- L5: the Today button follows its switch in `_applyAppearance`, not on every tick.
+- L6: stale comments reworded.
+- L7: no `:focus` rule for actors that never take focus; the Today button takes focus like
+  the settings button, with the same light violet border.
+- L8: `headerDateOf`, `panelDateOf`, `dayMonthYearOf`, `weekdayNameOf` on a GLib.DateTime.
+- L9: one vertical-panel test, desktop keys in `constants.js`, unused import and redundant
+  `reactive` removed.
+- L10: `eventCount.js`, `_updateHeaderCount`, `EVENT_COUNT_*`, `ELEMENT_SWITCHES.eventCount`;
+  the key stays `show-day-summary`, with a comment.
+- L11: accessible names `Previous month`, `Next month`, `Back to today`.
+- L12: time block `min-width: 8em` (96px at 100%); month arrows `1.33333em` (16px at 100%).
+- L13: button edges `#818CA4` (5.08:1 on the popup, were 1.84:1); other-month days on hover
+  in the secondary text colour (5.61:1, were 3.10:1).
+- L14: the pseudo-classes nothing styles (`:selected` on days, `:imminent`, `:soon`,
+  `:current`, `:all-day`) are no longer set; the validated look gave them no style, so
+  nothing changes on screen.
+- L15: the marker's empty rule goes; the test names it as a class without a rule.
+- L16: event rows use the clocks' time format, no leading space on 12-hour times.
+- L17: tests that could not fail replaced (heading order through `weekdayColumn`, no ratio
+  constant check, no test of GLib's own DST); new: New York's DST change against Paris, the
+  70 and 160 bounds, the Shown elements order, the header count's visibility.
+- L18: `set_monitor_height` has its own comment.
+- L19: accepted by the owner: the stock Configure tooltips stay.
 
 ## Out of scope
 

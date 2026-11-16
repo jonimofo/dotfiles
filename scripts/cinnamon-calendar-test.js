@@ -47,15 +47,9 @@ const EventsHeight = load('./eventsHeight');
 const PARIS = GLib.TimeZone.new_identifier('Europe/Paris');
 const VIETNAM = GLib.TimeZone.new_identifier('Asia/Ho_Chi_Minh');
 
-// A GLib.DateTime stand-in that formats like the French locale did on this machine
-// (`date '+%a %b %A %B'` gives "lun. nov. lundi novembre"), whatever the test's locale.
-function frenchDate(day) {
-    const names = { '%a': 'lun.', '%b': 'nov.', '%A': 'lundi', '%B': 'novembre' };
-    return {
-        format: conversion => names[conversion],
-        get_day_of_month: () => day,
-        get_year: () => 2026,
-    };
+// Date parts of a fabricated day, through GLib.DateTime (local zone of the test).
+function partsOf(year, month, day) {
+    return DateText.datePartsOf(GLib.DateTime.new(PARIS, year, month, day, 12, 0, 0));
 }
 
 function testSummarySplit() {
@@ -77,27 +71,42 @@ function testSummarySplit() {
     checkEqual('summary: null', split(null), JSON.stringify({ title: '', meta: '' }));
 }
 
-function testShortDate() {
-    checkEqual('abbreviation: dot removed, capitalised', DateText.tidyAbbreviation('lun.'), 'Lun');
-    checkEqual('abbreviation: no dot', DateText.tidyAbbreviation('mai'), 'Mai');
-    checkEqual('abbreviation: accented first letter', DateText.tidyAbbreviation('éte.'), 'Éte');
-    checkEqual('short date: French parts',
-        DateText.formatShortDate(DateText.datePartsOf(frenchDate(16), Constants.SHORT_DATE_FORMATS)), 'Lun 16 Nov');
-    checkEqual('short date: day without padding',
-        DateText.formatShortDate(DateText.datePartsOf(frenchDate(2), Constants.SHORT_DATE_FORMATS)), 'Lun 2 Nov');
+// English dates whatever LC_TIME says. The .sh runs this file once more under fr_FR.
+function testEnglishDates() {
+    checkEqual('header date: example of the eighth round', DateText.formatHeaderDate(partsOf(2026, 11, 16)),
+        'Mon 16 Nov. 2026');
+    checkEqual('header date: single-digit day', DateText.formatHeaderDate(partsOf(2026, 11, 2)), 'Mon 2 Nov. 2026');
+    checkEqual('header date: last day of the year', DateText.formatHeaderDate(partsOf(2026, 12, 31)), 'Thu 31 Dec. 2026');
+    checkEqual('header date: first day of the next year', DateText.formatHeaderDate(partsOf(2027, 1, 1)), 'Fri 1 Jan. 2027');
+    const months = [];
+    for (let month = 1; month <= 12; month++)
+        months.push(DateText.formatHeaderDate(partsOf(2026, month, 1)).split(' ')[2]);
+    checkEqual('header date: every month, dot after a shortened name only', months.join(' '),
+        'Jan. Feb. Mar. Apr. May Jun. Jul. Aug. Sep. Oct. Nov. Dec.');
+    const weekdays = [];
+    for (let day = 16; day <= 22; day++)
+        weekdays.push(DateText.formatHeaderDate(partsOf(2026, 11, day)).split(' ')[0]);
+    checkEqual('header date: each weekday', weekdays.join(' '), 'Mon Tue Wed Thu Fri Sat Sun');
+    checkEqual('panel date: no year, no dot', DateText.formatPanelDate(partsOf(2026, 11, 16)), 'Mon 16 Nov');
+    checkEqual('panel date: May', DateText.formatPanelDate(partsOf(2026, 5, 4)), 'Mon 4 May');
+    checkEqual('event span date', DateText.formatDayMonthYear(partsOf(2026, 9, 7)), '7 Sep. 2026');
+    checkEqual('event span weekday', DateText.weekdayName(partsOf(2026, 11, 18)), 'Wednesday');
+    checkEqual('month heading', DateText.formatMonthHeading(11, 2026), 'November 2026');
+    checkEqual('month heading: May', DateText.formatMonthHeading(5, 2026), 'May 2026');
+    checkEqual('day headings, Sunday first', Constants.WEEKDAY_ABBREVIATIONS.join(' '), 'Sun Mon Tue Wed Thu Fri Sat');
 }
 
 function testPanelText() {
     const example = GLib.DateTime.new(PARIS, 2026, 11, 16, 15, 52, 0);
     const format = DateText.timeFormatFor(true, false);
     const second = { label: 'VN', time: SecondZone.timeInZone(example, VIETNAM, format) };
-    const dateText = DateText.formatShortDate(DateText.datePartsOf(frenchDate(16), Constants.SHORT_DATE_FORMATS));
-    checkEqual('panel: mockup A example', DateText.formatPanelText(dateText, example.format(format), second),
-        'Lun 16 Nov · 15:52 · VN 21:52');
-    checkEqual('panel: second zone hidden', DateText.formatPanelText('Lun 16 Nov', '15:52', null),
-        'Lun 16 Nov · 15:52');
-    checkEqual('panel: empty label keeps the time', DateText.formatPanelText('Lun 16 Nov', '15:52',
-        { label: '', time: '21:52' }), 'Lun 16 Nov · 15:52 · 21:52');
+    const dateText = DateText.formatPanelDate(DateText.datePartsOf(example));
+    checkEqual('panel: round-one example time', DateText.formatPanelText(dateText, example.format(format), second),
+        'Mon 16 Nov · 15:52 · VN 21:52');
+    checkEqual('panel: second zone hidden', DateText.formatPanelText('Mon 16 Nov', '15:52', null),
+        'Mon 16 Nov · 15:52');
+    checkEqual('panel: empty label keeps the time', DateText.formatPanelText('Mon 16 Nov', '15:52',
+        { label: '', time: '21:52' }), 'Mon 16 Nov · 15:52 · 21:52');
     checkEqual('panel: empty custom date part', DateText.formatPanelText('', '15:52', second), '15:52 · VN 21:52');
 }
 
@@ -117,11 +126,6 @@ function testHeaderTexts() {
         JSON.stringify([{ time: '15:52', suffix: 'Paris' }, { time: '21:52', suffix: 'VN' }]));
     checkEqual('header clocks: second zone hidden', clocks('15:52', 'Paris', null),
         JSON.stringify([{ time: '15:52', suffix: 'Paris' }]));
-    checkEqual('header left: mockup B',
-        DateText.formatLongDate(DateText.datePartsOf(frenchDate(16), Constants.LONG_DATE_FORMATS)),
-        'Lundi 16 novembre 2026');
-    checkEqual('month heading: month first', DateText.formatMonthHeading('novembre', '2026', true), 'Novembre 2026');
-    checkEqual('month heading: year first', DateText.formatMonthHeading('novembre', '2026', false), '2026 novembre');
     checkEqual('city: Europe/Paris', DateText.cityFromZoneId('Europe/Paris'), 'Paris');
     checkEqual('city: three parts and underscores', DateText.cityFromZoneId('America/Argentina/Buenos_Aires'),
         'Buenos Aires');
@@ -332,7 +336,7 @@ function testStylesheet() {
 }
 
 testSummarySplit();
-testShortDate();
+testEnglishDates();
 testPanelText();
 testTimeFormats();
 testHeaderTexts();

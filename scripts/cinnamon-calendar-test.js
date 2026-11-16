@@ -104,7 +104,16 @@ function testEnglishDates() {
     checkEqual('event span weekday', DateText.weekdayName(partsOf(2026, 11, 18)), 'Wednesday');
     checkEqual('month heading', DateText.formatMonthHeading(11, 2026), 'November 2026');
     checkEqual('month heading: May', DateText.formatMonthHeading(5, 2026), 'May 2026');
-    checkEqual('day headings, Sunday first', Constants.WEEKDAY_ABBREVIATIONS.join(' '), 'Sun Mon Tue Wed Thu Fri Sat');
+    // Headings as the grid places them: each weekday at DayCell.weekdayColumn().
+    const headings = weekStart => {
+        const row = [];
+        for (let day = 0; day < 7; day++)
+            row[DayCell.weekdayColumn(day, weekStart)] = Constants.WEEKDAY_ABBREVIATIONS[day];
+        return row.join(' ');
+    };
+    checkEqual('day headings, week starting on Monday', headings(1), 'Mon Tue Wed Thu Fri Sat Sun');
+    checkEqual('day headings, week starting on Sunday', headings(0), 'Sun Mon Tue Wed Thu Fri Sat');
+    checkEqual('day column: Sunday is last in a Monday week', DayCell.weekdayColumn(0, 1), 6);
 }
 
 function testPanelText() {
@@ -129,6 +138,17 @@ function testTimeFormats() {
         /^3:52 \S+$/.test(afternoon.format(DateText.timeFormatFor(false, false))));
     check(`time: 12h with seconds (${afternoon.format(DateText.timeFormatFor(false, true))})`,
         /^3:52:07 \S+$/.test(afternoon.format(DateText.timeFormatFor(false, true))));
+}
+
+function testTimeOfEventRows() {
+    // Audit L16: the rows use timeFormatFor() too, so a single-digit hour has no leading space.
+    const morning = GLib.DateTime.new(PARIS, 2026, 11, 16, 9, 5, 0);
+    check(`time: 12h single-digit hour without a leading space (${morning.format(DateText.timeFormatFor(false, false))})`,
+        /^9:05 \S+$/.test(morning.format(DateText.timeFormatFor(false, false))));
+    const example = GLib.DateTime.new(PARIS, 2026, 11, 16, 15, 52, 0);
+    checkEqual('date helpers on a GLib.DateTime', [DateText.headerDateOf(example), DateText.panelDateOf(example),
+        DateText.dayMonthYearOf(example), DateText.weekdayNameOf(example)].join(' / '),
+    'Mon 16 Nov. 2026 / Mon 16 Nov / 16 Nov. 2026 / Monday');
 }
 
 function testHeaderTexts() {
@@ -172,11 +192,16 @@ function testSecondZone() {
         SecondZone.timeInZone(summer, VIETNAM, format), '2026-07-16 01:00');
     const beforeChange = GLib.DateTime.new(PARIS, 2026, 3, 29, 1, 30, 0);
     const afterChange = beforeChange.add_hours(1);
-    checkEqual('zone: Paris DST start, 01:30 then 03:30 in Paris',
-        afterChange.format('%H:%M'), '03:30');
     checkEqual('zone: Paris DST start, Vietnam goes from 07:30 to 08:30',
         `${SecondZone.timeInZone(beforeChange, VIETNAM, '%H:%M')} ${SecondZone.timeInZone(afterChange, VIETNAM, '%H:%M')}`,
         '07:30 08:30');
+    // A second zone with its own DST change: New York moves on 8 March 2026, Paris on 29 March.
+    const newYork = GLib.TimeZone.new_identifier('America/New_York');
+    const noonParis = (month, day) => SecondZone.timeInZone(GLib.DateTime.new(PARIS, 2026, month, day, 12, 0, 0),
+        newYork, '%H:%M');
+    checkEqual('zone: New York before both changes, 6 hours behind', noonParis(3, 1), '06:00');
+    checkEqual('zone: New York after its change, Paris not yet, 5 hours behind', noonParis(3, 20), '07:00');
+    checkEqual('zone: after both changes, 6 hours behind again', noonParis(4, 1), '06:00');
 }
 
 function testDayMarker() {
@@ -251,14 +276,14 @@ function testWording() {
     }
     check(`wording: no gettext call in the applet${gettextCalls.length ? ` (${gettextCalls.join(', ')})` : ''}`,
         gettextCalls.length === 0);
-    const countdown = (minutes, hour) => Countdown.countdownFor(minutes, hour).join('|');
-    checkEqual('countdown: a few minutes', countdown(5, 10), 'imminent|Starting in a few minutes');
-    checkEqual('countdown: minutes', countdown(25, 10), 'soon|Starting in 25 minutes');
-    checkEqual('countdown: one hour', countdown(60, 11), '|In 1 hour');
-    checkEqual('countdown: several hours', countdown(185, 13), '|In 3 hours');
-    checkEqual('countdown: six hours is still in hours', countdown(6 * 60 + 59, 16), '|In 6 hours');
-    checkEqual('countdown: this evening', countdown(8 * 60, 19), '|This evening');
-    checkEqual('countdown: later today', countdown(8 * 60, 17), '|Starting later today');
+    const countdown = (minutes, hour) => Countdown.countdownFor(minutes, hour);
+    checkEqual('countdown: a few minutes', countdown(5, 10), 'Starting in a few minutes');
+    checkEqual('countdown: minutes', countdown(25, 10), 'Starting in 25 minutes');
+    checkEqual('countdown: one hour', countdown(60, 11), 'In 1 hour');
+    checkEqual('countdown: several hours', countdown(185, 13), 'In 3 hours');
+    checkEqual('countdown: six hours is still in hours', countdown(6 * 60 + 59, 16), 'In 6 hours');
+    checkEqual('countdown: this evening', countdown(8 * 60, 19), 'This evening');
+    checkEqual('countdown: later today', countdown(8 * 60, 17), 'Starting later today');
     checkEqual('wording: stock phrases in English', [Constants.TEXT.noEvents, Constants.TEXT.allDay,
         Constants.TEXT.inProgress, Constants.TEXT.today, Constants.TEXT.settings].join(' / '),
     'No Events / All day / In progress / Today / Date and Time Settings');
@@ -266,7 +291,6 @@ function testWording() {
 
 function testEventsHeight() {
     const ratio = Constants.EVENTS_MAX_HEIGHT_RATIO;
-    checkEqual('events cap: ratio', ratio, 0.7);
     checkEqual('events cap: 1080 px monitor', EventsHeight.eventsMaxHeight(1080, ratio, 1), 756);
     checkEqual('events cap: rounded down', EventsHeight.eventsMaxHeight(1081, ratio, 1), 756);
     checkEqual('events cap: 1440 px monitor', EventsHeight.eventsMaxHeight(1440, ratio, 1), 1008);
@@ -282,6 +306,10 @@ function testAppearance() {
     const days = Constants.TEXT_SCALES.days;
     checkEqual('scale: default', Appearance.clampSetting(100, days), 100);
     checkEqual('scale: below the range', Appearance.clampSetting(20, days), 70);
+    checkEqual('scale: lowest value kept', Appearance.clampSetting(70, days), 70);
+    checkEqual('scale: highest value kept', Appearance.clampSetting(160, days), 160);
+    checkEqual('scale: just under the lowest', Appearance.clampSetting(69, days), 70);
+    checkEqual('scale: just over the highest', Appearance.clampSetting(161, days), 160);
     checkEqual('scale: above the range', Appearance.clampSetting(300, days), 160);
     checkEqual('scale: rounded to the step', Appearance.clampSetting(103, days), 105);
     checkEqual('scale: float from the dialog', Appearance.clampSetting(115.0000001, days), 115);
@@ -344,6 +372,9 @@ function testSchema() {
         layout[section].title))), JSON.stringify(Constants.SETTINGS_PAGES.map(page => page.sections)));
     const placed = layout.pages.flatMap(page => layout[page].sections.flatMap(section => layout[section].keys));
     const settingKeys = Object.keys(schema).filter(key => key !== 'layout');
+    checkEqual('schema: Shown elements in the order of constants.js',
+        JSON.stringify(layout['elements-section'].keys),
+        JSON.stringify(Object.values(Constants.ELEMENT_SWITCHES).map(spec => spec.key)));
     check('schema: every setting in one tab', settingKeys.every(key => placed.filter(k => k === key).length === 1) &&
         placed.every(key => settingKeys.includes(key)));
     // Every key the code reads: string literals given to bind(), bindWithObject() or
@@ -434,6 +465,7 @@ testEnglishDates();
 testPanelText();
 testTimeFormats();
 testHeaderTexts();
+testTimeOfEventRows();
 testSecondZone();
 testDayMarker();
 testEventsHeight();

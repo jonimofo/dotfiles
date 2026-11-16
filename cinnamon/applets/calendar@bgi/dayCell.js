@@ -1,4 +1,4 @@
-// Style classes of one day cell of calendar@bgi.
+// Day cells and columns of calendar@bgi's month grid.
 const Constants = require('./constants');
 
 // @state: {today, selected, outside (not in the shown month), weekend, marked (event markers
@@ -17,4 +17,10 @@ function dayStyleClass(state) {
     if (state.selected)
         classes.push(Constants.STYLE.daySelected);
     return classes.join(' ');
+}
+
+// Column, 0 to 6, of a weekday (@day as Date.getDay(), Sunday 0) in a week starting on
+// @weekStart (same numbering).
+function weekdayColumn(day, weekStart) {
+    return (7 + day - weekStart) % 7;
 }

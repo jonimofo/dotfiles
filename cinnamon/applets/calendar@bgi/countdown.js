@@ -11,17 +11,15 @@ function inHours(hours) {
     return withNumber(hours === 1 ? forms.one : forms.other, hours);
 }
 
-// [pseudo class, text] for an event @minutes away, starting at hour @startHour (0 to 23).
+// The countdown text of an event @minutes away, starting at hour @startHour (0 to 23).
 function countdownFor(minutes, startHour) {
     const limits = Constants.COUNTDOWN;
     if (minutes < limits.imminentMinutes)
-        return ['imminent', Constants.TEXT.startingSoon];
+        return Constants.TEXT.startingSoon;
     if (minutes < limits.soonMinutes)
-        return ['soon', withNumber(Constants.TEXT.startingInMinutes, minutes)];
+        return withNumber(Constants.TEXT.startingInMinutes, minutes);
     const hours = Math.floor(minutes / 60);
-    if (hours > limits.laterHours) {
-        const text = startHour > limits.eveningHour ? Constants.TEXT.thisEvening : Constants.TEXT.startingLaterToday;
-        return ['', text];
-    }
-    return ['', inHours(hours)];
+    if (hours > limits.laterHours)
+        return startHour > limits.eveningHour ? Constants.TEXT.thisEvening : Constants.TEXT.startingLaterToday;
+    return inHours(hours);
 }

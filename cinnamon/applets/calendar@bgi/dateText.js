@@ -42,6 +42,23 @@ function weekdayName(parts) {
     return Constants.WEEKDAY_NAMES[parts.weekday];
 }
 
+// The same, from a GLib.DateTime.
+function headerDateOf(datetime) {
+    return formatHeaderDate(datePartsOf(datetime));
+}
+
+function panelDateOf(datetime) {
+    return formatPanelDate(datePartsOf(datetime));
+}
+
+function dayMonthYearOf(datetime) {
+    return formatDayMonthYear(datePartsOf(datetime));
+}
+
+function weekdayNameOf(datetime) {
+    return weekdayName(datePartsOf(datetime));
+}
+
 // Over the month: "November 2026". @month is 1 to 12.
 function formatMonthHeading(month, year) {
     return [Constants.MONTH_NAMES[month - 1], year].join(Constants.WORD_SEPARATOR);

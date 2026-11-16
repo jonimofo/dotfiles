@@ -421,7 +421,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
         let date_text = this.use_custom_format ?
             this.clock.get_clock() :
-            DateText.formatPanelDate(DateText.datePartsOf(now));
+            DateText.panelDateOf(now);
         return DateText.formatPanelText(date_text, now.format(this._timeFormat()), this._secondTime(now));
     }
 
@@ -439,7 +439,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
         this.set_applet_label(label_string);
 
-        let dateFormattedTooltip = DateText.formatHeaderDate(DateText.datePartsOf(now));
+        let dateFormattedTooltip = DateText.headerDateOf(now);
         if (this.use_custom_format) {
             dateFormattedTooltip = this.clock.get_clock_for_format(this.custom_tooltip_format).capitalize();
             if (!dateFormattedTooltip) {
@@ -449,8 +449,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         }
 
         this._updateClocks(now);
-        this._headerDate.set_text(DateText.formatHeaderDate(DateText.datePartsOf(
-            EventView.js_date_to_gdatetime(this._calendar.getSelectedDate()))));
+        this._headerDate.set_text(DateText.headerDateOf(
+            EventView.js_date_to_gdatetime(this._calendar.getSelectedDate())));
         this.set_applet_tooltip(dateFormattedTooltip);
 
         this.events_manager.select_date(this._calendar.getSelectedDate());

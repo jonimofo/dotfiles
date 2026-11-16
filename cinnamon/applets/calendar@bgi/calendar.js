@@ -229,35 +229,32 @@ class Calendar {
 
         this.actor.connect('style-changed', Lang.bind(this, this._onStyleChange));
 
-        let back = new St.Button({ style_class: 'calendar-change-month-back' });
+        let back = new St.Button({ style_class: 'calendar-change-month-back',
+                                   accessible_name: Constants.TEXT.previousMonth });
         this._topBoxMonth.add(back);
         back.connect('clicked', Lang.bind(this, this._onPrevMonthButtonClicked));
 
         this._monthLabel = new St.Label({style_class: Constants.STYLE.monthLabel});
         this._topBoxMonth.add(this._monthLabel, { expand: true, x_fill: false, x_align: St.Align.MIDDLE });
 
-        let forward = new St.Button({ style_class: 'calendar-change-month-forward' });
+        let forward = new St.Button({ style_class: 'calendar-change-month-forward',
+                                      accessible_name: Constants.TEXT.nextMonth });
         this._topBoxMonth.add(forward);
         forward.connect('clicked', Lang.bind(this, this._onNextMonthButtonClicked));
 
-        // Add weekday labels...
-        //
-        // We need to figure out the abbreviated localized names for the days of the week;
-        // we do this by just getting the next 7 days starting from right now and then putting
-        // them in the right cell in the table. It doesn't matter if we add them in order
+        // Add weekday labels: the English abbreviations of the next 7 days, each in its
+        // column after the first day of the week. It doesn't matter if we add them in order
         let iter = new Date(this._selectedDate);
         iter.setSeconds(0); // Leap second protection. Hah!
         iter.setHours(12);
         for (let i = 0; i < 7; i++) {
             let styleClass = Constants.STYLE.dayHeading;
 
-            // Could use iter.toLocaleFormat('%a') but that normally gives three characters
-            // and we want, ideally, a single character for e.g. S M T W T F S
             let customDayAbbrev = _getCalendarDayAbbreviation(iter.getDay());
             let label = new St.Label({ style_class: styleClass, text: customDayAbbrev });
             this.actor.add(label,
                            { row: 1,
-                             col: offsetCols + (7 + iter.getDay() - this._weekStart) % 7,
+                             col: offsetCols + DayCell.weekdayColumn(iter.getDay(), this._weekStart),
                              x_fill: false, x_align: St.Align.MIDDLE });
             iter.setTime(iter.getTime() + MSECS_IN_DAY);
         }
@@ -383,15 +380,11 @@ class Calendar {
                 marked: this.show_day_marker
             });
 
-            if (_sameDay(this._selectedDate, iter)) {
-                button.add_style_pseudo_class('selected');
-            }
-
             button.style_class = styleClass;
 
             let offsetCols = this.show_week_numbers ? 1 : 0;
             this.actor.add(group,
-                           { row: row, col: offsetCols + (7 + iter.getDay() - this._weekStart) % 7 });
+                           { row: row, col: offsetCols + DayCell.weekdayColumn(iter.getDay(), this._weekStart) });
 
             if (this.show_week_numbers && iter.getDay() == 4) {
                 let label = new St.Label({ text: iter.toLocaleFormat('%V'),

@@ -754,7 +754,7 @@ class EventList {
     }
 
     set_date(gdate) {
-        this.selected_date_label.set_text(DateText.formatHeaderDate(DateText.datePartsOf(gdate)));
+        this.selected_date_label.set_text(DateText.headerDateOf(gdate));
         this.selected_date = gdate;
     }
 
@@ -980,9 +980,7 @@ class EventRow {
             this.countdown_label.set_text("");
         } else if (time_until_start > 0) {
             if (starts_today) {
-                let [countdown_pclass, text] = format_timespan(time_until_start);
-                this.countdown_label.set_text(text);
-                this.countdown_label.add_style_pseudo_class(countdown_pclass);
+                this.countdown_label.set_text(format_timespan(time_until_start));
                 this.is_current_or_next = !this.event.all_day;
             } else {
                 this.countdown_label.set_text("");
@@ -990,22 +988,14 @@ class EventRow {
         } else {
             if (this.event.all_day || this.event.multi_day) {
                 this.countdown_label.set_text("");
-                this.event_time.set_style_pseudo_class("all-day");
             } else {
                 this.countdown_label.set_text(Constants.TEXT.inProgress);
-                this.countdown_label.set_style_pseudo_class("current");
             } 
 
             this.is_current_or_next = this.event.is_today && !this.event.all_day;
         }
 
-        let time_format;
-
-        if (this.use_24h) {
-            time_format = "%H:%M";
-        } else {
-            time_format = "%l:%M %p";
-        }
+        let time_format = DateText.timeFormatFor(this.use_24h, false);
 
         let final_str = "";
 
@@ -1028,9 +1018,9 @@ class EventRow {
         // Past multi-day events (all-day or timed)
         // "12/04/2011 -> 12/08/2011"
         if (this.event.multi_day && this.event.ended_before_day(today)) {
-            final_str += DateText.formatDayMonthYear(DateText.datePartsOf(this.event.start_date));
+            final_str += DateText.dayMonthYearOf(this.event.start_date);
             final_str += ARROW_SEPARATOR;
-            final_str += DateText.formatDayMonthYear(DateText.datePartsOf(this.event.end_date));
+            final_str += DateText.dayMonthYearOf(this.event.end_date);
             this.event_time.set_text(final_str);
             return;
         }
@@ -1050,10 +1040,10 @@ class EventRow {
             if (this.event.started_before_day(this.selected_date)) {
                 // If it started within the last few days, show the day of week: "Wednesday -> ..."
                 if (this.event.started_after_day(this.selected_date.add_days(-4))) {
-                    final_str += DateText.weekdayName(DateText.datePartsOf(this.event.start_date));
+                    final_str += DateText.weekdayNameOf(this.event.start_date);
                 } else {
                     // otherwise the date: "12/04/2011 ->"
-                    final_str += DateText.formatDayMonthYear(DateText.datePartsOf(this.event.start_date));
+                    final_str += DateText.dayMonthYearOf(this.event.start_date);
                 }
             }
 
@@ -1071,24 +1061,24 @@ class EventRow {
             } else
             if (this.event.ends_after_day(this.selected_date.add_days(4))) {
                 // ends more than a few days after today: "-> 04/15/2011"
-                final_str += DateText.formatDayMonthYear(DateText.datePartsOf(this.event.end_date));
+                final_str += DateText.dayMonthYearOf(this.event.end_date);
             } else {
                 // ends only a few days after today: "-> Wednesday"
-                final_str += DateText.weekdayName(DateText.datePartsOf(this.event.end_date));
+                final_str += DateText.weekdayNameOf(this.event.end_date);
             }
         } else {
             // Prefix for non-current day selected
             if (this.event.started_before_day(today)) {
                 if (this.event.started_after_day(today.add_days(-4))) {
                     // started in the last couple of days: "Wednesday -> ..."
-                    final_str += DateText.weekdayName(DateText.datePartsOf(this.event.start_date));
+                    final_str += DateText.weekdayNameOf(this.event.start_date);
                 } else {
                     // Started on the selected day (but not today): "12:00 pm -> ..."
                     if (this.event.starts_on_day(this.selected_date) && !this.event.all_day) {
                         final_str += this.event.start.format(time_format);
                     } else {
                         // just the date if it's all day or started on an earlier day than selected: "04-16-2011 -> ..."
-                        final_str += DateText.formatDayMonthYear(DateText.datePartsOf(this.event.start_date));
+                        final_str += DateText.dayMonthYearOf(this.event.start_date);
                     }
                 }
             } else {
@@ -1105,10 +1095,10 @@ class EventRow {
                 } else {
                     // Event starts in the next few days: "Wednesday -> ..."
                     if (this.event.started_before_day(today.add_days(4))) {
-                        final_str += DateText.weekdayName(DateText.datePartsOf(this.event.start_date));
+                        final_str += DateText.weekdayNameOf(this.event.start_date);
                     } else {
                         // Any other start date, show that date: "04/16/2011 -> ..."
-                        final_str += DateText.formatDayMonthYear(DateText.datePartsOf(this.event.start_date));
+                        final_str += DateText.dayMonthYearOf(this.event.start_date);
                     }
                 }
             }
@@ -1131,10 +1121,10 @@ class EventRow {
             } else
             // Ends more than a few days after today: "-> 4/16/2021"
             if (this.event.ends_after_day(today.add_days(4))) {
-                final_str += DateText.formatDayMonthYear(DateText.datePartsOf(this.event.end_date));
+                final_str += DateText.dayMonthYearOf(this.event.end_date);
             } else {
                 // less than a few days after today: "-> Wednesday"
-                final_str += DateText.weekdayName(DateText.datePartsOf(this.event.end_date));
+                final_str += DateText.weekdayNameOf(this.event.end_date);
             }
         }
 

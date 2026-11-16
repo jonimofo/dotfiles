@@ -58,7 +58,7 @@ const EventsHeight = load('./eventsHeight');
 const PARIS = GLib.TimeZone.new_identifier('Europe/Paris');
 const VIETNAM = GLib.TimeZone.new_identifier('Asia/Ho_Chi_Minh');
 
-// Date parts of a fabricated day, through GLib.DateTime (local zone of the test).
+// Date parts of a fabricated day at noon in Paris, through GLib.DateTime.
 function partsOf(year, month, day) {
     return DateText.datePartsOf(GLib.DateTime.new(PARIS, year, month, day, 12, 0, 0));
 }

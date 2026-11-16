@@ -1,0 +1,6 @@
+matches:
+  - trigger: ":rdoc"
+    replace: "/audit"
+
+  - trigger: ":ask"
+    replace: "Ask me questions to confirm your understanding"

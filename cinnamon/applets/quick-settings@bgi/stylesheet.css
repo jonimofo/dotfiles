@@ -1,0 +1,184 @@
+/* Text colour and menu background come from the theme. The tile colours below are only the
+   fallback: the applet replaces them with the theme's slider colours (see themeColors.js). */
+
+.quick-settings-panel-icons {
+    spacing: 6px;
+}
+
+.quick-settings-content {
+    width: 418px;
+    padding: 8px;
+    spacing: 18px;
+}
+
+/* Header */
+
+.quick-settings-header {
+    spacing: 8px;
+}
+
+.quick-settings-battery {
+    spacing: 6px;
+}
+
+.quick-settings-battery-icon,
+.quick-settings-header-icon {
+    icon-size: 16px;
+}
+
+.quick-settings-battery-label {
+    font-weight: bold;
+}
+
+.quick-settings-header-buttons {
+    spacing: 8px;
+}
+
+.quick-settings-header-button {
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.quick-settings-header-button:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Sliders */
+
+.quick-settings-sliders {
+    spacing: 10px;
+}
+
+.quick-settings-slider-row {
+    spacing: 10px;
+}
+
+.quick-settings-slider-icon {
+    icon-size: 16px;
+}
+
+.quick-settings-slider-label {
+    width: 84px;
+}
+
+.quick-settings-slider {
+    min-width: 0;
+}
+
+.quick-settings-slider-arrow {
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+}
+
+.quick-settings-slider-arrow:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Tile grid */
+
+.quick-settings-grid {
+    spacing: 10px;
+}
+
+.quick-settings-grid-row {
+    spacing: 10px;
+}
+
+.quick-settings-tile {
+    width: 196px;
+    height: 44px;
+    border-radius: 22px;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.quick-settings-tile:insensitive {
+    background-color: rgba(255, 255, 255, 0.063);
+}
+
+.quick-settings-tile:checked {
+    background-color: rgba(120, 174, 237, 0.6);
+}
+
+.quick-settings-tile-toggle {
+    padding: 0 8px 0 14px;
+    border-radius: 22px 0 0 22px;
+}
+
+.quick-settings-tile-toggle-full {
+    border-radius: 22px;
+}
+
+.quick-settings-tile-arrow {
+    width: 36px;
+    border-radius: 0 22px 22px 0;
+}
+
+.quick-settings-tile-toggle:hover,
+.quick-settings-tile-arrow:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.quick-settings-tile-content {
+    spacing: 10px;
+}
+
+.quick-settings-tile-icon {
+    icon-size: 16px;
+}
+
+.quick-settings-tile-label {
+    font-weight: bold;
+}
+
+/* In-place list, under the row whose arrow opened it */
+
+.quick-settings-list {
+    padding: 10px;
+    spacing: 6px;
+    border-radius: 16px;
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.quick-settings-list-title {
+    padding: 0 8px;
+    font-weight: bold;
+}
+
+.quick-settings-list-scroll {
+    max-height: 240px;
+}
+
+.quick-settings-list-entries {
+    spacing: 2px;
+}
+
+.quick-settings-list-entry {
+    padding: 6px 8px;
+    border-radius: 10px;
+}
+
+.quick-settings-list-entry:hover,
+.quick-settings-list-entry:focus {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.quick-settings-list-entry:checked {
+    font-weight: bold;
+}
+
+.quick-settings-list-entry-content {
+    spacing: 10px;
+}
+
+.quick-settings-list-icon {
+    icon-size: 16px;
+}
+
+.quick-settings-list-separator {
+    height: 1px;
+    margin: 2px 8px;
+    background-color: rgba(255, 255, 255, 0.2);
+}

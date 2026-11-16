@@ -166,12 +166,32 @@ git config pull.ff only      # a pull that cannot fast-forward fails (no surpris
 - `commit-msg`: rejects subjects that break the Angular convention or exceed 71 characters,
   and messages carrying `Co-Authored-By` or "generated" footers.
 - `pre-push`: rejects pushes to `main`/`develop`/`server`, except `main` to the `gitlab` mirror.
-  Tag pushes (`git push origin vX.Y.Z`) are allowed.
+  Tag pushes (`git push origin vX.Y.Z`) are allowed. When a branch is pushed, it then runs
+  `scripts/check-all.sh` and cancels the push when a check fails. Tag pushes, the `gitlab`
+  mirror and branch deletions run no check, so `scripts/release.sh` cannot stop half done
+  after its merge. `SKIP_CHECKS=1 git push` skips only the checks (intermediate pushes), the
+  branch guard still runs. `scripts/pre-push-test.sh` covers these cases. After a change to
+  `.githooks/`, copy the hooks again.
+
+## Checks
+
+`scripts/check-all.sh` runs every check of the repo in under a minute (20 to 55 s here):
+each `scripts/*-test.sh`, `scripts/cinnamon-extension-check.sh`, and shellcheck (warnings
+and errors) on every tracked `*.sh` except the tmux-powerline configuration files. It needs `git`, `node`, `jq`, `gjs` and
+`shellcheck`. It is safe on the live desktop: the tests use stubs, fakes, throwaway repos and
+the memory GSettings backend.
+
+```bash
+scripts/check-all.sh
+```
+
+A new test script named `scripts/<topic>-test.sh` is picked up by it with no other change.
 
 Other rules:
 - 1 PR = 1 logical change (small PRs).
 - No `--force` on `main`/`develop`.
-- Hooks can be bypassed (`--no-verify`): they are a guardrail, not a guarantee.
+- Hooks can be bypassed (`--no-verify`): they are a guardrail, not a guarantee. GitHub branch
+  protection on `main` and `develop` (pull request required) refuses direct pushes even then.
 
 ## Example: from a change to main
 

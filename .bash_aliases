@@ -177,10 +177,17 @@ if [[ "$HOSTNAME" == "$LAPTOP_HOSTNAME" ]]; then
 
     # SEB VPN 
     alias vpn='sudo /usr/sbin/openvpn --cd /home/bgi/.secrets/vpn-seb --config /home/bgi/.secrets/vpn-seb/openvpn_client.ovpn'
+    alias qdv-vpn='sudo /usr/sbin/openvpn --cd /home/bgi/.secrets/vpn-qdv --config /home/bgi/.secrets/vpn-qdv/openvpn_client.ovpn --auth-user-pass /home/bgi/.secrets/vpn-qdv/credentials.txt --verb 3'
 
     # SSH & Permissions
     alias sa="ssh-add ~/.ssh/id_rsa"
     alias saa="ssh-add ~/.ssh/astrolab/id_astrohub_server"
+
+    # Time Tracking for CDP (kDrive file, defined only when synced)
+    CDP_TASK_FILE="$HOME/kDrive/xps/SAP-Work/000-TASKS_DONE_FOR_CDP.txt"
+    if [[ -f "$CDP_TASK_FILE" ]]; then
+        alias t='vim "$CDP_TASK_FILE"'
+    fi
 
     # AstroHub-Backup
     alias astrobkp-local-restart='systemctl --user restart astrohub-pull-backup.service'

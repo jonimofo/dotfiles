@@ -1,0 +1,136 @@
+.scale-strip,
+.scale-search-bar,
+.scale-dock {
+    background-color: rgba(0, 0, 0, 0.45);
+}
+
+.scale-strip,
+.scale-dock {
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.scale-strip {
+    padding: 12px;
+    border-bottom-width: 1px;
+}
+
+.scale-strip-row {
+    spacing: 16px;
+}
+
+.scale-strip-thumbnail,
+.scale-monitor-drop-target {
+    border-width: 3px;
+}
+
+.scale-strip-thumbnail {
+    border-color: rgba(255, 255, 255, 0.3);
+    -scale-window-gap: 6px;
+}
+
+.scale-strip-thumbnail:selected {
+    border-color: #78aeed;
+}
+
+.scale-strip-thumbnail-drop-target,
+.scale-strip-thumbnail-drop-target:selected,
+.scale-monitor-drop-target {
+    border-color: #ffffff;
+}
+
+.scale-strip-label {
+    padding: 2px 8px;
+    font-size: 10pt;
+    font-weight: bold;
+    color: #ffffff;
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+.scale-search-bar {
+    padding: 12px 12px 0 12px;
+}
+
+.scale-search-entry {
+    width: 480px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    font-size: 12pt;
+    color: #ffffff;
+    caret-color: #ffffff;
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+.scale-search-entry StLabel.hint-text {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.scale-search-grid {
+    padding: 32px;
+    spacing: 16px;
+    background-color: rgba(0, 0, 0, 0.6);
+    -scale-search-icon-size: 64px;
+}
+
+.scale-search-row {
+    spacing: 16px;
+}
+
+.scale-search-result {
+    width: 160px;
+    padding: 16px 8px;
+    spacing: 10px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+}
+
+.scale-search-result:hover,
+.scale-dock-icon:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.scale-search-result:selected {
+    border-color: #78aeed;
+    background-color: rgba(0, 0, 0, 0.55);
+}
+
+.scale-search-result-label {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #ffffff;
+    text-align: center;
+}
+
+.scale-dock-bar {
+    padding-bottom: 12px;
+}
+
+.scale-dock {
+    padding: 8px;
+    spacing: 8px;
+    border-radius: 16px;
+    border-width: 1px;
+    -scale-dock-icon-size: 48px;
+}
+
+.scale-dock-icon {
+    padding: 6px;
+    spacing: 4px;
+    border-radius: 8px;
+}
+
+.scale-dock-separator {
+    width: 1px;
+    margin: 4px 2px;
+    background-color: rgba(255, 255, 255, 0.6);
+}
+
+.scale-dock-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+}
+
+.scale-dock-dot-running {
+    background-color: #ffffff;
+}

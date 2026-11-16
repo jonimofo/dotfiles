@@ -1,0 +1,5 @@
+Status: Connected
+Server: Example #000
+Hostname: server.example
+Country: United States
+Uptime: 1 minute

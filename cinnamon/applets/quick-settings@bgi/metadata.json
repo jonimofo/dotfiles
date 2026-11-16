@@ -1,0 +1,10 @@
+{
+    "uuid": "quick-settings@bgi",
+    "name": "Quick Settings",
+    "description": "GNOME-style Quick Settings: status icons on the panel, sliders and toggle tiles in one menu.",
+    "icon": "preferences-system-symbolic",
+    "max-instances": 1,
+    "cinnamon-version": ["6.4"],
+    "version": "0.1.0",
+    "url": "https://github.com/jonimofo/dotfiles"
+}

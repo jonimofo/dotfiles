@@ -137,23 +137,29 @@ For a future re-sync with upstream. Everything else is the stock code.
 |---|---|---|
 | `metadata.json` | | uuid, name, description, version fields |
 | `settings-schema.json` | | "Second time zone" section with three keys |
-| `applet.js` | `constructor` | settings uuid, second zone settings, one header time label instead of the day and date labels |
+| `applet.js` | `constructor` | settings uuid, second zone settings, popup class, header band (date label moved from the event list, clocks), calendar panel, day summary card |
 | `applet.js` | `_onSettingsChanged` | resolves the second zone |
-| `applet.js` | `_updateClockAndDate` | panel text and header times from the pure formatters |
+| `applet.js` | `_updateClockAndDate` | panel text, clocks, header date and day card from the pure formatters |
+| `applet.js` | `_has_calendars_changed` | updates the day card |
 | `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height |
-| `applet.js` | new `_inVerticalPanel`, `_timeFormat`, `_panelText`, `_secondTime`, `_headerText`, `_updateSecondZone` | |
+| `applet.js` | new `_inVerticalPanel`, `_timeFormat`, `_panelText`, `_secondTime`, `_updateSecondZone`, `_buildClock`, `_updateClocks`, `_updateDaySummary` | |
 | `calendar.js` | `_getCalendarDayAbbreviation` | trailing dot removed, capitalised |
-| `calendar.js` | `_buildHeader` | day heading class |
-| `calendar.js` | `_update` | day class, one marker instead of one dot per event |
-| `eventView.js` | `ARROW_SEPARATOR` | ` - ` |
+| `calendar.js` | `_buildHeader` | one month row instead of the month and year rows, day heading class |
+| `calendar.js` | `_onPrevYearButtonClicked`, `_onNextYearButtonClicked` | removed with the year row |
+| `calendar.js` | `_update` | month row text, own day state classes, week number class, one marker instead of one dot per event |
+| `eventView.js` | `ARROW_SEPARATOR` | ` – ` |
 | `eventView.js` | `EventsManager.eds_service_found`, `log_dbus_error` | log prefix |
 | `eventView.js` | `EventList.constructor` | own class instead of `calendar-events-main-box` |
-| `eventView.js` | `EventList.set_events` | own class on the separator between two events |
+| `eventView.js` | `EventList.constructor` | own class on the event list box |
+| `eventView.js` | `EventList.set_events` | no separator between two events (the list's spacing) |
+| `eventView.js` | new `EventsManager.get_events_for_date` | the selected day's events for the day card |
 | `eventView.js` | new `EventList.set_monitor_height` | `max-height` of the column |
 | `eventView.js` | `EventList.set_date` | long date formatter |
-| `eventView.js` | `EventRow.constructor`, `EventRow.update_variations` | own row, content, title and time classes |
+| `eventView.js` | `EventRow.constructor` | accent bar, time block, title over metadata (summary cut at the first ` \| `), ellipsis, tooltip |
+| `eventView.js` | `EventRow.update_variations` | one time class |
 
 New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
+`dayCell.js`, `daySummary.js`,
 `stylesheet.css`.
 
 ## Steps
@@ -235,11 +241,88 @@ the space is under it.
 The column no longer carries the stock `calendar-events-main-box` class, so a theme's
 padding or right border on it no longer applies: the applet gives it `padding-right: 1em`.
 
+## Design handoff (third review round)
+
+Owner's words: "lis <dossier du handoff> pour améliorer" (the folder's local path left out).
+The folder is the owner's design handoff, status VALIDATED: a mockup image, a design spec with a
+palette table and a validation checklist, Cinnamon notes, reference CSS. It stays outside the
+repo: its images and examples hold private calendar content. This round supersedes the event
+row layout of the first two rounds where they differ.
+
+Decisions made by the designer and the owner:
+
+1. Month navigation on one row `<  Novembre 2026  >`, the arrows move one month; the year
+   arrows go; no dropdown chevron next to the month. The mouse wheel over the grid kept
+   changing month (stock `_onScroll`: up or left for the previous month, down or right for
+   the next).
+2. One horizontal row per event: accent bar (the calendar's colour from the data), time
+   block `HH:MM – HH:MM` on its own background, then the title (bold, primary text) over the
+   metadata (smaller, secondary text). The summary is cut at its first ` | `; without one it
+   is the title alone, with no empty second line. No icon, no duration.
+3. Long titles end in an ellipsis on one line. The full summary is in a tooltip: the stock
+   row had none, Cinnamon's `Tooltips.Tooltip` makes it one line.
+4. The palette of the spec, each colour defined once in the applet stylesheet, by role; no
+   colour in JavaScript. This reverses the "no colour literal" decision of the first round.
+   The event accent keeps the data colour; the code has no fallback colour, so the spec's four
+   accent colours are not used.
+5. Day cells larger, digits slightly larger, weight 500 to 600.
+6. Selected day violet with white bold text, today a thin light outline, both on a selected
+   today, other-month days discreet; the single event dot stays, in a reserved space.
+7. Header band: full date on the left, the two clocks on the right, time in primary text,
+   `Paris` and `VN` in secondary text.
+8. Under the calendar, one card for the selected day: `Aujourd'hui` or that day's date, the
+   number of events, the range from the first start to the last end, never a duration. A day
+   without events has no card, so no empty box is left.
+9. No legend. Footer entry kept as it is.
+10. Height of round two kept: only the list scrolls, up to 70% of the monitor's height. Row
+    sizes in px where the spec gives px.
+11. Only properties St supports; what it cannot do is listed below.
+12. Every new class is the applet's own (`calendar-bgi-`); the popup is styled through its
+    own class `calendar-bgi-popup` next to `menu`, so other menus keep their look.
+
+Day cells, before and after (CSS values; the cell is the day's font size times these):
+
+| | Before (rounds one and two) | Now |
+|---|---|---|
+| Font size | 125% | 133% (about +1 px), weight 500 |
+| Width | 2.6em, 3.25 base em | 2.6em, 3.46 base em (+6%) |
+| Height | 2.6em, 3.25 base em | 2.75em, 3.66 base em (+13%) |
+| Border | none | 1px in every state, coloured only for today and focus |
+| Marker | 2.6em down at 80% | 3.25em down at 80%; the digit is lifted by a 0.35em bottom padding |
+
+Spec checklist (section 7) and other spec items:
+
+| Spec item | Done | Not possible in St, or not done, and why |
+|---|---|---|
+| Look of the validated mockup | yes, except the items below | |
+| No category icon on the rows | yes (the stock rows had none) | |
+| No duration per event, time range shown | yes | |
+| No legend, no space kept for it | yes (there was none) | |
+| Larger day cells (+10 to 15% height) | yes, +13% height, +6% width | |
+| Six-week months fully visible | yes: the grid always has six rows (stock), no height cap on the calendar | to confirm live |
+| Independent, scrolling event list | yes, the calendar column does not scroll | |
+| Real data kept, no code or tag dropped | yes: the metadata is shown as stored; a summary starting with ` \| ` shows its metadata as the title | |
+| Summary without a wrong duration | yes: count and range only, tested | |
+| Selected, today, days with events distinct | yes | |
+| No regression in clicks, navigation, time zone, settings | tests green | year arrows removed on purpose |
+| Tabular figures for times | no | St has no font feature settings |
+| Accent bar following the row's rounded corners | no | St does not clip children to a border radius |
+| Keyboard focus visible | style defined (`:focus`, light violet border) | the stock days and arrows never take keyboard focus; making them focusable would change the stock behaviour |
+| Selected weekday heading highlighted ("Dim" in the mockup) | no | not in the decisions; would rebuild the headings on every selection |
+| Dropdown chevron next to the month | no | decision 1 |
+| Footer band colour | no | decision 9: footer kept as it is |
+| Thin scroll bar, stronger on hover | yes, 5px, hover colour | |
+| Category accent colours as fallback | no | the event colour always comes from the data |
+
 ## To confirm on the live panel
 
 - Sizes and the place of the dot under the number, under Dracula.
 - Today and the selected day still stand out with the new day class.
 - The events column width with long titles.
+- Third round: the palette under Dracula's menu (the popup's own background and border),
+  the header band, rows of 48 to 56 px, the time block width with 12-hour times, the
+  ellipsis and tooltip, the larger day cells with the dot under the digit, a six-week month,
+  the day card for today and for another day.
 - Second round: that `max-height` on the column makes it scroll past 70 % of the screen (a
   day with many events), the thin gap and the title indent under Dracula, and the empty
   day ("No Events") layout.

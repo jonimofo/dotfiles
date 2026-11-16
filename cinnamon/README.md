@@ -409,25 +409,34 @@ Design records:
 ## Calendar: what it does
 
 `applets/calendar@bgi/` is the stock Cinnamon calendar applet (`calendar@cinnamon.org`,
-Cinnamon 6.4) with three changes:
+Cinnamon 6.4) with a second time zone and its own look:
 
 - The panel reads `Lun 16 Nov · 15:52 · VN 21:52`: short date, local time, then a second
   time zone with its label. Weekday and month come from the locale (`LC_TIME`), without
   their trailing dot. The time follows the desktop's 24h or 12h and seconds settings.
-- The popup header reads `Lundi 16 novembre 2026` on the left (the selected day) and
-  `15:52 Paris  ·  21:52 VN` on the right. A click on the times goes back to today, as the
-  stock date did.
-- Event titles are bold and larger, event times at the normal size, day numbers larger in
-  wider cells, all in the theme's text colour. A day with events has one dot under it,
-  whatever the number of events.
-- Events sit in two tight lines, the title slightly indented under the time, a thin space
-  between two events. The events column is as tall as its events, up to 70% of the
-  screen's height (`EVENTS_MAX_HEIGHT_RATIO` in `constants.js`); beyond it the list scrolls.
+- The popup opens on a header band: the selected day's full date on the left
+  (`Lundi 16 novembre 2026`), the clocks on the right (`15:52 Paris`, `21:52 VN`). A click
+  on the clocks goes back to today, as the stock date did.
+- Left column, the selected day's events, one row each: the calendar's colour bar, the
+  time block `10:00 – 11:00`, then the title over its metadata. A summary such as
+  `Team meeting | Alex | [R1]` is cut at its first ` | `: title `Team meeting`, metadata
+  `Alex | [R1]`; without ` | ` the summary is the title alone. A line too long ends in `…`;
+  the tooltip shows the whole summary. The column is as tall as its events, up to 70% of
+  the screen's height (`EVENTS_MAX_HEIGHT_RATIO` in `constants.js`); beyond it only the
+  list scrolls.
+- Right column, the month: one row `<  Novembre 2026  >` (the arrows and the mouse wheel
+  move one month), larger day cells, one dot under a day with events. The selected day is
+  filled violet, today has a thin light outline, a selected today has both; days of the
+  other months are greyed.
+- Under the month, a card for the selected day: `Aujourd'hui` (or that day's date), the
+  number of events (`1 activité`, `16 activités`) and the range from the first start to the
+  last end. All-day events count but stay out of the range. The range is not a duration:
+  events can overlap. A day without events has no card.
 
-The sizes live in `applets/calendar@bgi/stylesheet.css` under the applet's own classes, so
-a theme that shrinks the stock calendar classes (Dracula: 80% and 70%) no longer applies.
-Colours still come from the theme: today, the selected day, weekends and the days of the
-other months look as in the stock applet.
+The look lives in `applets/calendar@bgi/stylesheet.css`, under the applet's own classes:
+other menus and the stock calendar are not touched. Its colours are the owner's validated
+palette (dark navy), each written once at the top of the file by role; they do not follow
+the desktop theme. The event colour bar keeps the colour of the event's calendar.
 
 Origin and licence: copied from `/usr/share/cinnamon/applets/calendar@cinnamon.org/` of
 Cinnamon 6.4.10 (Linux Mint, <https://github.com/linuxmint/cinnamon>), GPL-2+ (see
@@ -484,7 +493,9 @@ rm ~/.local/share/cinnamon/applets/calendar@bgi
 - On a vertical panel the stock text is shown, without the second time zone.
 - Month abbreviations keep the locale's length: `févr.` reads `Févr`, `juil.` reads `Juil`.
 - Event times have one colour whether the event is past, in progress or to come; the
-  countdown ("Starting in 5 minutes", "In progress") is kept.
+  countdown ("Starting in 5 minutes", "In progress") is kept, after the title.
+- The colours are fixed: a light desktop theme keeps the dark popup.
+- The days and the arrows of the month take no keyboard focus, as in the stock applet.
 - The day dot is a `•` character: its exact place under the number depends on the font.
 - The events column does not use the theme's `calendar-events-main-box` class (it carries a
   fixed height in some themes), so a theme's border or padding on that column is not drawn.

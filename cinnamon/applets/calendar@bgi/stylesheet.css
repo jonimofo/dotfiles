@@ -23,9 +23,8 @@
     background-color: #1C2436;
 }
 
-/* Event card: event rows, day summary card, Today and settings buttons */
+/* Event card: event rows, Today and settings buttons */
 .calendar-bgi-event-row,
-.calendar-bgi-day-summary,
 .calendar-bgi-today-button,
 .calendar-bgi-settings-button {
     background-color: #202B40;
@@ -94,13 +93,12 @@
     border-color: transparent;
 }
 
-/* Thin borders: popup, event rows, summary card, buttons, header dividers */
+/* Thin borders: popup, event rows, buttons, the line between the two clocks */
 .menu.calendar-bgi-popup,
 .calendar-bgi-event-row,
-.calendar-bgi-day-summary,
 .calendar-bgi-today-button,
 .calendar-bgi-settings-button,
-.calendar-bgi-clock {
+.calendar-bgi-clock-divided {
     border-color: #394761;
 }
 
@@ -123,10 +121,10 @@
     border-radius: 12px;
 }
 
-/* Header band: full date on the left, the clocks on the right. */
+/* Header band: two cells of the layout table, the date over the events column, the clocks
+   centred over the calendar column. Same side padding as the columns below. */
 .calendar-bgi-header {
-    padding: 12px 16px;
-    spacing: 16px;
+    padding: 12px;
 }
 
 .calendar-bgi-header-date {
@@ -139,9 +137,12 @@
 }
 
 .calendar-bgi-clock {
+    spacing: 5px;
+}
+
+.calendar-bgi-clock-divided {
     border-left-width: 1px;
     padding-left: 14px;
-    spacing: 5px;
 }
 
 .calendar-bgi-clock-time {
@@ -153,10 +154,11 @@
     font-size: 115%;
 }
 
-/* The two columns under the header band. */
-.calendar-bgi-columns {
-    padding: 12px 12px 0 12px;
-    spacing: 14px;
+/* The layout table: header row, then the events and calendar columns. No spacing, so the
+   header band is one strip; the columns' own padding makes the 14px gap between them. */
+.calendar-bgi-layout {
+    spacing-rows: 0;
+    spacing-columns: 0;
 }
 
 /* Left column. It replaces calendar-events-main-box, to which themes give a fixed height:
@@ -164,6 +166,7 @@
    width, so long titles end in an ellipsis instead of widening the popup. */
 .calendar-bgi-events {
     width: 28em;
+    padding: 12px 2px 0 12px;
 }
 
 .calendar-bgi-event-list {
@@ -226,6 +229,7 @@
 /* Right column: the calendar panel, the day summary card, the Today button. */
 .calendar-bgi-calendar-column {
     spacing: 12px;
+    padding: 12px 12px 0 12px;
 }
 
 .calendar-bgi-calendar-panel {
@@ -290,11 +294,10 @@
     font-size: 100%;
 }
 
-/* Day summary card under the calendar: one line, the number of events. */
+/* The number of events under the calendar: plain text, no card. The column's spacing keeps
+   it off the calendar panel and the Today button. */
 .calendar-bgi-day-summary {
-    border-width: 1px;
-    border-radius: 10px;
-    padding: 12px 14px;
+    padding: 0;
 }
 
 /* Today button, full width of the column, the card's corners. */
@@ -305,11 +308,11 @@
     font-weight: bold;
 }
 
-/* The count: about the event title size (14px at 100%) times 1.3, centred. The card is under
-   none of the three text sizes. */
+/* The count: the event title's size (14px at 100%), centred. It is under none of the three
+   text sizes. */
 .calendar-bgi-day-summary-count {
-    font-size: 18px;
-    font-weight: bold;
+    font-size: 14px;
+    font-weight: 600;
     text-align: center;
 }
 

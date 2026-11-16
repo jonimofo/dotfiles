@@ -74,14 +74,12 @@ const SUMMARY_SEPARATOR = ' | ';
 // scrolls.
 const EVENTS_MAX_HEIGHT_RATIO = 0.7;
 
-// Day summary card under the calendar: the selected day's number of events, nothing else.
+// Under the calendar: the selected day's number of events, as plain text.
 const SUMMARY_COUNT_ONE = 'event';
 const SUMMARY_COUNT_MANY = 'events';
 
-// Under the card: back to today's date and month. Dimmed, out of 255, while today is shown.
+// Under the count: back to today's date and month.
 const TODAY_BUTTON_LABEL = 'Today';
-const INACTIVE_OPACITY = 160;
-const FULL_OPACITY = 255;
 
 // One marker under a day that has events, drawn in the text colour of the theme.
 const DAY_MARKER_TEXT = '•';
@@ -94,9 +92,10 @@ const STYLE = {
     headerDate: 'calendar-bgi-header-date',
     headerTime: 'calendar-bgi-header-time',
     clock: 'calendar-bgi-clock',
+    clockDivided: 'calendar-bgi-clock-divided',
     clockTime: 'calendar-bgi-clock-time',
     clockSuffix: 'calendar-bgi-clock-suffix',
-    columns: 'calendar-bgi-columns',
+    layout: 'calendar-bgi-layout',
     calendarColumn: 'calendar-bgi-calendar-column',
     calendarPanel: 'calendar-bgi-calendar-panel',
     daySummary: 'calendar-bgi-day-summary',

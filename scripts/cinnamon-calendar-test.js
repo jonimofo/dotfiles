@@ -41,7 +41,6 @@ const SecondZone = load('./secondZone');
 const DayMarker = load('./dayMarker');
 const DayCell = load('./dayCell');
 const DaySummary = load('./daySummary');
-const TodayButton = load('./todayButton');
 const Appearance = load('./appearance');
 const EventsHeight = load('./eventsHeight');
 
@@ -190,18 +189,7 @@ function testDayCell() {
 function testDaySummary() {
     checkEqual('summary card: count, one', DaySummary.formatEventCount(1), '1 event');
     checkEqual('summary card: count, several', DaySummary.formatEventCount(16), '16 events');
-    checkEqual('summary card: count, zero (card hidden)', DaySummary.formatEventCount(0), '0 events');
-}
-
-function testTodayButton() {
-    const today = new Date(2026, 10, 16, 15, 52);
-    const active = (selected, shown) => TodayButton.todayButtonActive(selected, shown, today);
-    checkEqual('today button: today selected and shown, inactive', active(new Date(2026, 10, 16), new Date(2026, 10, 16)), false);
-    checkEqual('today button: another day of the month, active', active(new Date(2026, 10, 17), new Date(2026, 10, 17)), true);
-    checkEqual('today button: today selected, another month shown, active',
-        active(new Date(2026, 10, 16), new Date(2026, 11, 1)), true);
-    checkEqual('today button: same day a year later, active', active(new Date(2027, 10, 16), new Date(2027, 10, 16)), true);
-    checkEqual('today button: label', Constants.TODAY_BUTTON_LABEL, 'Today');
+    checkEqual('summary card: count, zero (hidden)', DaySummary.formatEventCount(0), '0 events');
 }
 
 function testEventsHeight() {
@@ -248,8 +236,13 @@ function testAppearance() {
         check(`100% look: ${Constants.STYLE[name]} is ${size.toFixed(3)}px, design ${px}px`, Math.abs(size - px) < 0.01);
     }
     const count = css.match(new RegExp(`\\.${Constants.STYLE.daySummaryCount}\\s*\\{[^}]*font-size:\\s*(\\d+)px`));
-    check(`count: about the event title size times 1.3 (${count ? count[1] : '?'}px)`,
-        count !== null && Math.abs(Number(count[1]) - designPx.eventTitle * 1.3) <= 1);
+    check(`count: the event title size (${count ? count[1] : '?'}px)`,
+        count !== null && Number(count[1]) === designPx.eventTitle);
+    const card = css.match(new RegExp(`\\.${Constants.STYLE.daySummary}\\s*\\{([^}]*)\\}`));
+    const cardLook = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(rule =>
+        rule[1].split(',').some(sel => sel.trim() === `.${Constants.STYLE.daySummary}`) &&
+        /background-color|border/.test(rule[2]));
+    check('count: plain text, no background or border', card !== null && cardLook.length === 0);
     const gap = css.match(/\.calendar-bgi-event-list\s*\{[^}]*spacing:\s*(\d+)px/);
     check('100% look: stylesheet gap is the default gap', gap !== null && Number(gap[1]) === Constants.EVENT_GAP.default);
 }
@@ -357,7 +350,6 @@ testEventsHeight();
 testDayCell();
 testAppearance();
 testDaySummary();
-testTodayButton();
 testSchema();
 testStylesheet();
 

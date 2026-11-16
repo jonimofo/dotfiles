@@ -18,7 +18,6 @@ const DateText = require('./dateText');
 const SecondZone = require('./secondZone');
 const DaySummary = require('./daySummary');
 const Appearance = require('./appearance');
-const TodayButton = require('./todayButton');
 
 const DATE_FORMAT_FULL = CinnamonDesktop.WallClock.lctime_format("cinnamon", _("%A, %B %-e, %Y"));
 
@@ -47,23 +46,22 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.events_manager.connect("has-calendars-changed", this._has_calendars_changed.bind(this));
             this.events_manager.connect("events-updated", () => this._updateDaySummary());
 
-            // Header band: the selected day's date, then the clocks
-            let header = new St.BoxLayout(
+            // One table, two columns: the header band's date over the events, its clocks
+            // over the calendar. The table gives a column one width for both rows, so the
+            // clocks are centred over the calendar whatever the date's length.
+            let layout = new St.Table(
                 {
-                    style_class: Constants.STYLE.header,
-                    vertical: false
+                    style_class: Constants.STYLE.layout,
+                    homogeneous: false
                 }
             );
-            this._header = header;
-            this.menu.addActor(header);
+            this.menu.addActor(layout);
 
-            let box = new St.BoxLayout(
-                {
-                    style_class: `calendar-main-box ${Constants.STYLE.columns}`,
-                    vertical: false
-                }
-            );
-            this.menu.addActor(box);
+            let header_date_cell = new St.BoxLayout({ style_class: Constants.STYLE.header });
+            let header_clocks_cell = new St.BoxLayout({ style_class: Constants.STYLE.header });
+            this._headerCells = [header_date_cell, header_clocks_cell];
+            layout.add(header_date_cell, { row: 0, col: 0 });
+            layout.add(header_clocks_cell, { row: 0, col: 1 });
 
             this.event_list = this.events_manager.get_event_list();
             this.event_list.connect("launched-calendar", Lang.bind(this.menu, this.menu.toggle));
@@ -76,7 +74,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 this.menu.passEvents = false;
             }));
 
-            box.add_actor(this.event_list.actor);
+            layout.add(this.event_list.actor, { row: 1, col: 0, y_fill: true });
 
             // The event list's date label moves to the header band, where it stays shown
             // with the events switched off.
@@ -85,7 +83,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this._headerDate.set_style_class_name(Constants.STYLE.headerDate);
             this._headerDate.x_expand = true;
             this._headerDate.y_align = Clutter.ActorAlign.CENTER;
-            header.add_actor(this._headerDate);
+            header_date_cell.add_actor(this._headerDate);
 
             let calbox = new St.BoxLayout(
                 {
@@ -97,7 +95,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.go_home_button = new St.BoxLayout(
                 {
                     style_class: "calendar-today-home-button",
-                    x_align: Clutter.ActorAlign.END,
+                    x_expand: true,
+                    x_align: Clutter.ActorAlign.CENTER,
                     y_align: Clutter.ActorAlign.CENTER,
                     reactive: true,
                     vertical: false
@@ -127,7 +126,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 }
             }));
 
-            header.add_actor(this.go_home_button);
+            header_clocks_cell.add_actor(this.go_home_button);
 
             // Local and second-zone clocks: time, then city or label
             this._headerTimes = new St.BoxLayout(
@@ -136,7 +135,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 }
             );
             this.go_home_button.add_actor(this._headerTimes);
-            this._clocks = [this._buildClock(), this._buildClock()];
+            this._clocks = [this._buildClock(false), this._buildClock(true)];
 
             this._calendar = new Calendar.Calendar(this.settings, this.events_manager);
             this._calendar.connect("selected-date-changed", Lang.bind(this, this._updateClockAndDate));
@@ -181,7 +180,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this._todayButton.connect("clicked", () => this._resetCalendar());
             calbox.add_actor(this._todayButton);
 
-            box.add_actor(calbox);
+            layout.add(calbox, { row: 1, col: 1, y_fill: true });
 
             // The stock settings entry, as a button of its label's width
             let footer = new St.BoxLayout({ style_class: Constants.STYLE.footer });
@@ -322,13 +321,16 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this.event_list.set_appearance(Appearance.eventListStyle(this.events_text_scale, this.event_gap),
                                        this.show_event_meta, this.show_event_countdown);
         this._calendar.actor.style = Appearance.percentFontStyle(this.days_text_scale, Constants.TEXT_SCALES.days);
-        this._header.style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);
+        let header_style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);
+        this._headerCells.forEach(cell => { cell.style = header_style; });
         this.go_home_button.visible = this.show_header_clocks;
     }
 
-    _buildClock() {
+    // @divided: a thin line before it, between the two clocks.
+    _buildClock(divided) {
+        let style_class = divided ? `${Constants.STYLE.clock} ${Constants.STYLE.clockDivided}` : Constants.STYLE.clock;
         let clock = {
-            actor: new St.BoxLayout({ style_class: Constants.STYLE.clock }),
+            actor: new St.BoxLayout({ style_class: style_class }),
             time: new St.Label({ style_class: Constants.STYLE.clockTime }),
             suffix: new St.Label({ style_class: Constants.STYLE.clockSuffix })
         };
@@ -360,16 +362,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this._daySummaryCount.set_text(DaySummary.formatEventCount(count));
     }
 
-    // Shown with its switch; inactive and dimmed while today is selected and shown.
     _updateTodayButton() {
-        let selected = this._calendar.getSelectedDate();
-        let active = TodayButton.todayButtonActive(selected, selected, new Date());
         this._todayButton.visible = this.show_today_button;
-        this._todayButton.reactive = active;
-        this._todayButton.opacity = active ? Constants.FULL_OPACITY : Constants.INACTIVE_OPACITY;
-        if (!active) {
-            this._todayButton.remove_style_pseudo_class("hover");
-        }
     }
 
     _updateSecondZone() {

@@ -12,7 +12,7 @@ const Settings = imports.ui.settings;
 const Atk = imports.gi.Atk;
 const Gtk = imports.gi.Gtk;
 const CinnamonDesktop = imports.gi.CinnamonDesktop;
-const Separator = imports.ui.separator;
+const Tooltips = imports.ui.tooltips;
 const Main = imports.ui.main;
 const Util = imports.misc.util;
 const Mainloop = imports.mainloop;
@@ -704,7 +704,7 @@ class EventList {
 
         this.events_box = new St.BoxLayout(
             {
-                style_class: 'calendar-events-event-container',
+                style_class: Constants.STYLE.eventList,
                 vertical: true,
                 accessible_role: Atk.Role.LIST
             }
@@ -799,15 +799,8 @@ class EventList {
         let events = event_data_list.get_event_list();
 
         let scroll_to_row = null;
-        let first_row_done = false;
 
         for (let event_data of events) {
-            if (first_row_done) {
-                let gap = new Separator.Separator();
-                gap.actor.add_style_class_name(Constants.STYLE.eventGap);
-                this.events_box.add_actor(gap.actor);
-            }
-
             let row = new EventRow(
                 event_data,
                 this.selected_date,
@@ -823,7 +816,6 @@ class EventList {
 
             this.events_box.add_actor(row.actor);
 
-            first_row_done = true;
             if (row.is_current_or_next && scroll_to_row === null) {
                 scroll_to_row = row;
             }
@@ -861,7 +853,7 @@ class EventRow {
 
         this.actor = new St.BoxLayout(
             {
-                style_class: `calendar-event-button ${Constants.STYLE.eventRow}`,
+                style_class: Constants.STYLE.eventRow,
                 reactive: true
             }
         );
@@ -883,62 +875,86 @@ class EventRow {
             }));
         }
 
+        // Accent bar | time block | title over metadata
         let color_strip = new St.Bin(
             {
-                style_class: "calendar-event-color-strip",
+                style_class: Constants.STYLE.eventAccent,
                 style: `background-color: ${event.color};`
             }
         );
 
         this.actor.add(color_strip);
 
+        let time_block = new St.BoxLayout(
+            {
+                style_class: Constants.STYLE.eventTimeBlock,
+                vertical: true
+            }
+        );
+        this.actor.add_actor(time_block);
+
+        this.event_time = new St.Label(
+            {
+                text: "",
+                y_expand: true,
+                y_align: Clutter.ActorAlign.CENTER,
+                style_class: Constants.STYLE.eventTime
+            }
+        );
+        time_block.add_actor(this.event_time);
+
         let vbox = new St.BoxLayout(
             {
                 style_class: Constants.STYLE.eventContent,
                 x_expand: true,
+                y_align: Clutter.ActorAlign.CENTER,
                 vertical: true
             }
         );
         this.actor.add_actor(vbox);
 
-        let label_box = new St.BoxLayout(
+        let title_box = new St.BoxLayout(
             {
                 name: "label-box",
                 x_expand: true
             }
         );
-        vbox.add_actor(label_box);
+        vbox.add_actor(title_box);
 
-        this.event_time = new St.Label(
+        let summary = DateText.splitSummary(this.event.summary);
+
+        let event_title = new St.Label(
             {
-                x_align: Clutter.ActorAlign.START,
-                text: "",
-                style_class: Constants.STYLE.eventTime
+                text: summary.title,
+                x_expand: true,
+                style_class: Constants.STYLE.eventTitle
             }
         );
-        label_box.add(this.event_time, { expand: true, x_fill: true });
+        event_title.get_clutter_text().ellipsize = Pango.EllipsizeMode.END;
+        title_box.add_actor(event_title);
 
         this.countdown_label = new St.Label(
             {
                 /// text set below
-                x_align: Clutter.ActorAlign.END,
-                style_class: "calendar-event-countdown",
+                y_align: Clutter.ActorAlign.CENTER,
+                style_class: Constants.STYLE.eventCountdown,
             }
         );
+        title_box.add_actor(this.countdown_label);
 
-        label_box.add(this.countdown_label, { expand: true, x_fill: true });
+        if (summary.meta !== "") {
+            let event_meta = new St.Label(
+                {
+                    text: summary.meta,
+                    style_class: Constants.STYLE.eventMeta
+                }
+            );
+            event_meta.get_clutter_text().ellipsize = Pango.EllipsizeMode.END;
+            vbox.add_actor(event_meta);
+        }
 
-        let event_summary = new St.Label(
-            {
-                text: this.event.summary,
-                y_expand: true,
-                style_class: Constants.STYLE.eventTitle
-            }
-        );
-
-        event_summary.get_clutter_text().line_wrap = true;
-        event_summary.get_clutter_text().ellipsize = Pango.EllipsizeMode.NEVER;
-        vbox.add(event_summary, { expand: true });
+        // The full summary, for titles or metadata cut by the ellipsis
+        this._tooltip = new Tooltips.Tooltip(this.actor, this.event.summary);
 
         this.update_variations();
     }

@@ -11,38 +11,54 @@
 }
 
 /* Left column. It replaces calendar-events-main-box, to which themes give a fixed height:
-   its height follows the events, capped by the applet (EVENTS_MAX_HEIGHT_RATIO). */
+   its height follows the events, capped by the applet (EVENTS_MAX_HEIGHT_RATIO). A fixed
+   width, so long titles end in an ellipsis instead of widening the popup. */
 .calendar-bgi-events {
-    min-width: 24em;
+    width: 28em;
     padding-right: 1em;
 }
 
-/* One event: two tight lines. Two classes, to win over the theme's calendar-event-button
-   padding while keeping its hover background. */
-.calendar-event-button.calendar-bgi-event-row {
-    padding: 0.2em 0.4em;
-    margin: 0;
+.calendar-bgi-event-list {
+    spacing: 4px;
 }
 
-.calendar-bgi-event-content {
-    spacing: 0.1em;
+/* One event: accent bar, time block, title over metadata. Sizes from the design spec. */
+.calendar-bgi-event-row {
+    border-width: 1px;
+    border-radius: 8px;
 }
 
-/* The thin space between two events. Two classes, to win over the theme's separator height. */
-.separator.calendar-bgi-event-gap {
-    height: 0.3em;
+.calendar-bgi-event-accent {
+    width: 4px;
 }
 
-/* Slightly indented under the time line. */
-.calendar-bgi-event-title {
-    font-size: 125%;
-    font-weight: bold;
-    padding-left: 0.6em;
+.calendar-bgi-event-time-block {
+    min-width: 96px;
+    padding: 0 9px;
 }
 
 .calendar-bgi-event-time {
-    font-size: 100%;
-    font-weight: normal;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.calendar-bgi-event-content {
+    padding: 7px 10px;
+    spacing: 1px;
+}
+
+.calendar-bgi-event-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.calendar-bgi-event-meta {
+    font-size: 12px;
+}
+
+.calendar-bgi-event-countdown {
+    font-size: 11px;
+    padding-left: 6px;
 }
 
 /* Right column: day headings and day numbers. */

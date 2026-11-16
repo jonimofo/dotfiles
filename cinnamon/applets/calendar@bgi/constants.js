@@ -35,8 +35,12 @@ const ZONE_ID_SPACE = /_/g;
 // Identifiers that are a file path, not a zone name: no city is shown for them.
 const ZONE_ID_PATH_PREFIXES = ['/', ':'];
 
-// Between the start and the end of an event: "10:00 - 11:00".
-const EVENT_TIME_SEPARATOR = ' - ';
+// Between the start and the end of an event: "10:00 – 11:00".
+const EVENT_TIME_SEPARATOR = ' – ';
+
+// An event summary "Team meeting | Alex | [R1]" reads as the title "Team meeting" over the
+// metadata "Alex | [R1]": it is cut at the first separator only.
+const SUMMARY_SEPARATOR = ' | ';
 
 // The events column grows with its events up to this share of the monitor's height, then
 // scrolls.
@@ -56,9 +60,13 @@ const STYLE = {
     dayMarkerBox: 'calendar-bgi-day-marker-box',
     dayMarker: 'calendar-bgi-day-marker',
     events: 'calendar-bgi-events',
+    eventList: 'calendar-bgi-event-list',
     eventRow: 'calendar-bgi-event-row',
+    eventAccent: 'calendar-bgi-event-accent',
+    eventTimeBlock: 'calendar-bgi-event-time-block',
     eventContent: 'calendar-bgi-event-content',
-    eventGap: 'calendar-bgi-event-gap',
+    eventMeta: 'calendar-bgi-event-meta',
+    eventCountdown: 'calendar-bgi-event-countdown',
     eventTitle: 'calendar-bgi-event-title',
     eventTime: 'calendar-bgi-event-time',
 };

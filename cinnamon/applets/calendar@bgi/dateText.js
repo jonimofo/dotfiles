@@ -38,6 +38,19 @@ function formatMonthHeading(month, year, monthFirst) {
     return capitaliseFirst(parts.join(Constants.WORD_SEPARATOR));
 }
 
+// {title, meta} of an event summary, cut at its first SUMMARY_SEPARATOR. Without one, the
+// summary is the title and meta is empty; a summary starting with one keeps its metadata as
+// the title.
+function splitSummary(summary) {
+    const text = summary || '';
+    const at = text.indexOf(Constants.SUMMARY_SEPARATOR);
+    if (at === -1)
+        return { title: text.trim(), meta: '' };
+    const title = text.slice(0, at).trim();
+    const meta = text.slice(at + Constants.SUMMARY_SEPARATOR.length).trim();
+    return title === '' ? { title: meta, meta: '' } : { title, meta };
+}
+
 function timeFormatFor(use24h, showSeconds) {
     if (use24h)
         return showSeconds ? Constants.TIME_FORMATS.h24Seconds : Constants.TIME_FORMATS.h24;

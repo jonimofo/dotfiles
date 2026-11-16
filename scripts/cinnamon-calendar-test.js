@@ -55,6 +55,25 @@ function frenchDate(day) {
     };
 }
 
+function testSummarySplit() {
+    const split = summary => JSON.stringify(DateText.splitSummary(summary));
+    checkEqual('summary: title and metadata', split('Team meeting | Alex'),
+        JSON.stringify({ title: 'Team meeting', meta: 'Alex' }));
+    checkEqual('summary: cut at the first separator only', split('Team meeting | Alex | [R1] [R2]'),
+        JSON.stringify({ title: 'Team meeting', meta: 'Alex | [R1] [R2]' }));
+    checkEqual('summary: no separator, title alone', split('Lunch'), JSON.stringify({ title: 'Lunch', meta: '' }));
+    checkEqual('summary: "|" without spaces is not a separator', split('Room|A'),
+        JSON.stringify({ title: 'Room|A', meta: '' }));
+    checkEqual('summary: spaces around trimmed', split('  Review | Project B  '),
+        JSON.stringify({ title: 'Review', meta: 'Project B' }));
+    checkEqual('summary: trailing separator, no empty second line', split('Call | '),
+        JSON.stringify({ title: 'Call', meta: '' }));
+    checkEqual('summary: leading separator, metadata becomes the title', split(' | Alex'),
+        JSON.stringify({ title: 'Alex', meta: '' }));
+    checkEqual('summary: empty string', split(''), JSON.stringify({ title: '', meta: '' }));
+    checkEqual('summary: null', split(null), JSON.stringify({ title: '', meta: '' }));
+}
+
 function testShortDate() {
     checkEqual('abbreviation: dot removed, capitalised', DateText.tidyAbbreviation('lun.'), 'Lun');
     checkEqual('abbreviation: no dot', DateText.tidyAbbreviation('mai'), 'Mai');
@@ -191,6 +210,7 @@ function testStylesheet() {
         unstyled.length === 0);
 }
 
+testSummarySplit();
 testShortDate();
 testPanelText();
 testTimeFormats();

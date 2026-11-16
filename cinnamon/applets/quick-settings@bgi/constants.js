@@ -27,11 +27,13 @@ const PANEL_ICONS = {
     vpn: 'network-vpn-symbolic',
     volume: 'audio-volume-high-symbolic',
 };
+// Names after a panel icon and on a tile (VPN, Bluetooth device): each name longer than the
+// limit is cut, ending in the ellipsis; several Bluetooth devices show the first and "+N".
+const PANEL_NAME_MAX = 16;
+const PANEL_NAME_ELLIPSIS = '…';
+const PANEL_NAME_MORE_PREFIX = ' +';
 // The VPN name after its panel icon: NordVPN's country, the NetworkManager profile's name,
-// both when both are up (NordVPN first). Each name longer than the limit is cut, ending in
-// the ellipsis.
-const PANEL_VPN_NAME_MAX = 16;
-const PANEL_VPN_NAME_ELLIPSIS = '…';
+// both joined by this when both are up (NordVPN first).
 const PANEL_VPN_NAME_SEPARATOR = ' + ';
 // Shown alone when every panel icon is hidden or absent, so the button never disappears.
 const PANEL_FALLBACK_ICON = 'preferences-system-symbolic';

@@ -1,4 +1,5 @@
 const Constants = require('./constants');
+const PanelText = require('./panelText');
 
 // NetworkManager VPN and WireGuard profiles, without the ones NordVPN creates itself (the
 // NordVPN tile shows those). @profiles: [{ uuid, id, type, iface, timestamp }].
@@ -16,14 +17,6 @@ function nordvpnLinkUp(activeConnections) {
         || Constants.NORDVPN_INTERFACES.includes(connection.iface));
 }
 
-// @text cut to Constants.PANEL_VPN_NAME_MAX characters, the last one the ellipsis.
-function shortName(text) {
-    const characters = [...text];
-    if (characters.length <= Constants.PANEL_VPN_NAME_MAX)
-        return text;
-    return `${characters.slice(0, Constants.PANEL_VPN_NAME_MAX - 1).join('')}${Constants.PANEL_VPN_NAME_ELLIPSIS}`;
-}
-
 // The text after the VPN panel icon. @nordvpnCountry: NordVPN's country while connected,
 // else null; @profileName: the active NetworkManager VPN profile's name, else null.
 // Returns null when neither is up (the icon hides).
@@ -31,7 +24,7 @@ function panelName(nordvpnCountry, profileName) {
     const names = [nordvpnCountry, profileName].filter(name => name);
     if (names.length === 0)
         return null;
-    return names.map(shortName).join(Constants.PANEL_VPN_NAME_SEPARATOR);
+    return names.map(PanelText.shortName).join(Constants.PANEL_VPN_NAME_SEPARATOR);
 }
 
 // @activeUuids: uuids of the VPN connections that are up. The toggle target is the active

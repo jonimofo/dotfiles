@@ -15,6 +15,12 @@ function panelLabel() {
     return new St.Label({ style_class: PANEL_LABEL_STYLE_CLASS, y_align: Clutter.ActorAlign.CENTER });
 }
 
+// @text null hides the label.
+function setLabelText(label, text) {
+    label.text = text || '';
+    label.visible = Boolean(text);
+}
+
 function iconWithLabel(icon, label) {
     const box = new St.BoxLayout({ style_class: 'quick-settings-panel-item' });
     box.add_child(icon);
@@ -22,7 +28,7 @@ function iconWithLabel(icon, label) {
     return box;
 }
 
-// The status items shown on the panel: Wi-Fi, VPN (icon and name), Bluetooth, volume icons
+// The status items shown on the panel: Wi-Fi, VPN and Bluetooth (icon and name), volume icons
 // and the battery (icon and level), in the order and with the selection of applyLayout().
 // Bluetooth shows only while the adapter is on, VPN only while a VPN is up, the battery only
 // when there is one: the settings can hide an item, never force one on. With nothing left,
@@ -40,10 +46,12 @@ class PanelIcons {
         };
         this._batteryLabel = panelLabel();
         this._vpnLabel = panelLabel();
+        this._bluetoothLabel = panelLabel();
         // One item each in the settings dialog: the icon and its text move and hide together.
         this._items = {
             ...this._icons,
             vpn: iconWithLabel(this._icons.vpn, this._vpnLabel),
+            bluetooth: iconWithLabel(this._icons.bluetooth, this._bluetoothLabel),
             battery: iconWithLabel(this._icons.battery, this._batteryLabel),
         };
         // Whether the state wants each item shown.
@@ -75,18 +83,20 @@ class PanelIcons {
     }
 
     // @iconName null hides the icon.
-    setBluetoothIconName(iconName) {
+    // @iconName null hides the item (adapter off); @name: from BluetoothModel.deviceName(),
+    // null leaves the icon alone.
+    setBluetooth(iconName, name) {
         this._wanted.bluetooth = iconName !== null;
         if (iconName)
             this._icons.bluetooth.icon_name = iconName;
+        setLabelText(this._bluetoothLabel, name);
         this._sync();
     }
 
     // @up: a VPN is up; @name: from VpnModel.panelName(), null leaves the icon alone.
     setVpn(up, name) {
         this._wanted.vpn = up;
-        this._vpnLabel.text = name || '';
-        this._vpnLabel.visible = Boolean(name);
+        setLabelText(this._vpnLabel, name);
         this._sync();
     }
 

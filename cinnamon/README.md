@@ -219,7 +219,9 @@ One button on the panel. Its icons, left to right: Wi-Fi, VPN (only while a Netw
 VPN or NordVPN is up), Bluetooth (only while the adapter is on), volume, then the battery
 icon and level, like `87%` (only with a battery). The VPN icon is followed by the name of
 the VPN that is up: NordVPN's country, or the NetworkManager profile's name; with both up,
-`<country> + <profile>`. A name longer than 16 characters is cut with `…`. A click opens
+`<country> + <profile>`. The Bluetooth icon is followed by the connected device's name; with
+several connected, the first in alphabetical order and `+N` for the others (`Headset +1`);
+nothing after it while none is connected. A name longer than 16 characters is cut with `…`. A click opens
 the menu:
 
 - Header: battery level and charging state on the left (hidden without a battery), then
@@ -237,7 +239,8 @@ the menu:
   dimmed.
 - Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
   - Wi-Fi: wireless on or off. Shows the network in use.
-  - Bluetooth: adapter on or off. Shows the device when exactly one is connected.
+  - Bluetooth: adapter on or off. Shows the connected device's name, with `+N` when several
+    are connected (same name as on the panel).
   - VPN: the active NetworkManager VPN or WireGuard profile, else the last used one. Shows
     its name.
   - NordVPN: connect (quick connect) or disconnect. Shows the country while connected.

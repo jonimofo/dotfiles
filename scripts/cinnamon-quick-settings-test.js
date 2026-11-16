@@ -466,6 +466,29 @@ function testBluetoothModel() {
     const off = Model.summarize([{ path: adapter, powered: false }], devices);
     check('bluetooth: adapter off hides the panel icon', Model.panelIconName(off) === null && Model.tileLabel(off, 'Bluetooth') === 'Bluetooth');
     check('bluetooth: no adapter means unavailable', Model.summarize([], devices).available === false);
+    check('bluetooth: the panel names the connected device, nothing when idle or off',
+        Model.deviceName(on) === 'Speaker' && Model.deviceName(idle) === null && Model.deviceName(off) === null);
+    const pair = [
+        { path: 'm', adapter, name: 'Mouse', icon: 'input-mouse', paired: true, connected: true },
+        { path: 'h', adapter, name: 'Headset', icon: 'audio-headset', paired: true, connected: true },
+    ];
+    const two = Model.summarize([{ path: adapter, powered: true }], pair);
+    const swapped = Model.summarize([{ path: adapter, powered: true }], [...pair].reverse());
+    check(`bluetooth: two devices give the first in alphabetical order and +1 (${Model.deviceName(two)})`,
+        Model.deviceName(two) === 'Headset +1' && Model.deviceName(swapped) === 'Headset +1'
+        && Model.tileLabel(two, 'Bluetooth') === 'Headset +1');
+    const three = Model.summarize([{ path: adapter, powered: true }],
+        [...pair, { path: 'k', adapter, name: 'Keyboard', icon: null, paired: true, connected: true }]);
+    check(`bluetooth: three devices give +2 (${Model.deviceName(three)})`, Model.deviceName(three) === 'Headset +2');
+    const long = Model.summarize([{ path: adapter, powered: true }],
+        [{ path: 'l', adapter, name: 'Wireless Headset Pro', icon: null, paired: true, connected: true }]);
+    check(`bluetooth: a long name is cut like the VPN name (${Model.deviceName(long)})`, Model.deviceName(long) === 'Wireless Headse…');
+    const PanelText = load('./panelText');
+    check('panel text: 16 characters kept, 17 cut to 16 with the ellipsis',
+        PanelText.shortName('Sixteen chars ok') === 'Sixteen chars ok' && PanelText.shortName('Seventeen chars!!') === 'Seventeen chars…'
+        && [...PanelText.shortName('Seventeen chars!!')].length === 16);
+    check('panel text: the count follows the cut first name, none gives null',
+        PanelText.countedName(['Seventeen chars!!', 'Mouse']) === 'Seventeen chars… +1' && PanelText.countedName([]) === null);
 }
 
 function testVpnModel() {

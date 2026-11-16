@@ -197,6 +197,38 @@ only; the applet normalized them in memory only.
   symbolic, as the stock power applet uses it) followed by the level; one Panel-tab entry
   moves and hides both. The header battery is unchanged.
 
+## Bluetooth device name on the panel and the tile (sixth review round)
+
+Request: "bluetooth doit aussi afficher le nom du périp branché". Chosen option: "Barre du
+haut et tuile". Several connected devices: the first name followed by `+1` (the count of the
+others).
+
+```
+Barre :
+
+  wifi  vpn France  bt WH-1000XM4  vol  [bat] 87%
+
+Menu :
+
+| [ Wi-Fi           > ] [ WH-1000XM4      > ] |
+| [ NordVPN         > ] [ VPN             > ] |
+
+Rien de connecté :
+
+| [ Wi-Fi           > ] [ Bluetooth       > ] |
+```
+
+Two devices connected, panel: `bt WH-1000XM4 +1`. Bluetooth on, nothing connected: the `bt`
+icon alone.
+
+- `BluetoothModel.deviceName()`: from the connected names BlueZ already gives (`Alias`),
+  sorted alphabetically by `summarize()` (BlueZ reports no connection order), the first cut to
+  16 characters, then ` +N`. Null while the adapter is off or nothing is connected.
+- The cut and the count live in `panelText.js`, shared with the VPN name; the limit is
+  `PANEL_NAME_MAX`.
+- Before this round the tile already showed the name when exactly one device was connected,
+  and `Bluetooth` with two or more.
+
 ## Out of scope
 
 - `Charge 80%` tile: issue #52.

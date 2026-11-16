@@ -187,7 +187,7 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setChecked(summary.powered);
         tile.setIconName(summary.powered ? Constants.BLUETOOTH_ON_ICON : Constants.BLUETOOTH_OFF_ICON);
         tile.setLabel(BluetoothModel.tileLabel(summary, tile.defaultLabel));
-        this._panelIcons.setBluetoothIconName(BluetoothModel.panelIconName(summary));
+        this._panelIcons.setBluetooth(BluetoothModel.panelIconName(summary), BluetoothModel.deviceName(summary));
         this._content.lists.refresh('bluetooth');
         this._syncAirplaneMode();
     }

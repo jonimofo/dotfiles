@@ -1,4 +1,5 @@
 const Constants = require('./constants');
+const PanelText = require('./panelText');
 
 // What the Bluetooth tile, list and panel icon show, from plain data:
 // @adapters: [{ path, powered }], @devices: [{ path, adapter, name, icon, paired, connected }].
@@ -20,9 +21,16 @@ function summarize(adapters, devices) {
     };
 }
 
-// The connected device's name when exactly one is connected, else the tile's own label.
+// The connected devices as the panel and the tile name them: the first in alphabetical
+// order (summarize() sorts them; BlueZ gives no connection order), cut, then " +N" for the
+// others. Null while the adapter is off or nothing is connected.
+function deviceName(summary) {
+    return summary.powered ? PanelText.countedName(summary.connectedNames) : null;
+}
+
+// deviceName(), else the tile's own label.
 function tileLabel(summary, defaultLabel) {
-    return summary.powered && summary.connectedNames.length === 1 ? summary.connectedNames[0] : defaultLabel;
+    return deviceName(summary) || defaultLabel;
 }
 
 // Panel icon: none while off, the active variant while a device is connected.

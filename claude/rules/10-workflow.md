@@ -16,6 +16,14 @@ change, infra change, anything touching more than one file.
 5. **Execute with `/step-by-step`:** one step per message, with what / why / expected result /
    how to verify, then wait for the OK. Restate "step N of M" each time.
 
+- A change to what the user SEES (layout, position, grouping, wording, colour, size) is never
+  trivial, even as a follow-up round on an open PR and even when the request sounds precise.
+  It gets: a one-line restatement, the open questions (one screen each), an ASCII mockup in the
+  option preview (or, under "live first" below, the live page), explicit validation. Only then
+  the agent brief.
+- Any word that needs interpreting ("grouped by page", "the name", "more readable") is a question,
+  not an assumption.
+
 ## Skip the ceremony
 
 - Trivial task (typo, one-line fix, "commit", "resume"): do it, add one line "skipped the ceremony".
@@ -25,12 +33,6 @@ change, infra change, anything touching more than one file.
 - Skip words in the request: `go`, `gogo`, `ok go`, `do it`, `just <verb>`. Execute directly.
   Step-by-step still applies when the execution has more than one step.
 - When in doubt whether a task is trivial, it is not.
-- A change to what the user SEES (layout, position, grouping, wording, colour, size) is never
-  trivial, even as a follow-up round on an open PR and even when the request sounds precise.
-  It gets: a one-line restatement, the open questions (one screen each), an ASCII mockup in the
-  option preview, explicit validation. Only then the agent brief.
-- Any word that needs interpreting ("grouped by page", "the name", "more readable") is a question,
-  not an assumption.
 
 ## Mid-work rules
 

@@ -7,7 +7,8 @@
 - Never sign commits. Never add `Co-Authored-By`, `Signed-off-by`, "Generated with" or any
   mention of Claude or AI, in commits, PRs, issues or code.
 - Stage only the files of the change. Never `git add -A` on a dirty tree.
-- `--no-verify` only when the user says "no verif" / "no verify".
+- `--no-verify` only when the user says "no verif" / "no verify", or for intermediate pushes of a
+  delegated agent on its own branch (`50-delegation.md`).
 - The bare word "commit" from the user means: run `/commit` on the current changes.
 
 ## Branch model (default when CONTRIBUTING.md says nothing)

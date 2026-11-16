@@ -2,7 +2,8 @@ const Gio = imports.gi.Gio;
 const GsettingsWrite = require('./gsettingsWrite');
 
 // One boolean GSettings key: the Do Not Disturb tile, Night Light on the Warmth row. With
-// @inverted, it is on while the key is false (Do Not Disturb is on while notifications are off).
+// @inverted, it is on while the key is false (Do Not Disturb is on while notifications are
+// off).
 // @onChange runs on every change of the key, made here or anywhere else.
 class BooleanSetting {
     constructor(schema, key, inverted, onChange) {

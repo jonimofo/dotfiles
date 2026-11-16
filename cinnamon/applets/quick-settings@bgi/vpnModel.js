@@ -8,6 +8,14 @@ function vpnProfiles(profiles) {
         && !Constants.NORDVPN_INTERFACES.includes(profile.id));
 }
 
+// Whether NordVPN's own NetworkManager link (NordLynx) is among the active connections,
+// from their ids and interface names: [{ id, iface }]. It changes when NordVPN connects or
+// disconnects, from the applet or from anywhere else.
+function nordvpnLinkUp(activeConnections) {
+    return activeConnections.some(connection => Constants.NORDVPN_INTERFACES.includes(connection.id)
+        || Constants.NORDVPN_INTERFACES.includes(connection.iface));
+}
+
 // @text cut to Constants.PANEL_VPN_NAME_MAX characters, the last one the ellipsis.
 function shortName(text) {
     const characters = [...text];

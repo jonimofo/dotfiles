@@ -359,7 +359,15 @@ manager come with the desktop.
   unchecked and a click turns the radios off again.
 - A size changed in `stylesheet.css` shows after the next login.
 - NordVPN's own NetworkManager connection (interface `nordlynx`) is left out of the VPN
-  tile; it was only checked while NordVPN was disconnected.
+  tile. Its going up or down (NordVPN connected or disconnected from a terminal or NordVPN's
+  own app) triggers one `nordvpn status` read, so the VPN name on the panel follows. With
+  NordVPN's OpenVPN technology no such link exists in NetworkManager: the panel then
+  follows only when the menu opens.
+- A Warmth above 4700 K may be set back to 4700 K when Cinnamon Settings > Night Light is
+  opened. Verified by reading the page's code only (`cs_nightlight.py` and the xapp `Range`
+  widget: a 1700 K to 4700 K scale bound to the key, whose clamped value is written back
+  300 ms after it changes); not tried on screen, since that would change the setting. A
+  value below 1700 K is not affected by that path.
 
 ## Quick Settings: tests
 
@@ -379,9 +387,13 @@ Prerequisites: `node` and `jq` for the check, `gjs` with the libnm and Cvc typel
 logic tests.
 
 `cinnamon-quick-settings-test.sh` runs on the memory GSettings backend and on fakes: fake
-NetworkManager objects (Wi-Fi, VPN), a fake system bus (BlueZ, power profiles), a fake
-session bus (Keep awake), fake Cvc streams, and fake ddcutil and nordvpn commands fed with
-output captured on this machine (`scripts/fixtures/`). It never talks to the real
-NetworkManager, BlueZ or session manager.
+NetworkManager objects (Wi-Fi, VPN), a fake system bus (BlueZ, power profiles, UPower's
+keyboard backlight), a fake session bus (Keep awake), fake Cvc streams, fake radios
+(Airplane mode), and fake ddcutil, nordvpn and top commands fed with output captured on
+this machine (`scripts/fixtures/`, `top` in English and with French headers). One check
+runs the real `top` under `LC_ALL=C`, read only. It never talks to the real
+NetworkManager, BlueZ, UPower or session manager.
 
-Design record: [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md).
+Design records:
+[`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md),
+[`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md).

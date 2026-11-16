@@ -58,8 +58,8 @@ class MenuContent {
     // line's id. Hidden rows leave no gap; tiles reflow two per row, an odd last tile on the
     // left. An open list is closed first: its row may be gone.
     applyLayout(sliderIds, tileLayoutIds) {
-        const tileIds = tileLayoutIds.filter(id => id !== Constants.CPU_LINE_ID);
-        this._cpuLine.visible = tileLayoutIds.includes(Constants.CPU_LINE_ID);
+        const { tileIds, cpuLine } = LayoutModel.splitTileLayout(tileLayoutIds, Constants.CPU_LINE_ID);
+        this._cpuLine.visible = cpuLine;
         this.lists.close();
         this._detach(this.listPanel.actor);
 

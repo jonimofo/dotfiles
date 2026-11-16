@@ -11,11 +11,6 @@ const LayoutModel = require('./layoutModel');
 const PANEL_ICON_STYLE_CLASS = 'system-status-icon';
 const PANEL_LABEL_STYLE_CLASS = 'applet-label';
 
-// The status items shown on the panel: Wi-Fi, VPN (icon and name), Bluetooth, volume icons
-// and the battery (icon and level), in the order and with the selection of applyLayout(). Bluetooth shows only while
-// the adapter is on, VPN only while a VPN is up, the battery only when there is one: the
-// settings can hide an item, never force one on. With nothing left, one fallback icon keeps
-// the button on the panel.
 function panelLabel() {
     return new St.Label({ style_class: PANEL_LABEL_STYLE_CLASS, y_align: Clutter.ActorAlign.CENTER });
 }
@@ -27,6 +22,11 @@ function iconWithLabel(icon, label) {
     return box;
 }
 
+// The status items shown on the panel: Wi-Fi, VPN (icon and name), Bluetooth, volume icons
+// and the battery (icon and level), in the order and with the selection of applyLayout().
+// Bluetooth shows only while the adapter is on, VPN only while a VPN is up, the battery only
+// when there is one: the settings can hide an item, never force one on. With nothing left,
+// one fallback icon keeps the button on the panel.
 class PanelIcons {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-panel-icons' });

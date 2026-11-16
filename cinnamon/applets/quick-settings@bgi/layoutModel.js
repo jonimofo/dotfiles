@@ -60,6 +60,12 @@ function visibleIds(stored, declared) {
     return normalize(stored, declared).filter(row => row.show).map(row => row.id);
 }
 
+// The Tiles list split into the tile ids to lay out and whether the CPU line shows: the
+// line sits under the tiles whatever its place in the list. @cpuLineId: its id.
+function splitTileLayout(ids, cpuLineId) {
+    return { tileIds: ids.filter(id => id !== cpuLineId), cpuLine: ids.includes(cpuLineId) };
+}
+
 // @ids split into rows of @perRow; the last row may be shorter.
 function rows(ids, perRow) {
     const result = [];
@@ -74,7 +80,8 @@ function defaults(declared) {
 }
 
 // Panel items: each shows when the settings allow it AND its state wants it (Bluetooth on,
-// a VPN up, a battery present). The fallback shows when none does. @allowedIds: ids; @wanted: { id: bool }.
+// a VPN up, a battery present). The fallback shows when none does.
+// @allowedIds: ids; @wanted: { id: bool }.
 function panelIconVisibility(allowedIds, wanted) {
     const visible = {};
     for (const id of Object.keys(wanted))

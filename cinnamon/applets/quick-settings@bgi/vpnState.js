@@ -18,6 +18,7 @@ class VpnState {
         this._inFlight = new Set();
         this._cancellable = new Gio.Cancellable();
         this.summary = VpnModel.summarize([], []);
+        this.nordvpnLinkUp = false;
         requestClient(this._cancellable, (client, error) => this._onClientReady(client, error));
     }
 
@@ -94,6 +95,10 @@ class VpnState {
             timestamp: connection.get_setting_connection().get_timestamp(),
         }));
         const vpnUuids = VpnModel.vpnProfiles(profiles).map(profile => profile.uuid);
+        const profileOf = new Map(profiles.map(profile => [profile.uuid, profile]));
+        this.nordvpnLinkUp = VpnModel.nordvpnLinkUp(this._client.get_active_connections()
+            .map(activeConnection => profileOf.get(activeConnection.get_uuid()))
+            .filter(profile => profile));
         this._disconnectActive();
         const activeUuids = [];
         for (const activeConnection of this._client.get_active_connections()) {

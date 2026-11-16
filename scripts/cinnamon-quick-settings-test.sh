@@ -3,7 +3,8 @@
 # and nordvpn parsing (captured output in fixtures/), send-on-release, brightness backends,
 # in-place lists, Bluetooth, VPN and NordVPN logic, the Warmth row with its Night Light
 # switch, Keyboard light (fake UPower bus), Airplane mode, the CPU line (captured top
-# output). Wi-Fi runs on fake NetworkManager objects. No real setting is changed and no real device is touched.
+# output). Wi-Fi runs on fake NetworkManager objects. No real setting is changed and no real
+# device is touched.
 # Usage: scripts/cinnamon-quick-settings-test.sh (from any directory). Needs gjs and libnm.
 set -euo pipefail
 

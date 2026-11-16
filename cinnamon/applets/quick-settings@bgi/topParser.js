@@ -2,7 +2,7 @@ const Constants = require('./constants');
 
 const FRAME_START = 'top - ';
 
-const CPU_COLUMN = '%CPU';
+const CPU_COLUMN = Constants.CPU_TOP_CPU_COLUMN;
 const COMMAND_COLUMN = 'COMMAND';
 
 // The busiest process in the last frame of `top -b` output: { name, percent }, or null
@@ -42,5 +42,5 @@ function busiestProcess(text) {
 function label(process) {
     if (!process)
         return '';
-    return `${process.name} ${Math.round(process.percent)}${Constants.CPU_PERCENT_SUFFIX}`;
+    return `${process.name} ${Math.round(process.percent)}${Constants.PERCENT_SUFFIX}`;
 }

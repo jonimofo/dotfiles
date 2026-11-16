@@ -38,7 +38,7 @@ class SliderRow {
         this._switch = null;
         this._switchButton = null;
         if (definition.hasSwitch) {
-            this._addSwitch(definition.label);
+            this._addSwitch(definition.switchLabel);
         } else if (definition.hasMenu) {
             this._arrow = new ExpandArrow.ExpandArrow('quick-settings-slider-arrow', 'quick-settings-slider-icon');
             this.actor.add_child(this._arrow.actor);
@@ -64,8 +64,10 @@ class SliderRow {
         this._switchButton.connect('clicked', () => onSwitch());
     }
 
+    // Also the button's checked state, as the tiles set it, so screen readers get it.
     setSwitchState(on) {
         this._switch.setToggleState(on);
+        this._switchButton.checked = on;
     }
 
     setValueText(text) {

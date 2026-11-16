@@ -18,6 +18,12 @@ function fractionToKelvin(fraction) {
     return clampKelvin(Constants.WARMTH_MIN_KELVIN + steps * Constants.WARMTH_STEP_KELVIN);
 }
 
+// What the Warmth row shows: Night Light off dims and freezes the slider, the switch
+// follows it; the handle is clamped to the range, the text is the stored value.
+function rowState(enabled, kelvin) {
+    return { available: enabled, switchOn: enabled, fraction: kelvinToFraction(kelvin), text: label(kelvin) };
+}
+
 function label(kelvin) {
     return `${kelvin}${Constants.WARMTH_UNIT_SUFFIX}`;
 }

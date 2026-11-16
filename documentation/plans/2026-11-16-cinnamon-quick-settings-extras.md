@@ -53,9 +53,8 @@ Owner's answers:
 ## Decisions
 
 - Warmth: `org.cinnamon.settings-daemon.plugins.color`, `night-light-temperature` (uint32)
-  and `night-light-enabled`. Same range as Cinnamon's Night Light page (widened in the third
-  review round): 1700 K to 4700 K,
-  step 100, inverted (handle to the right = warmer = fewer kelvin). The value shows as
+  and `night-light-enabled`. 1700 K to 4700 K at first (Cinnamon's Night Light page), 6500 K
+  to 1000 K since the third review round; step 100, inverted (handle to the right = warmer = fewer kelvin). The value shows as
   `3400 K`. The switch at the right end writes `night-light-enabled`; while off the slider is
   dimmed and takes no input. It follows the keys live. Listed in the Sliders tab as Warmth.
   The Night Light tile was removed afterwards (see below).

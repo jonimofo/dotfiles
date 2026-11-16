@@ -194,6 +194,7 @@ class QuickSettingsApplet extends Applet.Applet {
 
     _setUpVpn() {
         const tile = this._content.tiles.vpn;
+        this._nordvpnLinkUp = null;
         this._vpn = new VpnState.VpnState(() => this._syncVpn(), this._requestNmClient);
         tile.setOnToggle(() => this._vpn.toggle());
         this._registerList('vpn', tile, () => this._tileAnchor('vpn'),
@@ -210,6 +211,7 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setAvailable(summary.available);
         tile.setChecked(summary.active !== null);
         tile.setLabel(summary.label);
+        this._refreshNordvpnOnLinkChange();
         this._syncVpnPanelIcon();
         this._content.lists.refresh('vpn');
     }
@@ -237,6 +239,16 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setLabel(this._nordvpn.connectedCountry || tile.defaultLabel);
         this._syncVpnPanelIcon();
         this._content.lists.refresh('nordvpn');
+    }
+
+    // NordVPN connected or disconnected elsewhere (a terminal, its own app) brings its
+    // NordLynx link up or down in NetworkManager: one status read then, no polling.
+    _refreshNordvpnOnLinkChange() {
+        const linkUp = this._vpn.nordvpnLinkUp;
+        const changed = this._nordvpnLinkUp !== null && linkUp !== this._nordvpnLinkUp;
+        this._nordvpnLinkUp = linkUp;
+        if (changed && this._nordvpn && this._isShown(Constants.LAYOUT_KEYS.tiles, 'nordvpn'))
+            this._nordvpn.refresh();
     }
 
     _syncVpnPanelIcon() {
@@ -306,13 +318,12 @@ class QuickSettingsApplet extends Applet.Applet {
 
     // Night Light off: the Warmth slider is dimmed and inert, the switch stays usable.
     _syncNightLight() {
-        const enabled = this._nightLight.enabled;
-        const kelvin = this._nightLight.temperature;
+        const state = WarmthModel.rowState(this._nightLight.enabled, this._nightLight.temperature);
         const row = this._content.sliders.warmth;
-        row.setAvailable(enabled);
-        row.setSwitchState(enabled);
-        row.showValue(WarmthModel.kelvinToFraction(kelvin));
-        row.setValueText(WarmthModel.label(kelvin));
+        row.setAvailable(state.available);
+        row.setSwitchState(state.switchOn);
+        row.showValue(state.fraction);
+        row.setValueText(state.text);
     }
 
     _setUpKeepAwake() {
@@ -342,9 +353,9 @@ class QuickSettingsApplet extends Applet.Applet {
     _setUpAirplaneMode() {
         const tile = this._content.tiles['airplane-mode'];
         this._airplaneMode = new AirplaneMode.AirplaneMode([
-            { isOn: () => this._wifi.enabled, setOn: on => this._wifi.setEnabled(on) },
-            { isOn: () => this._bluetooth.summary.powered, setOn: on => this._bluetooth.setPowered(on) },
-        ]);
+            { isOn: () => this._wifi.enabled, setOn: (on, onFailed) => this._wifi.setEnabled(on, onFailed) },
+            { isOn: () => this._bluetooth.summary.powered, setOn: (on, onFailed) => this._bluetooth.setPowered(on, onFailed) },
+        ], () => this._syncAirplaneMode());
         tile.setOnToggle(() => {
             this._airplaneMode.toggle();
             this._syncAirplaneMode();
@@ -399,8 +410,21 @@ class QuickSettingsApplet extends Applet.Applet {
         this._nordvpnShown = false;
         this.settings = new Settings.AppletSettings(this._layout, uuid, instanceId);
         for (const key of Object.values(Constants.LAYOUT_KEYS))
-            this.settings.bind(key, key, () => this._applyLayout());
+            this.settings.bind(key, key, () => this._onLayoutSettingChanged());
+        this._onLayoutSettingChanged();
+    }
+
+    _onLayoutSettingChanged() {
+        this._writeBackLayouts();
         this._applyLayout();
+    }
+
+    // A list saved by an older version lacks the new elements (or holds removed ones): it is
+    // written back normalized, so the dialog lists every element. setValue() saves the file
+    // without calling the bind callback; a later settings change finds nothing to write.
+    _writeBackLayouts() {
+        for (const key of Object.values(Constants.LAYOUT_KEYS))
+            LayoutModel.writeBackLayout(this.settings, key, this._declared(key));
     }
 
     _declared(key) {
@@ -423,10 +447,6 @@ class QuickSettingsApplet extends Applet.Applet {
     // A hidden Brightness row runs no ddcutil and a hidden NordVPN tile no nordvpn call:
     // each reads once when it shows (at start, or when the dialog shows it again).
     _applyLayout() {
-        // A list saved by an older version lacks the new elements: written back so the dialog
-        // lists them. The write calls this again, which then finds nothing to write.
-        for (const key of Object.values(Constants.LAYOUT_KEYS))
-            LayoutModel.writeBackLayout(this.settings, key, this._declared(key));
         const sliders = this._visible(Constants.LAYOUT_KEYS.sliders);
         const tiles = this._visible(Constants.LAYOUT_KEYS.tiles);
         this._content.applyLayout(sliders, tiles);

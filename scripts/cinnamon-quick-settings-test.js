@@ -3,9 +3,10 @@
 // (no test touches the real NetworkManager); brightness runs against fake ddcutil
 // and laptop backends fed with captured ddcutil output; NordVPN runs against a fake client
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
-// models run on plain data; Night Light (the Warmth row) and Do Not Disturb run on the memory
-// GSettings backend; the keyboard light runs on a fake UPower bus; Airplane mode on fake radios
-// and on the Wi-Fi and Bluetooth fakes; the CPU line parser on captured top output.
+// models run on plain data; Night Light (the Warmth row) and Do Not Disturb run on the
+// memory GSettings backend; the keyboard light runs on a fake UPower bus; Airplane mode on
+// fake radios and on the Wi-Fi and Bluetooth fakes; the CPU line parser on captured top
+// output.
 // No real setting is changed.
 // Usage: GSETTINGS_BACKEND=memory gjs cinnamon-quick-settings-test.js <applet folder> <fixtures folder>
 const GLib = imports.gi.GLib;
@@ -55,6 +56,16 @@ function load(name) {
         modules[file] = new Function('require', 'imports', `${source}\nreturn { ${names.join(', ')} };`)(load, appletImports);
     }
     return modules[file];
+}
+
+// The message of what @call throws, or null.
+function thrownBy(call) {
+    try {
+        call();
+        return null;
+    } catch (e) {
+        return e.message;
+    }
 }
 
 function check(label, condition) {
@@ -474,7 +485,10 @@ function testVpnModel() {
     check('vpn: the active profile names the tile and is marked',
         up.label === 'VPN Office' && up.target.id === 'Office' && up.profiles.find(p => p.id === 'Office').active);
     check('vpn: no profile means unavailable', Model.summarize([wifi], []).available === false);
-    check('vpn panel: no VPN up, no name', Model.panelName(null, null) === null);
+    check('vpn: NordVPN link up only while its NordLynx connection is active',
+        Model.nordvpnLinkUp([{ id: 'nordlynx', iface: 'nordlynx' }]) && Model.nordvpnLinkUp([{ id: 'x', iface: 'nordlynx' }])
+        && !Model.nordvpnLinkUp([{ id: 'Office', iface: null }]) && !Model.nordvpnLinkUp([]));
+    check('vpn panel: no VPN up, no name', Model.panelName(null, null) === null && Model.panelName('', '') === null);
     check('vpn panel: NordVPN shows its country', Model.panelName('France', null) === 'France');
     check('vpn panel: a NetworkManager VPN shows its profile name', Model.panelName(null, 'Office') === 'Office');
     check(`vpn panel: both up, NordVPN first (${Model.panelName('France', 'Office')})`, Model.panelName('France', 'Office') === 'France + Office');
@@ -653,8 +667,17 @@ async function testNightLight() {
     check('warmth: out-of-range values are clamped on the slider', Model.kelvinToFraction(9000) === 0 && Model.kelvinToFraction(500) === 1);
     check(`warmth: positions round to the 100 K step (${Model.fractionToKelvin(0.5)})`,
         Model.fractionToKelvin(0.5) === 3800 && Model.fractionToKelvin(0) === 6500 && Model.fractionToKelvin(1) === 1000);
-    check('warmth: every step survives a round trip',
-        [1000, 1700, 3400, 3700, 4700, 6500].every(k => Model.fractionToKelvin(Model.kelvinToFraction(k)) === k));
+    const steps = [];
+    for (let kelvin = 1000; kelvin <= 6500; kelvin += 100)
+        steps.push(kelvin);
+    check(`warmth: every one of the ${steps.length} steps survives a round trip`,
+        steps.length === 56 && steps.every(k => Model.fractionToKelvin(Model.kelvinToFraction(k)) === k));
+    check('warmth: row state, Night Light on', JSON.stringify(Model.rowState(true, 3700))
+        === JSON.stringify({ available: true, switchOn: true, fraction: Model.kelvinToFraction(3700), text: '3700 K' }));
+    check('warmth: row state, Night Light off dims the slider and turns the switch off',
+        !Model.rowState(false, 3700).available && !Model.rowState(false, 3700).switchOn);
+    check('warmth: row state, a stored 9000 K puts the handle at the left end and shows 9000 K',
+        Model.rowState(true, 9000).fraction === 0 && Model.rowState(true, 9000).text === '9000 K');
     check('warmth: label', Model.label(3400) === '3400 K');
 
     const NightLight = load('./nightLight');
@@ -682,9 +705,8 @@ async function testNightLight() {
     const beforeRead = changes;
     const outside = night.temperature;
     await wait(0);
-    check(`night light: a stored 9000 K reads as is, slider at its left end, no write (${outside})`,
-        outside === 9000 && Model.kelvinToFraction(outside) === 0 && Model.label(outside) === '9000 K'
-        && color.get_uint('night-light-temperature') === 9000 && changes === beforeRead);
+    check(`night light: a stored 9000 K reads back as 9000, the key unchanged (${outside})`,
+        outside === 9000 && color.get_uint('night-light-temperature') === 9000 && changes === beforeRead);
     night.destroy();
 }
 
@@ -696,6 +718,9 @@ class FakeKbdBus {
         this.level = level;
         this.absent = absent;
         this.calls = [];
+        // With holdSets, SetBrightness replies wait in held until answered by hand.
+        this.holdSets = false;
+        this.held = [];
         this.subscriptions = new Map();
         this.nextSubscription = 1;
     }
@@ -713,7 +738,10 @@ class FakeKbdBus {
     call(name, path, iface, method, parameters, replyType, flags, timeout, cancellable, callback) {
         const call = { method, args: parameters ? parameters.deepUnpack() : [] };
         this.calls.push(`${method}${call.args.length ? ` ${call.args}` : ''}`);
-        callback(this, call);
+        if (this.holdSets && method === 'SetBrightness')
+            this.held.push(() => callback(this, call));
+        else
+            callback(this, call);
     }
 
     call_finish(call) {
@@ -773,14 +801,35 @@ function testKeyboardLight() {
     const noLevels = new KbdBacklight.KbdBacklight(() => {}, new FakeKbdBus({ max: 0 }));
     check('keyboard: a maximum of 0 leaves the tile unavailable', !noLevels.available);
     noLevels.destroy();
+    check('keyboard: a maximum of 0 stays at 0', Model.nextLevel(0, 0) === 0 && Model.levelWord(0, 0) === 'Off');
+
+    const slowBus = new FakeKbdBus({ max: 2, level: 0 });
+    const slow = new KbdBacklight.KbdBacklight(() => {}, slowBus);
+    slowBus.holdSets = true;
+    slow.cycle();
+    slow.cycle();
+    check(`keyboard: two quick clicks go two steps (${slowBus.calls.slice(2)})`, `${slowBus.calls.slice(2)}` === 'SetBrightness 1,SetBrightness 2');
+    slowBus.held.shift()();
+    check('keyboard: the reply of an older click does not show its level', slow.level === 0);
+    slowBus.held.shift()();
+    check('keyboard: the reply of the last click shows its level', slow.level === 2);
+    slow.cycle();
+    slowBus.emitChanged(1);
+    slowBus.held.shift()();
+    check(`keyboard: a late reply never overwrites a level reported since (${slow.level})`, slow.level === 1);
+    slow.destroy();
     errors = [];
 }
 
 // Radios whose change arrives later, as libnm and BlueZ report it.
-function fakeRadio(on) {
+function fakeRadio(on, { refuseOff = false } = {}) {
     const radio = { on, writes: [] };
     radio.isOn = () => radio.on;
-    radio.setOn = value => radio.writes.push(value);
+    radio.setOn = (value, onFailed) => {
+        radio.writes.push(value);
+        if (refuseOff && !value)
+            onFailed();
+    };
     radio.arrive = () => {
         if (radio.writes.length)
             radio.on = radio.writes[radio.writes.length - 1];
@@ -790,6 +839,18 @@ function fakeRadio(on) {
 
 function testAirplaneMode() {
     const AirplaneMode = load('./airplaneMode');
+    {
+        const stubborn = fakeRadio(true, { refuseOff: true });
+        const other = fakeRadio(true);
+        let notified = 0;
+        const refused = new AirplaneMode.AirplaneMode([stubborn, other], () => notified++);
+        refused.toggle();
+        check(`airplane: a radio that refuses to turn off ends airplane mode, the tile unchecks (${notified} notice)`,
+            !refused.active && notified === 1 && stubborn.on);
+        other.arrive();
+        refused.sync();
+        check('airplane: after a refusal, a later radio change keeps it unchecked', !refused.active);
+    }
     let wifi = fakeRadio(true);
     let bluetooth = fakeRadio(true);
     let airplane = new AirplaneMode.AirplaneMode([wifi, bluetooth]);
@@ -837,6 +898,14 @@ function testAirplaneMode() {
     wifiState.setEnabled(false);
     wifiState.setEnabled(true);
     check(`airplane: Wi-Fi goes through WirelessEnabled (${client.writes})`, `${client.writes}` === 'WirelessEnabled=false,WirelessEnabled=true');
+    errors = [];
+    let wifiRefused = 0;
+    client.dbus_set_property_finish = () => {
+        throw new GLib.Error(Gio.DBusError, Gio.DBusError.ACCESS_DENIED, 'Not authorized');
+    };
+    wifiState.setEnabled(false, () => wifiRefused++);
+    check(`airplane: a refused WirelessEnabled write is logged and reported (${errors})`, wifiRefused === 1 && errors.length === 1);
+    errors = [];
     wifiState.destroy();
     check('airplane: no NetworkManager disconnect() call', device.disconnectCalls === 0 && client.disconnectCalls === 0);
     const Bluetooth = load('./bluetooth');
@@ -846,8 +915,9 @@ function testAirplaneMode() {
         newManager: () => {},
     };
     const bluetoothState = new Bluetooth.Bluetooth(() => {}, system);
-    bluetoothState.setPowered(false);
-    check('airplane: no adapter, no Bluetooth call', calls.length === 0);
+    let bluetoothRefused = 0;
+    bluetoothState.setPowered(false, () => bluetoothRefused++);
+    check('airplane: no adapter, no Bluetooth call, reported as refused', calls.length === 0 && bluetoothRefused === 1);
     bluetoothState.summary = { available: true, powered: true, adapterPath: '/org/bluez/hci0', devices: [], connectedNames: [] };
     bluetoothState.setPowered(false);
     check(`airplane: Bluetooth goes through Adapter1.Powered (${calls})`, `${calls}` === 'Set false');
@@ -863,6 +933,9 @@ async function testTopProcess() {
     const spaced = text.replace('211,8   0,6   1:03.17 php', '  1,0   0,6   1:03.17 php');
     check(`cpu: a command name with spaces is kept whole (${Parser.label(Parser.busiestProcess(spaced))})`,
         Parser.label(Parser.busiestProcess(spaced)) === 'Isolated Web Co 16%');
+    check('cpu: empty output is an error, not a process', thrownBy(() => Parser.busiestProcess('')) === 'no PID header line in the top output');
+    check('cpu: a line whose %CPU is not a number is skipped',
+        Parser.label(Parser.busiestProcess(text.replace('211,8   0,6   1:03.17 php', 'n/a   0,6   1:03.17 php'))) === 'Isolated Web Co 16%');
     check('cpu: decimal points read too', Parser.busiestProcess(text.replace(/(\d),(\d)/g, '$1.$2')).percent === busiest.percent);
     const headerOnly = text.slice(0, text.lastIndexOf('COMMAND') + 'COMMAND'.length);
     check('cpu: a header without process lines, no process', Parser.busiestProcess(headerOnly) === null && Parser.label(null) === '');
@@ -1022,7 +1095,10 @@ function testLayoutModel() {
     const ownerTiles = Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS);
     check(`layout: the owner's saved Tiles list drops night-light and places the new tiles by the defaults (${ownerTiles})`,
         `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,cpu-line');
-    const ownerRows = Model.rows(ownerTiles.filter(id => id !== Constants.CPU_LINE_ID), Constants.TILES_PER_ROW);
+    const ownerSplit = Model.splitTileLayout(ownerTiles, Constants.CPU_LINE_ID);
+    check('layout: the CPU line is split off the tiles and shows', ownerSplit.cpuLine && !ownerSplit.tileIds.includes(Constants.CPU_LINE_ID));
+    check('layout: a hidden CPU line does not show', !Model.splitTileLayout(['wifi', 'vpn'], Constants.CPU_LINE_ID).cpuLine);
+    const ownerRows = Model.rows(ownerSplit.tileIds, Constants.TILES_PER_ROW);
     check(`layout: the owner's tile rows (${JSON.stringify(ownerRows)})`,
         JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["power-profile","airplane-mode"],["keyboard-light"]]');
     check('layout: the owner\'s hidden tiles stay hidden',
@@ -1083,6 +1159,8 @@ function testLayoutModel() {
         Model.storedUpdate(Model.defaults(Constants.SLIDERS), Constants.SLIDERS) === null);
     check('layout write-back: a row without a show flag is written back shown',
         JSON.stringify(Model.storedUpdate([{ id: 'output' }, ...Model.defaults(Constants.SLIDERS).slice(1)], Constants.SLIDERS)[0]) === '{"show":true,"id":"output"}');
+    check('layout write-back: nothing stored writes the defaults',
+        JSON.stringify(Model.storedUpdate(null, Constants.SLIDERS)) === JSON.stringify(Model.defaults(Constants.SLIDERS)));
     check('layout write-back: a removed id alone is enough to write',
         Model.storedUpdate([...Model.defaults(Constants.SLIDERS), { show: true, id: 'gone' }], Constants.SLIDERS) !== null);
     check('layout: odd count leaves one tile on the last row',

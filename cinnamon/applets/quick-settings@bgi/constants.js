@@ -66,8 +66,10 @@ const SLIDERS = [
     { id: 'output', label: 'Sound', name: 'Sound', icon: 'audio-volume-high-symbolic', hasMenu: true },
     { id: 'input', label: 'Microphone', name: 'Microphone', icon: 'audio-input-microphone-symbolic', hasMenu: true },
     { id: 'monitors', label: 'Brightness', name: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
-    // The Night Light temperature, its value as text and a switch for Night Light on the right.
-    { id: 'warmth', label: 'Warmth', name: 'Warmth', icon: 'night-light-symbolic', hasMenu: false, hasSwitch: true },
+    // The Night Light temperature, its value as text, and on the right a switch for Night
+    // Light (switchLabel: what it toggles, for screen readers).
+    { id: 'warmth', label: 'Warmth', name: 'Warmth', icon: 'night-light-symbolic', hasMenu: false, hasSwitch: true,
+        switchLabel: 'Night Light' },
 ];
 
 // Tiles, left to right then top to bottom, two per row: this array is the only place that
@@ -96,7 +98,8 @@ const DARK_STYLE_OFF = 'default';
 
 // Battery, from cinnamon-settings-daemon like the stock power applet.
 const POWER_PROXY = 'org.cinnamon.SettingsDaemon.Power';
-const BATTERY_LABEL_SUFFIX = '%';
+// After the battery level and the CPU line's figure.
+const PERCENT_SUFFIX = '%';
 
 // Brightness of the external monitors, through DDC/CI. Buses are detected at runtime: they
 // change with the dock.
@@ -259,11 +262,12 @@ const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming'
 const CPU_LINE_ID = 'cpu-line';
 const CPU_LINE_ITEM = { id: CPU_LINE_ID, name: 'CPU line' };
 const CPU_LINE_TITLE = 'CPU';
-const CPU_TOP_COMMAND = ['top', '-b', '-n', '2', '-d', '0.5', '-o', '%CPU', '-w', '512'];
+// The column top sorts by and the parser reads.
+const CPU_TOP_CPU_COLUMN = '%CPU';
+const CPU_TOP_COMMAND = ['top', '-b', '-n', '2', '-d', '0.5', '-o', CPU_TOP_CPU_COLUMN, '-w', '512'];
 // top translates its column names (COMMAND is COM. in French): run it untranslated.
 const CPU_TOP_ENV = { LC_ALL: 'C' };
 const CPU_IGNORED_COMMANDS = ['top'];
-const CPU_PERCENT_SUFFIX = '%';
 
 // Settings dialog (settings-schema.json): one list per group, rows { show, id }.
 const LAYOUT_KEYS = {

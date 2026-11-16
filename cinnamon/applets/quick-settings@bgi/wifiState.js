@@ -122,11 +122,14 @@ class WifiState {
         this._setWirelessEnabled(!this._client.wireless_enabled);
     }
 
-    // The software switch, as Airplane mode sets it.
-    setEnabled(enabled) {
-        if (!this._client)
+    // The software switch, as Airplane mode sets it. @onFailed() runs when the write is
+    // refused or there is no client.
+    setEnabled(enabled, onFailed = () => {}) {
+        if (!this._client) {
+            onFailed();
             return;
-        this._setWirelessEnabled(enabled);
+        }
+        this._setWirelessEnabled(enabled, onFailed);
     }
 
     requestScan() {
@@ -221,13 +224,14 @@ class WifiState {
 
     // libnm 1.22 deprecates wireless_set_enabled() in favour of this D-Bus call, which also
     // reports a refusal (polkit, NetworkManager stopped) instead of failing silently.
-    _setWirelessEnabled(enabled) {
+    _setWirelessEnabled(enabled, onFailed = () => {}) {
         this._client.dbus_set_property(NM.DBUS_PATH, NM.DBUS_INTERFACE, 'WirelessEnabled',
             GLib.Variant.new_boolean(enabled), AsyncHelpers.NO_TIMEOUT, this._cancellable, (client, result) => {
                 try {
                     client.dbus_set_property_finish(result);
                 } catch (e) {
-                    AsyncHelpers.logUnlessCancelled(e, `setting WirelessEnabled to ${enabled}`);
+                    if (!AsyncHelpers.logUnlessCancelled(e, `setting WirelessEnabled to ${enabled}`))
+                        onFailed();
                 }
             });
     }

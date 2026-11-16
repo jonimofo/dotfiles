@@ -39,6 +39,7 @@ const Constants = load('./constants');
 const DateText = load('./dateText');
 const SecondZone = load('./secondZone');
 const DayMarker = load('./dayMarker');
+const EventsHeight = load('./eventsHeight');
 
 const PARIS = GLib.TimeZone.new_identifier('Europe/Paris');
 const VIETNAM = GLib.TimeZone.new_identifier('Asia/Ho_Chi_Minh');
@@ -147,6 +148,20 @@ function testDayMarker() {
     checkEqual('marker: events switched off', DayMarker.dayMarkerCount(false, ['#ff0000']), 0);
 }
 
+function testEventsHeight() {
+    const ratio = Constants.EVENTS_MAX_HEIGHT_RATIO;
+    checkEqual('events cap: ratio', ratio, 0.7);
+    checkEqual('events cap: 1080 px monitor', EventsHeight.eventsMaxHeight(1080, ratio, 1), 756);
+    checkEqual('events cap: rounded down', EventsHeight.eventsMaxHeight(1081, ratio, 1), 756);
+    checkEqual('events cap: 1440 px monitor', EventsHeight.eventsMaxHeight(1440, ratio, 1), 1008);
+    checkEqual('events cap: HiDPI, scale 2', EventsHeight.eventsMaxHeight(2160, ratio, 2), 756);
+    checkEqual('events cap: unknown scale read as 1', EventsHeight.eventsMaxHeight(1080, ratio, 0), 756);
+    checkEqual('events cap: zero height, no cap', EventsHeight.eventsMaxHeight(0, ratio, 1), null);
+    checkEqual('events cap: missing height, no cap', EventsHeight.eventsMaxHeight(undefined, ratio, 1), null);
+    checkEqual('events cap: null height, no cap', EventsHeight.eventsMaxHeight(null, ratio, 1), null);
+    checkEqual('events cap: NaN height, no cap', EventsHeight.eventsMaxHeight(NaN, ratio, 1), null);
+}
+
 function testSchema() {
     const schema = JSON.parse(readText(`${appletDir}/settings-schema.json`));
     checkEqual('schema: show second zone default', schema[Constants.SHOW_SECOND_ZONE_KEY].default, true);
@@ -167,6 +182,9 @@ function testStylesheet() {
     const absolute = css.match(/\d(px|pt)\b/);
     check(`stylesheet: relative units only${absolute ? ` (found ${absolute[0]})` : ''}`, absolute === null);
     const unstyled = Object.values(Constants.STYLE).filter(name => !css.includes(`.${name}`));
+    const eventsRule = css.match(new RegExp(`\\.${Constants.STYLE.events}\\s*\\{([^}]*)\\}`));
+    check('stylesheet: events column has no fixed height',
+        eventsRule !== null && !/(^|[^-])height\s*:/.test(eventsRule[1]));
     check(`stylesheet: every class styled${unstyled.length ? ` (missing ${unstyled.join(', ')})` : ''}`,
         unstyled.length === 0);
 }
@@ -177,6 +195,7 @@ testTimeFormats();
 testHeaderTexts();
 testSecondZone();
 testDayMarker();
+testEventsHeight();
 testSchema();
 testStylesheet();
 

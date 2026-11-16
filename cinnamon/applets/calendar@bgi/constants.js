@@ -38,6 +38,10 @@ const ZONE_ID_PATH_PREFIXES = ['/', ':'];
 // Between the start and the end of an event: "10:00 - 11:00".
 const EVENT_TIME_SEPARATOR = ' - ';
 
+// The events column grows with its events up to this share of the monitor's height, then
+// scrolls.
+const EVENTS_MAX_HEIGHT_RATIO = 0.7;
+
 // One marker under a day that has events, drawn in the text colour of the theme.
 const DAY_MARKER_TEXT = '•';
 const DAY_MARKER_MAX = 1;
@@ -50,6 +54,9 @@ const STYLE = {
     dayMarkerBox: 'calendar-bgi-day-marker-box',
     dayMarker: 'calendar-bgi-day-marker',
     events: 'calendar-bgi-events',
+    eventRow: 'calendar-bgi-event-row',
+    eventContent: 'calendar-bgi-event-content',
+    eventGap: 'calendar-bgi-event-gap',
     eventTitle: 'calendar-bgi-event-title',
     eventTime: 'calendar-bgi-event-time',
 };

@@ -332,6 +332,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         // Whenever the menu is opened, select today
         this.menu.connect('open-state-changed', Lang.bind(this, function (menu, isOpen) {
             if (isOpen) {
+                let monitor = Main.layoutManager.findMonitorForActor(this.actor);
+                this.event_list.set_monitor_height(monitor ? monitor.height : null);
                 this._resetCalendar();
                 this.events_manager.select_date(this._calendar.getSelectedDate(), true);
             }

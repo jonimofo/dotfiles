@@ -420,6 +420,9 @@ Cinnamon 6.4) with three changes:
 - Event titles are bold and larger, event times at the normal size, day numbers larger in
   wider cells, all in the theme's text colour. A day with events has one dot under it,
   whatever the number of events.
+- Events sit in two tight lines, the title slightly indented under the time, a thin space
+  between two events. The events column is as tall as its events, up to 70% of the
+  screen's height (`EVENTS_MAX_HEIGHT_RATIO` in `constants.js`); beyond it the list scrolls.
 
 The sizes live in `applets/calendar@bgi/stylesheet.css` under the applet's own classes, so
 a theme that shrinks the stock calendar classes (Dracula: 80% and 70%) no longer applies.
@@ -483,6 +486,8 @@ rm ~/.local/share/cinnamon/applets/calendar@bgi
 - Event times have one colour whether the event is past, in progress or to come; the
   countdown ("Starting in 5 minutes", "In progress") is kept.
 - The day dot is a `•` character: its exact place under the number depends on the font.
+- The events column does not use the theme's `calendar-events-main-box` class (it carries a
+  fixed height in some themes), so a theme's border or padding on that column is not drawn.
 - A size changed in `stylesheet.css` shows after the next login (see
   [Reload after an edit](#reload-after-an-edit)).
 

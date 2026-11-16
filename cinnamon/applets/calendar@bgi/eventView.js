@@ -20,6 +20,7 @@ const Tweener = imports.ui.tweener;
 const Interfaces = imports.misc.interfaces;
 const Constants = require('./constants');
 const DateText = require('./dateText');
+const EventsHeight = require('./eventsHeight');
 
 const STATUS_UNKNOWN = 0;
 const STATUS_NO_CALENDARS = 1;
@@ -629,7 +630,7 @@ class EventList {
 
         this.actor = new St.BoxLayout(
             {
-                style_class: `calendar-events-main-box ${Constants.STYLE.events}`,
+                style_class: Constants.STYLE.events,
                 vertical: true,
                 visible: false
             }
@@ -740,6 +741,12 @@ class EventList {
         this.emit("launched-calendar");
     }
 
+    // Caps the column at a share of @monitorHeight (physical pixels); no cap without a height.
+    set_monitor_height(monitorHeight) {
+        let max_height = EventsHeight.eventsMaxHeight(monitorHeight, Constants.EVENTS_MAX_HEIGHT_RATIO, global.ui_scale);
+        this.actor.style = max_height === null ? null : `max-height: ${max_height}px;`;
+    }
+
     set_date(gdate) {
         this.selected_date_label.set_text(DateText.formatLongDate(DateText.datePartsOf(gdate, Constants.LONG_DATE_FORMATS)));
         this.selected_date = gdate;
@@ -796,7 +803,9 @@ class EventList {
 
         for (let event_data of events) {
             if (first_row_done) {
-                this.events_box.add_actor(new Separator.Separator().actor);
+                let gap = new Separator.Separator();
+                gap.actor.add_style_class_name(Constants.STYLE.eventGap);
+                this.events_box.add_actor(gap.actor);
             }
 
             let row = new EventRow(
@@ -852,7 +861,7 @@ class EventRow {
 
         this.actor = new St.BoxLayout(
             {
-                style_class: "calendar-event-button",
+                style_class: `calendar-event-button ${Constants.STYLE.eventRow}`,
                 reactive: true
             }
         );
@@ -885,7 +894,7 @@ class EventRow {
 
         let vbox = new St.BoxLayout(
             {
-                style_class: "calendar-event-row-content",
+                style_class: Constants.STYLE.eventContent,
                 x_expand: true,
                 vertical: true
             }

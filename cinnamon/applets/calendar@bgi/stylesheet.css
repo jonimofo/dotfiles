@@ -10,16 +10,34 @@
     text-align: center;
 }
 
-/* Left column: room for the larger event titles. Two classes, to win over the theme's
-   calendar-events-main-box sizes. */
-.calendar-events-main-box.calendar-bgi-events {
+/* Left column. It replaces calendar-events-main-box, to which themes give a fixed height:
+   its height follows the events, capped by the applet (EVENTS_MAX_HEIGHT_RATIO). */
+.calendar-bgi-events {
     min-width: 24em;
-    height: 26em;
+    padding-right: 1em;
 }
 
+/* One event: two tight lines. Two classes, to win over the theme's calendar-event-button
+   padding while keeping its hover background. */
+.calendar-event-button.calendar-bgi-event-row {
+    padding: 0.2em 0.4em;
+    margin: 0;
+}
+
+.calendar-bgi-event-content {
+    spacing: 0.1em;
+}
+
+/* The thin space between two events. Two classes, to win over the theme's separator height. */
+.separator.calendar-bgi-event-gap {
+    height: 0.3em;
+}
+
+/* Slightly indented under the time line. */
 .calendar-bgi-event-title {
     font-size: 125%;
     font-weight: bold;
+    padding-left: 0.6em;
 }
 
 .calendar-bgi-event-time {

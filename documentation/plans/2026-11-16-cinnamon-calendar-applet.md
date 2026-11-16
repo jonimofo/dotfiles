@@ -140,17 +140,21 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `applet.js` | `constructor` | settings uuid, second zone settings, one header time label instead of the day and date labels |
 | `applet.js` | `_onSettingsChanged` | resolves the second zone |
 | `applet.js` | `_updateClockAndDate` | panel text and header times from the pure formatters |
+| `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height |
 | `applet.js` | new `_inVerticalPanel`, `_timeFormat`, `_panelText`, `_secondTime`, `_headerText`, `_updateSecondZone` | |
 | `calendar.js` | `_getCalendarDayAbbreviation` | trailing dot removed, capitalised |
 | `calendar.js` | `_buildHeader` | day heading class |
 | `calendar.js` | `_update` | day class, one marker instead of one dot per event |
 | `eventView.js` | `ARROW_SEPARATOR` | ` - ` |
 | `eventView.js` | `EventsManager.eds_service_found`, `log_dbus_error` | log prefix |
-| `eventView.js` | `EventList.constructor` | own class on the events box |
+| `eventView.js` | `EventList.constructor` | own class instead of `calendar-events-main-box` |
+| `eventView.js` | `EventList.set_events` | own class on the separator between two events |
+| `eventView.js` | new `EventList.set_monitor_height` | `max-height` of the column |
 | `eventView.js` | `EventList.set_date` | long date formatter |
-| `eventView.js` | `EventRow.constructor`, `EventRow.update_variations` | own title and time classes |
+| `eventView.js` | `EventRow.constructor`, `EventRow.update_variations` | own row, content, title and time classes |
 
-New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `stylesheet.css`.
+New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
+`stylesheet.css`.
 
 ## Steps
 
@@ -172,11 +176,73 @@ All done, in the PR that closes #55.
 - The test also checks the stylesheet: no colour, no `opacity`, no `px` or `pt`, and every
   class of `constants.js` styled.
 
+## Events column tightened (second review round)
+
+Owner's words, after loading the applet live: "c'est mieux mais la colonne de gauche avec
+les évnèments peut eetre amélioré, y'a trop d'espace, je veux que tout s'affiche d'un coup
+quand c possible (hauteur max à définir)". Chosen option: "Deux lignes serrées", with the
+note: "indented la seconde ligne legerement".
+
+Validated mockup:
+
+```
++----------------------------------+
+|  Lundi 16 novembre 2026          |
+| | 10:00 - 11:00                  |
+| | Team meeting | Room A          |
+| | 11:00 - 12:00                  |
+| | Review | Project B             |
+| | 11:00 - 12:00                  |
+| | Review | Project C             |
+| | 12:00 - 13:30                  |
+| | Lunch                          |
+| | 14:00 - 15:00                  |
+| | Call | Client                  |
+| | 15:00 - 16:00                  |
+| | Workshop                       |
++----------------------------------+
+
+Un fin trait d'espace entre deux événements,
+plus de grand vide.
+Hauteur : selon le contenu, 70 % de l'écran au plus.
+```
+
+The three lines under the frame are design notes, not UI text. The title line is slightly
+indented under the time line.
+
+Where the space came from, and what replaces it:
+
+| Space | Before | Now |
+|---|---|---|
+| Between two events | the stock `Separator` (class `separator`): Dracula gives it `height: 1em` | `.separator.calendar-bgi-event-gap`, `height: 0.3em`; the theme still draws its line colour, Dracula's is transparent |
+| Under the last event | `height: 26em` on the column (first round); themes such as Adapta set `height: 300px` on `calendar-events-main-box` | no height: the column takes its content's height, `max-height` set by the applet |
+| Around an event | `calendar-event-button`: `padding: 5px 10px` in Adapta, nothing in Dracula | `.calendar-event-button.calendar-bgi-event-row`, `padding: 0.2em 0.4em`, `margin: 0`; the theme's hover stays |
+| Inside an event | `calendar-event-row-content` (unstyled by Dracula) | `calendar-bgi-event-content`, `spacing: 0.1em` |
+| Title indent | none | `padding-left: 0.6em` on `calendar-bgi-event-title` |
+
+Height: each time the menu opens, the applet reads the height of the monitor holding the
+panel button (`Main.layoutManager.findMonitorForActor`, as the stock popup menu does) and
+sets `max-height` on the column to `EVENTS_MAX_HEIGHT_RATIO` (0.7) of it, in style pixels
+(divided by `global.ui_scale`), rounded down (`eventsHeight.js`, tested). Beyond it the
+stock scroll view scrolls. An unknown or zero monitor height sets no cap; the stock popup
+menu's own cap (the monitor's height) still applies.
+
+Column alignment: both columns sit in the stock horizontal `calendar-main-box`, which gives
+them the height of the taller one. With few events the events column is as tall as the
+calendar, events at the top. With many, the calendar stays at the top of its column and
+the space is under it.
+
+The column no longer carries the stock `calendar-events-main-box` class, so a theme's
+padding or right border on it no longer applies: the applet gives it `padding-right: 1em`.
+
 ## To confirm on the live panel
 
 - Sizes and the place of the dot under the number, under Dracula.
 - Today and the selected day still stand out with the new day class.
 - The events column width with long titles.
+- Second round: that `max-height` on the column makes it scroll past 70 % of the screen (a
+  day with many events), the thin gap and the title indent under Dracula, and the empty
+  day ("No Events") layout.
 
 ## Out of scope
 

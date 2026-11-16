@@ -111,10 +111,22 @@ class WifiState {
         return WifiNetworks.buildNetworkList(accessPoints, this.activeSsid, Constants.WIFI_LIST_MAX);
     }
 
+    // True once the NetworkManager client is ready.
+    get available() {
+        return this._client !== null;
+    }
+
     toggle() {
         if (!this._client)
             return;
         this._setWirelessEnabled(!this._client.wireless_enabled);
+    }
+
+    // The software switch, as Airplane mode sets it.
+    setEnabled(enabled) {
+        if (!this._client)
+            return;
+        this._setWirelessEnabled(enabled);
     }
 
     requestScan() {

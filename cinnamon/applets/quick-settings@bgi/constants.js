@@ -76,6 +76,9 @@ const TILES = [
     { id: 'do-not-disturb', label: 'Do Not Disturb', name: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
     { id: 'keep-awake', label: 'Keep awake', name: 'Keep awake', icon: 'my-caffeine-on-symbolic', hasMenu: false },
     { id: 'mic-mute', label: 'Mic mute', name: 'Mic mute', icon: 'microphone-sensitivity-muted-symbolic', hasMenu: false },
+    { id: 'keyboard-light', label: 'Keyboard', name: 'Keyboard light', icon: 'keyboard-brightness-symbolic', hasMenu: false },
+    { id: 'airplane-mode', label: 'Airplane mode', name: 'Airplane mode', icon: 'airplane-mode-symbolic', hasMenu: false },
+    { id: 'touchpad', label: 'Touchpad', name: 'Touchpad', icon: 'input-touchpad-symbolic', hasMenu: false },
 ];
 
 const TILES_PER_ROW = 2;
@@ -220,6 +223,22 @@ const WARMTH_MIN_KELVIN = 1700;
 const WARMTH_MAX_KELVIN = 4700;
 const WARMTH_STEP_KELVIN = 100;
 const WARMTH_UNIT_SUFFIX = ' K';
+
+// Keyboard light, through UPower on the system bus. The tile shows "Keyboard" and the level's
+// word: Off at 0, On for a light with one level, High at the maximum, Low up to half of it,
+// Medium above.
+const UPOWER_NAME = 'org.freedesktop.UPower';
+const KBD_BACKLIGHT_PATH = '/org/freedesktop/UPower/KbdBacklight';
+const KBD_BACKLIGHT_INTERFACE = 'org.freedesktop.UPower.KbdBacklight';
+const KBD_BACKLIGHT_SIGNAL = 'BrightnessChanged';
+const KBD_LEVEL_WORDS = { off: 'Off', on: 'On', low: 'Low', medium: 'Medium', high: 'High' };
+
+// Touchpad: the key of Cinnamon Settings > Mouse and Touchpad > Touchpad. Its range is
+// enabled, disabled and disabled-on-external-mouse: only disabled reads as off.
+const TOUCHPAD_SCHEMA = 'org.cinnamon.desktop.peripherals.touchpad';
+const TOUCHPAD_KEY = 'send-events';
+const TOUCHPAD_ON = 'enabled';
+const TOUCHPAD_OFF = 'disabled';
 
 // Do Not Disturb: the key Cinnamon's message tray reads (Settings > Notifications >
 // Enable notifications). The tile is on when notifications are off.

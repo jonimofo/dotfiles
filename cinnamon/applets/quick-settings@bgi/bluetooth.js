@@ -38,9 +38,13 @@ class Bluetooth {
     }
 
     toggle() {
+        this.setPowered(!this.summary.powered);
+    }
+
+    // The adapter power, as Airplane mode sets it.
+    setPowered(powered) {
         if (!this.summary.available)
             return;
-        const powered = !this.summary.powered;
         const value = new GLib.Variant('(ssv)', [Constants.BLUEZ_ADAPTER_INTERFACE, 'Powered', GLib.Variant.new_boolean(powered)]);
         this._call(this.summary.adapterPath, Constants.DBUS_PROPERTIES_INTERFACE, 'Set', value,
             `setting the Bluetooth adapter power to ${powered}`);

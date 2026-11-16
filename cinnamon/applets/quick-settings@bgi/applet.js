@@ -11,7 +11,10 @@ const PanelIcons = require('./panelIcons');
 const MenuContent = require('./menuContent');
 const WifiState = require('./wifiState');
 const NmClient = require('./nmClient');
-const DarkStyleState = require('./darkStyleState');
+const StringSetting = require('./stringSetting');
+const KbdBacklight = require('./kbdBacklight');
+const KbdBacklightModel = require('./kbdBacklightModel');
+const AirplaneMode = require('./airplaneMode');
 const Brightness = require('./brightness');
 const DdcBrightness = require('./ddcBrightness');
 const ScreenBrightness = require('./screenBrightness');
@@ -65,20 +68,17 @@ class QuickSettingsApplet extends Applet.Applet {
         this._requestNmClient = (cancellable, onReady) => this._nmClient.request(cancellable, onReady);
         this._setUpWifi();
 
-        this._darkStyleTile = this._content.tiles['dark-style'];
-        this._darkStyle = new DarkStyleState.DarkStyleState(() => this._syncDarkStyle());
-        this._darkStyleTile.setOnToggle(() => this._darkStyle.toggle());
-        this._syncDarkStyle();
-
         this._setUpBrightness();
         this._setUpVolume();
         this._setUpBluetooth();
+        this._setUpAirplaneMode();
         this._setUpVpn();
         this._setUpNordvpn();
         this._setUpPowerProfile();
         this._setUpSettingTiles();
         this._setUpNightLight();
         this._setUpKeepAwake();
+        this._setUpKeyboardLight();
         this._setUpMicMute();
         this._setUpHeader();
         this._setUpLayoutSettings(metadata.uuid, instanceId);
@@ -112,6 +112,8 @@ class QuickSettingsApplet extends Applet.Applet {
         this._wifi.destroy();
         this._nmClient.destroy();
         this._darkStyle.destroy();
+        this._touchpad.destroy();
+        this._keyboardLight.destroy();
         this._content.destroy();
         this.menu.destroy();
     }
@@ -157,6 +159,7 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setLabel(ssid || tile.defaultLabel);
         this._panelIcons.setWifiEnabled(enabled);
         this._content.lists.refresh('wifi');
+        this._syncAirplaneMode();
     }
 
     _setUpBluetooth() {
@@ -180,6 +183,7 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setLabel(BluetoothModel.tileLabel(summary, tile.defaultLabel));
         this._panelIcons.setBluetoothIconName(BluetoothModel.panelIconName(summary));
         this._content.lists.refresh('bluetooth');
+        this._syncAirplaneMode();
     }
 
     _setUpVpn() {
@@ -266,13 +270,20 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     _setUpSettingTiles() {
-        this._doNotDisturb = this._wireSettingTile('do-not-disturb',
-            Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, true);
+        this._doNotDisturb = this._wireSettingTile('do-not-disturb', onChange => new BooleanSetting.BooleanSetting(
+            Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, true, onChange));
+        this._darkStyle = this._wireSettingTile('dark-style', onChange => new StringSetting.StringSetting(
+            Constants.DARK_STYLE_SCHEMA, Constants.DARK_STYLE_KEY,
+            { on: Constants.DARK_STYLE_ON, off: Constants.DARK_STYLE_OFF, onUnlessOff: false }, onChange));
+        this._touchpad = this._wireSettingTile('touchpad', onChange => new StringSetting.StringSetting(
+            Constants.TOUCHPAD_SCHEMA, Constants.TOUCHPAD_KEY,
+            { on: Constants.TOUCHPAD_ON, off: Constants.TOUCHPAD_OFF, onUnlessOff: true }, onChange));
     }
 
-    _wireSettingTile(tileId, schema, key, inverted) {
+    // @create(onChange): a BooleanSetting or a StringSetting calling onChange on each change.
+    _wireSettingTile(tileId, create) {
         const tile = this._content.tiles[tileId];
-        const setting = new BooleanSetting.BooleanSetting(schema, key, inverted, () => tile.setChecked(setting.enabled));
+        const setting = create(() => tile.setChecked(setting.enabled));
         tile.setOnToggle(() => setting.toggle());
         tile.setChecked(setting.enabled);
         return setting;
@@ -309,6 +320,43 @@ class QuickSettingsApplet extends Applet.Applet {
         });
         tile.setOnToggle(() => this._keepAwake.toggle());
         tile.setAvailable(false);
+    }
+
+    // A click goes one level up, back to off after the brightest.
+    _setUpKeyboardLight() {
+        const tile = this._content.tiles['keyboard-light'];
+        this._keyboardLight = new KbdBacklight.KbdBacklight(() => {
+            const light = this._keyboardLight;
+            tile.setAvailable(light.available);
+            tile.setChecked(light.level > 0);
+            tile.setLabel(KbdBacklightModel.tileLabel(tile.defaultLabel, light.level, light.max));
+        });
+        tile.setOnToggle(() => this._keyboardLight.cycle());
+        tile.setAvailable(false);
+    }
+
+    // Wi-Fi and Bluetooth through their own tiles' code; checked while airplane mode is on.
+    _setUpAirplaneMode() {
+        const tile = this._content.tiles['airplane-mode'];
+        this._airplaneMode = new AirplaneMode.AirplaneMode([
+            { isOn: () => this._wifi.enabled, setOn: on => this._wifi.setEnabled(on) },
+            { isOn: () => this._bluetooth.summary.powered, setOn: on => this._bluetooth.setPowered(on) },
+        ]);
+        tile.setOnToggle(() => {
+            this._airplaneMode.toggle();
+            this._syncAirplaneMode();
+        });
+        this._syncAirplaneMode();
+    }
+
+    // Runs on every Wi-Fi and Bluetooth change, also before airplane mode is set up.
+    _syncAirplaneMode() {
+        if (!this._airplaneMode)
+            return;
+        const tile = this._content.tiles['airplane-mode'];
+        this._airplaneMode.sync();
+        tile.setAvailable(this._wifi.available || this._bluetooth.summary.available);
+        tile.setChecked(this._airplaneMode.active);
     }
 
     // Same stream as the Microphone row: dimmed while there is no source.
@@ -457,10 +505,6 @@ class QuickSettingsApplet extends Applet.Applet {
                     openSettings: () => this._openSettings(Constants.SETTINGS_COMMANDS.sound),
                 }));
         }
-    }
-
-    _syncDarkStyle() {
-        this._darkStyleTile.setChecked(this._darkStyle.enabled);
     }
 }
 

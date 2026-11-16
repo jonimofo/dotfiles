@@ -88,7 +88,10 @@
                     "Dark style": "dark-style",
                     "Do Not Disturb": "do-not-disturb",
                     "Keep awake": "keep-awake",
-                    "Mic mute": "mic-mute"
+                    "Mic mute": "mic-mute",
+                    "Keyboard light": "keyboard-light",
+                    "Airplane mode": "airplane-mode",
+                    "Touchpad": "touchpad"
                 }
             }
         ],
@@ -132,6 +135,18 @@
             {
                 "show": true,
                 "id": "mic-mute"
+            },
+            {
+                "show": true,
+                "id": "keyboard-light"
+            },
+            {
+                "show": true,
+                "id": "airplane-mode"
+            },
+            {
+                "show": true,
+                "id": "touchpad"
             }
         ]
     },

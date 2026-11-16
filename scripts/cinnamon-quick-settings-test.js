@@ -81,11 +81,12 @@ class FakeSlider {
 Signals.addSignalMethods(FakeSlider.prototype);
 
 async function testDarkStyle() {
-    const Dark = load('./darkStyleState');
+    const StringSetting = load('./stringSetting');
     const settings = new Gio.Settings({ schema_id: 'org.x.apps.portal' });
     settings.set_string('color-scheme', 'prefer-dark');
     let changes = 0;
-    const dark = new Dark.DarkStyleState(() => changes++);
+    const dark = new StringSetting.StringSetting('org.x.apps.portal', 'color-scheme',
+        { on: 'prefer-dark', off: 'default', onUnlessOff: false }, () => changes++);
     check('dark: prefer-dark reads as on', dark.enabled === true);
     dark.toggle();
     check('dark: toggle off writes default', settings.get_string('color-scheme') === 'default' && !dark.enabled);
@@ -655,6 +656,197 @@ async function testNightLight() {
     night.destroy();
 }
 
+async function testTouchpad() {
+    const StringSetting = load('./stringSetting');
+    const Constants = load('./constants');
+    const settings = new Gio.Settings({ schema_id: Constants.TOUCHPAD_SCHEMA });
+    const [, range] = settings.get_range(Constants.TOUCHPAD_KEY).deepUnpack();
+    const allowed = range.deepUnpack();
+    check(`touchpad: on and off values are in the key's range (${allowed})`,
+        allowed.includes(Constants.TOUCHPAD_ON) && allowed.includes(Constants.TOUCHPAD_OFF));
+    settings.set_string('send-events', 'enabled');
+    let changes = 0;
+    const touchpad = new StringSetting.StringSetting(Constants.TOUCHPAD_SCHEMA, Constants.TOUCHPAD_KEY,
+        { on: Constants.TOUCHPAD_ON, off: Constants.TOUCHPAD_OFF, onUnlessOff: true }, () => changes++);
+    check('touchpad: enabled reads as on', touchpad.enabled);
+    touchpad.toggle();
+    check('touchpad: a click writes disabled', settings.get_string('send-events') === 'disabled' && !touchpad.enabled);
+    touchpad.toggle();
+    check('touchpad: a second click writes enabled', settings.get_string('send-events') === 'enabled');
+    settings.set_string('send-events', 'disabled-on-external-mouse');
+    check('touchpad: disabled-on-external-mouse reads as on', touchpad.enabled);
+    touchpad.toggle();
+    check('touchpad: from disabled-on-external-mouse a click writes disabled', settings.get_string('send-events') === 'disabled');
+    await wait(0);
+    check(`touchpad: every change notifies (${changes})`, changes >= 4);
+    touchpad.destroy();
+}
+
+// UPower's KbdBacklight on a fake system bus: calls are answered at once, or fail when the
+// object is absent.
+class FakeKbdBus {
+    constructor({ max = 2, level = 0, absent = false } = {}) {
+        this.max = max;
+        this.level = level;
+        this.absent = absent;
+        this.calls = [];
+        this.subscriptions = new Map();
+        this.nextSubscription = 1;
+    }
+
+    signal_subscribe(name, iface, signal, path, arg0, flags, callback) {
+        const id = this.nextSubscription++;
+        this.subscriptions.set(id, { signal, callback });
+        return id;
+    }
+
+    signal_unsubscribe(id) {
+        this.subscriptions.delete(id);
+    }
+
+    call(name, path, iface, method, parameters, replyType, flags, timeout, cancellable, callback) {
+        const call = { method, args: parameters ? parameters.deepUnpack() : [] };
+        this.calls.push(`${method}${call.args.length ? ` ${call.args}` : ''}`);
+        callback(this, call);
+    }
+
+    call_finish(call) {
+        if (this.absent)
+            throw new GLib.Error(Gio.DBusError, Gio.DBusError.UNKNOWN_OBJECT, 'No such object');
+        if (call.method === 'GetMaxBrightness')
+            return new GLib.Variant('(i)', [this.max]);
+        if (call.method === 'GetBrightness')
+            return new GLib.Variant('(i)', [this.level]);
+        this.level = call.args[0];
+        return null;
+    }
+
+    emitChanged(level) {
+        this.level = level;
+        for (const { signal, callback } of this.subscriptions.values()) {
+            if (signal === 'BrightnessChanged')
+                callback(this, ':1.1', '/org/freedesktop/UPower/KbdBacklight', 'org.freedesktop.UPower.KbdBacklight',
+                    signal, new GLib.Variant('(i)', [level]));
+        }
+    }
+}
+
+function testKeyboardLight() {
+    const Model = load('./kbdBacklightModel');
+    check('keyboard: levels cycle 0, 1, 2, back to 0',
+        Model.nextLevel(0, 2) === 1 && Model.nextLevel(1, 2) === 2 && Model.nextLevel(2, 2) === 0);
+    check('keyboard: maximum 2 reads Off, Low, High',
+        `${[0, 1, 2].map(level => Model.levelWord(level, 2))}` === 'Off,Low,High');
+    check('keyboard: maximum 1 reads Off, On', `${[0, 1].map(level => Model.levelWord(level, 1))}` === 'Off,On');
+    check(`keyboard: maximum 4 reads ${[0, 1, 2, 3, 4].map(level => Model.levelWord(level, 4))}`,
+        `${[0, 1, 2, 3, 4].map(level => Model.levelWord(level, 4))}` === 'Off,Low,Low,Medium,High');
+    check('keyboard: tile label', Model.tileLabel('Keyboard', 1, 2) === 'Keyboard Low');
+
+    const KbdBacklight = load('./kbdBacklight');
+    errors = [];
+    const bus = new FakeKbdBus({ max: 2, level: 1 });
+    let changes = 0;
+    const light = new KbdBacklight.KbdBacklight(() => changes++, bus);
+    check(`keyboard: reads the maximum and the level (${bus.calls})`, light.available && light.max === 2 && light.level === 1);
+    light.cycle();
+    light.cycle();
+    check(`keyboard: clicks set 2 then 0 through UPower (${bus.calls.slice(2)})`,
+        `${bus.calls.slice(2)}` === 'SetBrightness 2,SetBrightness 0' && light.level === 0);
+    const seen = changes;
+    bus.emitChanged(2);
+    check('keyboard: follows BrightnessChanged (the keyboard hotkey)', light.level === 2 && changes === seen + 1);
+    light.destroy();
+    check('keyboard: destroy unsubscribes', bus.subscriptions.size === 0);
+
+    const absentBus = new FakeKbdBus({ absent: true });
+    const absent = new KbdBacklight.KbdBacklight(() => {}, absentBus);
+    absent.cycle();
+    check(`keyboard: no KbdBacklight object leaves the tile unavailable, no SetBrightness (${absentBus.calls})`,
+        !absent.available && `${absentBus.calls}` === 'GetMaxBrightness');
+    absent.destroy();
+    const noLevels = new KbdBacklight.KbdBacklight(() => {}, new FakeKbdBus({ max: 0 }));
+    check('keyboard: a maximum of 0 leaves the tile unavailable', !noLevels.available);
+    noLevels.destroy();
+    errors = [];
+}
+
+// Radios whose change arrives later, as libnm and BlueZ report it.
+function fakeRadio(on) {
+    const radio = { on, writes: [] };
+    radio.isOn = () => radio.on;
+    radio.setOn = value => radio.writes.push(value);
+    radio.arrive = () => {
+        if (radio.writes.length)
+            radio.on = radio.writes[radio.writes.length - 1];
+    };
+    return radio;
+}
+
+function testAirplaneMode() {
+    const AirplaneMode = load('./airplaneMode');
+    let wifi = fakeRadio(true);
+    let bluetooth = fakeRadio(true);
+    let airplane = new AirplaneMode.AirplaneMode([wifi, bluetooth]);
+    airplane.toggle();
+    airplane.sync();
+    check('airplane: a click turns both radios off, checked while their change is on its way',
+        airplane.active && `${wifi.writes}` === 'false' && `${bluetooth.writes}` === 'false');
+    wifi.arrive();
+    airplane.sync();
+    bluetooth.arrive();
+    airplane.sync();
+    check('airplane: stays checked once both are off', airplane.active);
+    airplane.toggle();
+    check('airplane: a second click turns both back on', !airplane.active && `${wifi.writes}` === 'false,true' && `${bluetooth.writes}` === 'false,true');
+
+    wifi = fakeRadio(false);
+    bluetooth = fakeRadio(true);
+    airplane = new AirplaneMode.AirplaneMode([wifi, bluetooth]);
+    airplane.toggle();
+    bluetooth.arrive();
+    airplane.sync();
+    airplane.toggle();
+    check('airplane: Wi-Fi already off stays off after restore, Bluetooth comes back',
+        wifi.writes.length === 0 && `${bluetooth.writes}` === 'false,true');
+
+    wifi = fakeRadio(true);
+    bluetooth = fakeRadio(true);
+    airplane = new AirplaneMode.AirplaneMode([wifi, bluetooth]);
+    airplane.toggle();
+    wifi.arrive();
+    bluetooth.arrive();
+    airplane.sync();
+    bluetooth.on = true;
+    airplane.sync();
+    check('airplane: Bluetooth turned on by hand unchecks the tile', !airplane.active);
+    airplane.toggle();
+    check('airplane: the next click starts airplane mode again, it restores nothing old',
+        airplane.active && `${wifi.writes}` === 'false' && `${bluetooth.writes}` === 'false,false');
+
+    // The real Wi-Fi and Bluetooth code paths that airplane mode calls.
+    const Wifi = load('./wifiState');
+    const device = new FakeNmDevice();
+    const client = new FakeNmClient(device);
+    const wifiState = new Wifi.WifiState(() => {}, (cancellable, onReady) => onReady(client, null));
+    wifiState.setEnabled(false);
+    wifiState.setEnabled(true);
+    check(`airplane: Wi-Fi goes through WirelessEnabled (${client.writes})`, `${client.writes}` === 'WirelessEnabled=false,WirelessEnabled=true');
+    wifiState.destroy();
+    check('airplane: no NetworkManager disconnect() call', device.disconnectCalls === 0 && client.disconnectCalls === 0);
+    const Bluetooth = load('./bluetooth');
+    const calls = [];
+    const system = {
+        bus: { call: (name, path, iface, method, parameters) => calls.push(`${method} ${parameters.deepUnpack()[2].unpack()}`) },
+        newManager: () => {},
+    };
+    const bluetoothState = new Bluetooth.Bluetooth(() => {}, system);
+    bluetoothState.setPowered(false);
+    check('airplane: no adapter, no Bluetooth call', calls.length === 0);
+    bluetoothState.summary = { available: true, powered: true, adapterPath: '/org/bluez/hci0', devices: [], connectedNames: [] };
+    bluetoothState.setPowered(false);
+    check(`airplane: Bluetooth goes through Adapter1.Powered (${calls})`, `${calls}` === 'Set false');
+}
+
 function testBatteryModel() {
     const Model = load('./batteryModel');
     const kinds = { battery: 2, unknownState: 0 };
@@ -710,7 +902,7 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute,Keyboard light,Airplane mode,Touchpad'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
         && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume,Battery');
@@ -1252,6 +1444,9 @@ async function main() {
     testPowerProfileModel();
     await testBooleanSettings();
     await testNightLight();
+    await testTouchpad();
+    testKeyboardLight();
+    testAirplaneMode();
     testBatteryModel();
     testMicMute();
     testSchemaMatchesDeclarations();

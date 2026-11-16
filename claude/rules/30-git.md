@@ -7,8 +7,10 @@
 - Never sign commits. Never add `Co-Authored-By`, `Signed-off-by`, "Generated with" or any
   mention of Claude or AI, in commits, PRs, issues or code.
 - Stage only the files of the change. Never `git add -A` on a dirty tree.
-- `--no-verify` only when the user says "no verif" / "no verify", or for intermediate pushes of a
-  delegated agent on its own branch (`50-delegation.md`).
+- `--no-verify` only when the user says "no verif" / "no verify". Intermediate pushes of a
+  delegated agent on its own branch (`50-delegation.md`) skip only the checks: `SKIP_CHECKS=1 git
+  push` where the repo's hook supports it (dotfiles does), else a normal push. Never
+  `--no-verify` for that: it also skips the branch guard.
 - The bare word "commit" from the user means: run `/commit` on the current changes.
 
 ## Branch model (default when CONTRIBUTING.md says nothing)

@@ -19,8 +19,9 @@ Planning and design are never delegated, even for research-heavy plans.
 
 ## Brief format (every agent gets this)
 
-0. Visible change: the validated ASCII mockup and the user's answers, verbatim. No mockup in the
-   brief, no brief.
+0. Visible change: the validated ASCII mockup, or under "live first" the validated live state
+   (commit or screenshot), and the user's answers, verbatim. A brief for a visible change
+   without one is not sent.
 1. Goal in one sentence, and what is explicitly out of scope.
 2. Files and docs to read first (paths), decisions already made, patterns to reuse.
 3. Steps, in order.
@@ -37,5 +38,5 @@ Planning and design are never delegated, even for research-heavy plans.
 
 A hand-back that fails a check goes back to the same agent with the exact gap, not to a new one.
 
-One audit per PR, at the end. Intermediate pushes use `--no-verify`; the full suite runs on the
-final push.
+One audit per PR, at the end. Intermediate pushes skip only the checks (`SKIP_CHECKS=1`, see
+`30-git.md`); the full suite runs on the final push.

@@ -343,6 +343,7 @@ scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
+scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 ```
 

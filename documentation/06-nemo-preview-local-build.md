@@ -37,6 +37,7 @@ All constants are in `src/js/util/constants.js`.
 No upstream test suite. Two regression tests for the PDF loader, in `nemo-preview/tests/`, run headless with `cjs`. Exit code 0 means pass.
 
 ```bash
+cd ~/Repos/dotfiles/documentation/nemo-preview/tests
 L=/usr/lib/x86_64-linux-gnu/nemo-preview
 DOC=file:///path/to/any.odt   # e.g. soffice --headless --convert-to odt sample.txt
 GI_TYPELIB_PATH=$L/girepository-1.0 LD_LIBRARY_PATH=$L cjs pdf-loader-double-free.js "$DOC"; echo $?
@@ -47,6 +48,12 @@ Against the unfixed library they exit 134 (double free) and 133 (critical) respe
 
 Manual checks after any change: PDF wheel scrolling without freeze, an office file, an image in the floating preview, Space toggles closed, ↑/↓ in Nemo switches the open preview, large photo or video opens big and centered.
 
+Two fixes have no automated test (they need a display and GStreamer): video player signals disconnected on close, toolbar fade stopped on close. Check: preview a video for 2 s and close it, preview an image and close it, wait 5 s, then this must print 0:
+
+```bash
+journalctl --user --since "-2min" --no-pager | grep -cE "nemo-preview-st.*(has been already disposed|GTK_IS_ADJUSTMENT)"
+```
+
 ## 3. Rebuild (Nemo update in Debian, or a change to the patches)
 
 Work in a durable directory, for example `~/Repos/Sandbox/nemo-preview-build/`. Snapshot first so the build packages can be removed exactly: `dpkg-query -W -f='${Package}\n' | sort > pkgs-before.txt`.
@@ -56,12 +63,14 @@ Work in a durable directory, for example `~/Repos/Sandbox/nemo-preview-build/`. 
 ```bash
 sudo apt-get build-dep -y nemo
 apt-get source nemo && cd nemo-<version>
-cp <dotfiles>/documentation/nemo-preview/nemo-6.4.5-preview-follow-selection.patch debian/patches/preview-follow-selection.patch
+mkdir -p debian/patches   # Debian's nemo source ships no patches
+cp ~/Repos/dotfiles/documentation/nemo-preview/nemo-6.4.5-preview-follow-selection.patch debian/patches/preview-follow-selection.patch
 echo preview-follow-selection.patch >> debian/patches/series
 # add a changelog entry <debian version>+local1, then:
 dpkg-buildpackage -b -us -uc
 sudo apt-mark unhold nemo nemo-data libnemo-extension1 gir1.2-nemo-3.0
-sudo apt-get install ./nemo_*+local1_amd64.deb ./nemo-data_*+local1_all.deb ./libnemo-extension1_*+local1_amd64.deb ./gir1.2-nemo-3.0_*+local1_amd64.deb
+# dpkg-buildpackage writes the .deb files to the parent directory
+sudo apt-get install ../nemo_*+local1_amd64.deb ../nemo-data_*+local1_all.deb ../libnemo-extension1_*+local1_amd64.deb ../gir1.2-nemo-3.0_*+local1_amd64.deb
 sudo apt-mark hold nemo nemo-data libnemo-extension1 gir1.2-nemo-3.0
 nemo -q   # closes all Nemo windows; the desktop (nemo-desktop) keeps running
 ```
@@ -81,7 +90,7 @@ git clone --depth 1 --branch 4.6.8 https://github.com/linuxmint/xreader.git && (
 sudo apt-get install ./libxreaderdocument3_4.6.8_amd64.deb ./libxreaderview3_4.6.8_amd64.deb ./gir1.2-xreader_4.6.8_amd64.deb \
   ./libxreaderdocument-dev_4.6.8_amd64.deb ./libxreaderview-dev_4.6.8_amd64.deb
 git clone --depth 1 --branch 6.4.0 https://github.com/linuxmint/nemo-extensions.git
-cd nemo-extensions && git apply <dotfiles>/documentation/nemo-preview/nemo-preview-6.4.0-local7.patch
+cd nemo-extensions && git apply ~/Repos/dotfiles/documentation/nemo-preview/nemo-preview-6.4.0-local7.patch
 cd nemo-preview && dpkg-buildpackage -b -us -uc
 sudo apt-get install ../nemo-preview_6.4.0+local7_amd64.deb
 ```

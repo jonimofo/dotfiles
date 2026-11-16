@@ -157,7 +157,7 @@
     },
     "custom-format": {
         "type": "entry",
-        "default": "%A, %B %e, %H:%M",
+        "default": "%a %e %b",
         "description": "Date format",
         "dependency": "use-custom-format",
         "tooltip": "Set your custom format here."

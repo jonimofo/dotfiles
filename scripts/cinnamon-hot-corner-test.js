@@ -8,6 +8,9 @@ const ByteArray = imports.byteArray;
 const [extensionDir] = ARGV;
 let failures = 0;
 
+const loggedErrors = [];
+globalThis.global = { logError: message => loggedErrors.push(message) };
+
 function check(label, condition) {
     print(`${condition ? 'PASS' : 'FAIL'} ${label}`);
     if (!condition)
@@ -56,17 +59,17 @@ function readText(path) {
 }
 
 // Cinnamon's require(): every top-level declaration of the file is exported.
-function load(name) {
+function load(name, moduleImports) {
     const source = readText(`${extensionDir}/${name}.js`);
     const names = [...source.matchAll(/^(?:function|const|let|var|class) ([A-Za-z0-9_]+)/gm)].map(m => m[1]);
-    return new Function('imports', `${source}\nreturn { ${names.join(', ')} };`)(extensionImports);
+    return new Function('imports', `${source}\nreturn { ${names.join(', ')} };`)(moduleImports);
 }
 
 function visibleInFullscreen(manager) {
     return chrome.params.get(manager.corners[0].actor).visibleInFullscreen;
 }
 
-const HotCornerFullscreen = load('hotCornerFullscreen');
+const HotCornerFullscreen = load('hotCornerFullscreen', extensionImports);
 const manager = new FakeHotCornerManager();
 manager.update();
 main.layoutManager.hotCornerManager = manager;
@@ -75,8 +78,10 @@ HotCornerFullscreen.enable();
 check('enable marks the existing corner visible in fullscreen', visibleInFullscreen(manager) === true);
 check('enable recomputes the chrome visibility', chrome.visibilityUpdates === 1);
 
+const visibilityUpdatesBeforeRebuild = chrome.visibilityUpdates;
 const result = manager.update();
 check('a rebuilt corner is visible in fullscreen too', visibleInFullscreen(manager) === true);
+check('a rebuild recomputes the chrome visibility', chrome.visibilityUpdates === visibilityUpdatesBeforeRebuild + 1);
 check('the patched update returns the original result', result === 'original result');
 check('the patched update runs the original once', manager.updateCalls === 2);
 
@@ -108,6 +113,64 @@ try {
     noManagerError = e;
 }
 check('enable and disable work before the manager exists', noManagerError === null);
+
+// Cinnamon internals renamed or broken: the module logs and keeps the stock behaviour.
+const brokenChrome = {
+    modifyActorParams() {
+        throw new Error('modifyActorParams is gone');
+    },
+    _updateVisibility() {},
+};
+class BrokenHotCornerManager extends FakeHotCornerManager {}
+BrokenHotCornerManager.prototype.update = function () {
+    this.corners = { 0: { actor: {} } };
+    return 'broken result';
+};
+const brokenOriginalUpdate = BrokenHotCornerManager.prototype.update;
+const brokenMain = { layoutManager: { _chrome: brokenChrome, hotCornerManager: null } };
+const BrokenModule = load('hotCornerFullscreen',
+    { ui: { main: brokenMain, hotCorner: { HotCornerManager: BrokenHotCornerManager } } });
+const brokenManager = new BrokenHotCornerManager();
+brokenManager.update();
+brokenMain.layoutManager.hotCornerManager = brokenManager;
+
+let enableError = null;
+loggedErrors.length = 0;
+try {
+    BrokenModule.enable();
+} catch (e) {
+    enableError = e;
+}
+check('a failing enable does not throw (the other modules keep running)', enableError === null);
+check('a failing enable logs what failed', loggedErrors.length === 1 && loggedErrors[0].includes('enable (stock behaviour kept)') && loggedErrors[0].includes('modifyActorParams is gone'));
+check('a failing enable leaves the original update', BrokenHotCornerManager.prototype.update === brokenOriginalUpdate);
+
+// Enable works, then a later rebuild hits the broken internals.
+brokenMain.layoutManager.hotCornerManager = null;
+BrokenModule.enable();
+let rebuildError = null;
+let rebuildResult = null;
+loggedErrors.length = 0;
+try {
+    rebuildResult = brokenManager.update();
+} catch (e) {
+    rebuildError = e;
+}
+check('a failing rebuild does not throw into Cinnamon', rebuildError === null);
+check('a failing rebuild still returns the original result', rebuildResult === 'broken result');
+check('a failing rebuild logs what failed', loggedErrors.length === 1 && loggedErrors[0].includes('flagging the rebuilt corners'));
+
+brokenMain.layoutManager.hotCornerManager = brokenManager;
+let disableError = null;
+loggedErrors.length = 0;
+try {
+    BrokenModule.disable();
+} catch (e) {
+    disableError = e;
+}
+check('a failing disable does not throw', disableError === null);
+check('a failing disable logs what failed', loggedErrors.length === 1 && loggedErrors[0].includes('disable failed'));
+check('a failing disable still restores the original update', BrokenHotCornerManager.prototype.update === brokenOriginalUpdate);
 
 if (failures > 0) {
     print(`${failures} failure(s)`);

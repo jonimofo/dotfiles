@@ -42,6 +42,27 @@
         "callback" : "on_custom_format_button_pressed",
         "tooltip" : "Click this button to know more about the syntax for date formats."
     },
+    "section-second-zone": {
+        "type": "section",
+        "description": "Second time zone"
+    },
+    "show-second-zone" : {
+        "type" : "switch",
+        "default" : true,
+        "description": "Show a second time zone"
+    },
+    "second-zone-id" : {
+        "type" : "entry",
+        "default" : "Asia/Ho_Chi_Minh",
+        "description" : "Time zone",
+        "dependency" : "show-second-zone"
+    },
+    "second-zone-label" : {
+        "type" : "entry",
+        "default" : "VN",
+        "description" : "Label",
+        "dependency" : "show-second-zone"
+    },
     "section2": {
         "type": "section",
         "description": "Keyboard shortcuts"

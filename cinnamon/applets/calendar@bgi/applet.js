@@ -13,9 +13,10 @@ const EventView = require('./eventView');
 const CinnamonDesktop = imports.gi.CinnamonDesktop;
 const Main = imports.ui.main;
 const Separator = imports.ui.separator;
+const Constants = require('./constants');
+const DateText = require('./dateText');
+const SecondZone = require('./secondZone');
 
-const DAY_FORMAT = CinnamonDesktop.WallClock.lctime_format("cinnamon", "%A");
-const DATE_FORMAT_SHORT = CinnamonDesktop.WallClock.lctime_format("cinnamon", _("%B %-e, %Y"));
 const DATE_FORMAT_FULL = CinnamonDesktop.WallClock.lctime_format("cinnamon", _("%A, %B %-e, %Y"));
 
 class CinnamonCalendarApplet extends Applet.TextApplet {
@@ -31,7 +32,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this._initContextMenu();
             this.menu.setCustomStyleClass('calendar-background');
 
-            this.settings = new Settings.AppletSettings(this, "calendar@cinnamon.org", this.instance_id);
+            this.settings = new Settings.AppletSettings(this, Constants.UUID, this.instance_id);
             this.desktop_settings = new Gio.Settings({ schema_id: "org.cinnamon.desktop.interface" });
 
             this.clock = new CinnamonDesktop.WallClock();
@@ -103,21 +104,13 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
             calbox.add_actor(this.go_home_button);
 
-            // Calendar
-            this._day = new St.Label(
+            // Local and second-zone times
+            this._headerTimes = new St.Label(
                 {
-                    style_class: "calendar-today-day-label"
+                    style_class: Constants.STYLE.headerTime
                 }
             );
-            this.go_home_button.add_actor(this._day);
-
-            // Date
-            this._date = new St.Label(
-                {
-                    style_class: "calendar-today-date-label"
-                }
-            );
-            this.go_home_button.add_actor(this._date);
+            this.go_home_button.add_actor(this._headerTimes);
 
             this._calendar = new Calendar.Calendar(this.settings, this.events_manager);
             this._calendar.connect("selected-date-changed", Lang.bind(this, this._updateClockAndDate));
@@ -136,6 +129,11 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.settings.bind("use-custom-format", "use_custom_format", this._onSettingsChanged);
             this.settings.bind("custom-format", "custom_format", this._onSettingsChanged);
             this.settings.bind("custom-tooltip-format", "custom_tooltip_format", this._onSettingsChanged);
+            this._secondZoneResolver = new SecondZone.SecondZone(message => global.logError(message));
+            this._secondZone = null;
+            this.settings.bind(Constants.SHOW_SECOND_ZONE_KEY, "show_second_zone", this._onSettingsChanged);
+            this.settings.bind(Constants.SECOND_ZONE_ID_KEY, "second_zone_id", this._onSettingsChanged);
+            this.settings.bind(Constants.SECOND_ZONE_LABEL_KEY, "second_zone_label", this._onSettingsChanged);
             this.settings.bind("keyOpen", "keyOpen", this._setKeybinding);
             this._setKeybinding();
 
@@ -179,6 +177,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     }
 
     _onSettingsChanged() {
+        this._updateSecondZone();
         this._updateFormatString();
         this._updateClockAndDate();
         this.event_list.actor.visible = this.events_manager.is_active();
@@ -233,12 +232,52 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this.event_list.actor.visible = this.events_manager.is_active();
     }
 
-    _updateClockAndDate() {
-        let label_string = this.clock.get_clock();
+    _updateSecondZone() {
+        this._secondZone = this._secondZoneResolver.resolve(this.show_second_zone, this.second_zone_id);
+    }
 
-        if (!this.use_custom_format) {
-            label_string = label_string.capitalize();
+    _inVerticalPanel() {
+        return this.orientation == St.Side.LEFT || this.orientation == St.Side.RIGHT;
+    }
+
+    _timeFormat() {
+        return DateText.timeFormatFor(this.desktop_settings.get_boolean("clock-use-24h"),
+                                      this.desktop_settings.get_boolean("clock-show-seconds"));
+    }
+
+    // {label, time} of the second zone, or null when it is hidden.
+    _secondTime(now) {
+        if (this._secondZone === null) {
+            return null;
         }
+        return {
+            label: (this.second_zone_label || "").trim(),
+            time: SecondZone.timeInZone(now, this._secondZone, this._timeFormat())
+        };
+    }
+
+    // A vertical panel keeps the stock text. Elsewhere the custom format, when on, replaces
+    // the date part only.
+    _panelText(now) {
+        if (this._inVerticalPanel()) {
+            let text = this.clock.get_clock();
+            return this.use_custom_format ? text : text.capitalize();
+        }
+
+        let date_text = this.use_custom_format ?
+            this.clock.get_clock() :
+            DateText.formatShortDate(DateText.datePartsOf(now, Constants.SHORT_DATE_FORMATS));
+        return DateText.formatPanelText(date_text, now.format(this._timeFormat()), this._secondTime(now));
+    }
+
+    _headerText(now) {
+        let city = DateText.cityFromZoneId(GLib.TimeZone.new_local().get_identifier());
+        return DateText.formatHeaderTimes(now.format(this._timeFormat()), city, this._secondTime(now));
+    }
+
+    _updateClockAndDate() {
+        let now = GLib.DateTime.new_now_local();
+        let label_string = this._panelText(now);
 
         this.go_home_button.reactive = !this._calendar.todaySelected();
         if (this._calendar.todaySelected()) {
@@ -260,11 +299,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             }
         }
 
-        let dateFormattedShort = this.clock.get_clock_for_format(DATE_FORMAT_SHORT).capitalize();
-        let dayFormatted = this.clock.get_clock_for_format(DAY_FORMAT).capitalize();
-
-        this._day.set_text(dayFormatted);
-        this._date.set_text(dateFormattedShort);
+        this._headerTimes.set_text(this._headerText(now));
         this.set_applet_tooltip(dateFormattedTooltip);
 
         this.events_manager.select_date(this._calendar.getSelectedDate());

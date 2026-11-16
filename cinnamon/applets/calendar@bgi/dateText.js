@@ -75,7 +75,7 @@ function formatSecondTime(second) {
     return joinNonEmpty([second.label, second.time], Constants.WORD_SEPARATOR);
 }
 
-// "Lun 16 Nov · 15:52 · VN 21:52". @second is {label, time}, or null when hidden.
+// "Mon 16 Nov · 15:52 · VN 21:52". @second is {label, time}, or null when hidden.
 function formatPanelText(dateText, localTime, second) {
     const parts = [dateText, localTime];
     if (second)

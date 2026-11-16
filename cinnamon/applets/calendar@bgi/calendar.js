@@ -67,31 +67,6 @@ function _getEndOfDay(date) {
     return ret;
 }
 
-function _formatEventTime(event, clockFormat) {
-    let ret;
-    if (event.allDay) {
-        /* Translators: Shown in calendar event list for all day events
-         * Keep it short, best if you can use less then 10 characters
-         */
-        ret = C_("event list time", "All Day");
-    } else {
-        switch (clockFormat) {
-        case '24h':
-            /* Translators: Shown in calendar event list, if 24h format */
-            ret = event.date.toLocaleFormat(C_("event list time", "%H:%M"));
-            break;
-
-        default:
-            /* explicit fall-through */
-        case '12h':
-            /* Translators: Shown in calendar event list, if 12h format */
-            ret = event.date.toLocaleFormat(C_("event list time", "%l:%M %p"));
-            break;
-        }
-    }
-    return ret;
-}
-
 function _getDigitWidth(actor){
     let context = actor.get_pango_context();
     let themeNode = actor.get_theme_node();

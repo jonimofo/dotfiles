@@ -19,6 +19,7 @@ const Tweener = imports.ui.tweener;
 const Interfaces = imports.misc.interfaces;
 const Constants = require('./constants');
 const DateText = require('./dateText');
+const Countdown = require('./countdown');
 const EventsHeight = require('./eventsHeight');
 
 const STATUS_UNKNOWN = 0;
@@ -56,29 +57,9 @@ function month_year_only(gdatetime) {
 
 function format_timespan(timespan) {
     let minutes = Math.floor(timespan / GLib.TIME_SPAN_MINUTE);
+    let start_hour = GLib.DateTime.new_now_local().add_hours(Math.floor(minutes / 60)).get_hour();
 
-    if (minutes < 10) {
-        return ["imminent", _("Starting in a few minutes")];
-    }
-
-    if (minutes < 60) {
-        return ["soon", _("Starting in %d minutes").format(minutes)];
-    }
-
-    let hours = Math.floor(minutes / 60);
-
-    if (hours > 6) {
-        let now = GLib.DateTime.new_now_local();
-        let later = now.add_hours(hours);
-
-        if (later.get_hour() > 18) {
-            return ["", _("This evening")];
-        }
-
-        return ["", _("Starting later today")];
-    }
-
-    return ["", ngettext("In %d hour", "In %d hours", hours).format(hours)];
+    return Countdown.countdownFor(minutes, start_hour);
 }
 
 
@@ -696,7 +677,7 @@ class EventList {
         let no_events_label = new St.Label(
             {
                 style_class: "calendar-events-no-events-label",
-                text: _("No Events"),
+                text: Constants.TEXT.noEvents,
                 y_align: Clutter.ActorAlign.CENTER
             }
         );
@@ -1001,7 +982,7 @@ class EventRow {
                 this.countdown_label.set_text("");
                 this.event_time.set_style_pseudo_class("all-day");
             } else {
-                this.countdown_label.set_text(_("In progress"));
+                this.countdown_label.set_text(Constants.TEXT.inProgress);
                 this.countdown_label.set_style_pseudo_class("current");
             } 
 
@@ -1022,7 +1003,7 @@ class EventRow {
         if (this.event.starts_on_day(this.selected_date) && !this.event.multi_day) {
             if (this.event.all_day) {
                 // an all day event: "All day"
-                final_str += _("All day");
+                final_str += Constants.TEXT.allDay;
             } else {
                 // a timed event: "12:00 pm"
                 final_str += this.event.start.format(time_format);
@@ -1049,7 +1030,7 @@ class EventRow {
             if (this.event.starts_on_day(this.selected_date)) {
                 if (this.event.all_day) {
                     // all day event that starts today: "Today -> ..."
-                    final_str += _("Today")
+                    final_str += Constants.TEXT.today
                 } else {
                     // timed: "12:00 pm -> ..."
                     final_str += this.event.start.format(time_format);
@@ -1072,7 +1053,7 @@ class EventRow {
             if (this.event.ends_on_day(this.selected_date)) {
                 if (this.event.all_day) {
                     // All-day event started previously, ends today: "-> Today"
-                    final_str += _("Today")
+                    final_str += Constants.TEXT.today
                 } else {
                     // Timed event started previously, ends today: "-> 12:00 pm"
                     final_str += this.event.end.format(time_format);
@@ -1110,7 +1091,7 @@ class EventRow {
                         final_str += " ";
                     }
 
-                    final_str += _("Today");
+                    final_str += Constants.TEXT.today;
                 } else {
                     // Event starts in the next few days: "Wednesday -> ..."
                     if (this.event.started_before_day(today.add_days(4))) {
@@ -1132,7 +1113,7 @@ class EventRow {
                     final_str += " ";
                 }
                 // all day ends today: "-> Today"
-                final_str += _("Today");
+                final_str += Constants.TEXT.today;
             } else
             if (this.event.ends_on_day(this.selected_date) && !this.event.all_day) {
                 // Ends on the selected date, not all day: "-> 12:00 pm"

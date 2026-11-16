@@ -165,8 +165,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this._todayButton = new St.Button(
                 {
                     style_class: Constants.STYLE.todayButton,
-                    label: Constants.TODAY_BUTTON_LABEL,
-                    accessible_name: Constants.TODAY_BUTTON_LABEL,
+                    label: Constants.TEXT.today,
+                    accessible_name: Constants.TEXT.today,
                     x_expand: true,
                     reactive: true,
                     track_hover: true
@@ -179,7 +179,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
             // The stock settings entry, as a button of its label's width
             let footer = new St.BoxLayout({ style_class: Constants.STYLE.footer });
-            let settings_label = _("Date and Time Settings");
+            let settings_label = Constants.TEXT.settings;
             let settings_button = new St.Button(
                 {
                     style_class: Constants.STYLE.settingsButton,

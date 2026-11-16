@@ -49,6 +49,7 @@ const SecondZone = load('./secondZone');
 const DayMarker = load('./dayMarker');
 const DayCell = load('./dayCell');
 const TickClock = load('./tickClock');
+const Countdown = load('./countdown');
 const DaySummary = load('./daySummary');
 const Appearance = load('./appearance');
 const EventsHeight = load('./eventsHeight');
@@ -236,6 +237,30 @@ function testTickClock() {
     check(`tick clock: not every second without them (${minuteTicks} in 2.5 s)`, minuteTicks <= 1);
 }
 
+// Audit M3: every phrase the applet shows is its own English constant, never gettext, so
+// the French run of this file shows the same words.
+function testWording() {
+    const gettextCalls = [];
+    for (const file of listJs()) {
+        const source = readText(`${appletDir}/${file}`);
+        if (/(^|[^\w.$])(_|C_|ngettext)\(/m.test(source))
+            gettextCalls.push(file);
+    }
+    check(`wording: no gettext call in the applet${gettextCalls.length ? ` (${gettextCalls.join(', ')})` : ''}`,
+        gettextCalls.length === 0);
+    const countdown = (minutes, hour) => Countdown.countdownFor(minutes, hour).join('|');
+    checkEqual('countdown: a few minutes', countdown(5, 10), 'imminent|Starting in a few minutes');
+    checkEqual('countdown: minutes', countdown(25, 10), 'soon|Starting in 25 minutes');
+    checkEqual('countdown: one hour', countdown(60, 11), '|In 1 hour');
+    checkEqual('countdown: several hours', countdown(185, 13), '|In 3 hours');
+    checkEqual('countdown: six hours is still in hours', countdown(6 * 60 + 59, 16), '|In 6 hours');
+    checkEqual('countdown: this evening', countdown(8 * 60, 19), '|This evening');
+    checkEqual('countdown: later today', countdown(8 * 60, 17), '|Starting later today');
+    checkEqual('wording: stock phrases in English', [Constants.TEXT.noEvents, Constants.TEXT.allDay,
+        Constants.TEXT.inProgress, Constants.TEXT.today, Constants.TEXT.settings].join(' / '),
+    'No Events / All day / In progress / Today / Date and Time Settings');
+}
+
 function testEventsHeight() {
     const ratio = Constants.EVENTS_MAX_HEIGHT_RATIO;
     checkEqual('events cap: ratio', ratio, 0.7);
@@ -383,6 +408,7 @@ testHeaderTexts();
 testSecondZone();
 testDayMarker();
 testEventsHeight();
+testWording();
 testTickClock();
 testDayCell();
 testAppearance();

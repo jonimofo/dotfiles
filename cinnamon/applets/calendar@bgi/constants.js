@@ -82,8 +82,25 @@ const EVENTS_MAX_HEIGHT_RATIO = 0.7;
 const SUMMARY_COUNT_ONE = 'event';
 const SUMMARY_COUNT_MANY = 'events';
 
-// Under the count: back to today's date and month.
-const TODAY_BUTTON_LABEL = 'Today';
+// Every phrase the applet shows, in English whatever the locale: the stock applet's
+// gettext strings are replaced by these. %d stands for a number.
+const TEXT = {
+    today: 'Today',
+    noEvents: 'No Events',
+    allDay: 'All day',
+    inProgress: 'In progress',
+    startingSoon: 'Starting in a few minutes',
+    startingInMinutes: 'Starting in %d minutes',
+    thisEvening: 'This evening',
+    startingLaterToday: 'Starting later today',
+    inHours: { one: 'In %d hour', other: 'In %d hours' },
+    settings: 'Date and Time Settings',
+};
+const NUMBER_PLACEHOLDER = '%d';
+// Countdown before an event of today (stock thresholds): "Starting in a few minutes" under
+// 10 minutes, "Starting in N minutes" under an hour, "In N hours" up to 6 hours, then
+// "This evening" when it starts after 18:00, else "Starting later today".
+const COUNTDOWN = { imminentMinutes: 10, soonMinutes: 60, laterHours: 6, eveningHour: 18 };
 
 // One marker under a day that has events, drawn in the text colour of the theme.
 const DAY_MARKER_TEXT = '•';

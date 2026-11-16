@@ -11,6 +11,8 @@ My Cinnamon extensions and applets, versioned. Each one is symlinked into
 - `applets/quick-settings@bgi/`: one panel button that opens a GNOME-style Quick Settings
   menu (sound, microphone, brightness, network, Bluetooth, VPN, power and session).
   Tested on Cinnamon 6.4 (X11). See [Quick Settings](#quick-settings-what-it-does) below.
+- `applets/calendar@bgi/`: the stock calendar applet with a second time zone and larger text.
+  Tested on Cinnamon 6.4 (X11). See [Calendar](#calendar-what-it-does) below.
 - `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
   Enable adds it at the right end of panel1's right zone.
 - `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
@@ -386,6 +388,7 @@ scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
 scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
+scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, day marker, stylesheet rules
 ```
 
 Prerequisites: `node` and `jq` for the check, `gjs` with the libnm and Cvc typelibs for the
@@ -402,3 +405,85 @@ NetworkManager, BlueZ, UPower or session manager.
 Design records:
 [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md),
 [`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md).
+
+## Calendar: what it does
+
+`applets/calendar@bgi/` is the stock Cinnamon calendar applet (`calendar@cinnamon.org`,
+Cinnamon 6.4) with three changes:
+
+- The panel reads `Lun 16 Nov · 15:52 · VN 21:52`: short date, local time, then a second
+  time zone with its label. Weekday and month come from the locale (`LC_TIME`), without
+  their trailing dot. The time follows the desktop's 24h or 12h and seconds settings.
+- The popup header reads `Lundi 16 novembre 2026` on the left (the selected day) and
+  `15:52 Paris  ·  21:52 VN` on the right. A click on the times goes back to today, as the
+  stock date did.
+- Event titles are bold and larger, event times at the normal size, day numbers larger in
+  wider cells, all in the theme's text colour. A day with events has one dot under it,
+  whatever the number of events.
+
+The sizes live in `applets/calendar@bgi/stylesheet.css` under the applet's own classes, so
+a theme that shrinks the stock calendar classes (Dracula: 80% and 70%) no longer applies.
+Colours still come from the theme: today, the selected day, weekends and the days of the
+other months look as in the stock applet.
+
+Origin and licence: copied from `/usr/share/cinnamon/applets/calendar@cinnamon.org/` of
+Cinnamon 6.4.10 (Linux Mint, <https://github.com/linuxmint/cinnamon>), GPL-2+ (see
+`/usr/share/doc/cinnamon/copyright`). The first commit of the folder is the unchanged copy;
+the stock functions changed since are listed in the plan, for a re-sync with upstream.
+
+## Calendar: settings
+
+Right-click the clock > Configure... The stock settings stay: events on or off, week numbers,
+custom date format, the `<Super>c` shortcut. A "Second time zone" section adds:
+
+| Setting | Default | |
+|---|---|---|
+| Show a second time zone | on | off hides it on the panel and in the popup |
+| Time zone | `Asia/Ho_Chi_Minh` | an IANA id; an unknown one hides the second time and is logged once |
+| Label | `VN` | shown before the time on the panel, after it in the popup |
+
+With the custom date format on, it replaces the date part of the panel text only: the times
+and the second zone follow it.
+
+## Calendar: install
+
+The link must point to the main checkout, not to a git worktree. The stock applet is
+replaced on the panel by this one:
+
+```bash
+ln -s ~/Repos/dotfiles/cinnamon/applets/calendar@bgi \
+  ~/.local/share/cinnamon/applets/calendar@bgi
+~/Repos/dotfiles/cinnamon/applet.sh disable calendar@cinnamon.org
+~/Repos/dotfiles/cinnamon/applet.sh enable calendar@bgi
+```
+
+`applet.sh enable` adds it at the right end of panel1's right zone; drag it in panel edit
+mode to move it. Its settings start from the defaults: the stock applet's settings are not
+copied (shortcut, events, week numbers).
+
+Reload after an edit:
+
+```bash
+~/Repos/dotfiles/cinnamon/applet.sh reload calendar@bgi
+journalctl --user -b --since "-2 min" --no-pager | grep -E 'calendar@bgi|JS ERROR'
+```
+
+Back to the stock applet:
+
+```bash
+~/Repos/dotfiles/cinnamon/applet.sh disable calendar@bgi
+~/Repos/dotfiles/cinnamon/applet.sh enable calendar@cinnamon.org
+rm ~/.local/share/cinnamon/applets/calendar@bgi
+```
+
+## Calendar: known limitations
+
+- On a vertical panel the stock text is shown, without the second time zone.
+- Month abbreviations keep the locale's length: `févr.` reads `Févr`, `juil.` reads `Juil`.
+- Event times have one colour whether the event is past, in progress or to come; the
+  countdown ("Starting in 5 minutes", "In progress") is kept.
+- The day dot is a `•` character: its exact place under the number depends on the font.
+- A size changed in `stylesheet.css` shows after the next login (see
+  [Reload after an edit](#reload-after-an-edit)).
+
+Design record: [`documentation/plans/2026-11-16-cinnamon-calendar-applet.md`](../documentation/plans/2026-11-16-cinnamon-calendar-applet.md).

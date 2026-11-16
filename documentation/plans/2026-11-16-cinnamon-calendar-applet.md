@@ -1,4 +1,4 @@
-Status: VALIDATED
+Status: DONE
 
 # Cinnamon calendar applet with a second time zone
 
@@ -154,12 +154,29 @@ New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `styl
 
 ## Steps
 
+All done, in the PR that closes #55.
+
 1. This plan.
 2. Stock copy, unchanged except the uuid and name in `metadata.json`.
 3. Panel text with the second zone and its settings.
 4. Popup: header, sizes, stylesheet.
 5. One dot per day with events.
 6. Tests in `scripts/check-all.sh`, README section, plan to `DONE`, draft PR.
+
+## Built differently from the steps
+
+- The popup header times came with step 3: they share the second zone code with the panel.
+- `scripts/check-all.sh` needed no change: it runs every `scripts/*-test.sh`, so it picks up
+  `scripts/cinnamon-calendar-test.sh`. `scripts/cinnamon-extension-check.sh` checks every
+  folder under `cinnamon/applets/`, the new one included.
+- The test also checks the stylesheet: no colour, no `opacity`, no `px` or `pt`, and every
+  class of `constants.js` styled.
+
+## To confirm on the live panel
+
+- Sizes and the place of the dot under the number, under Dracula.
+- Today and the selected day still stand out with the new day class.
+- The events column width with long titles.
 
 ## Out of scope
 

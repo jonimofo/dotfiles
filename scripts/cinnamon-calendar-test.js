@@ -351,6 +351,8 @@ function testAppearance() {
 function testSchema() {
     const schema = JSON.parse(readText(`${appletDir}/settings-schema.json`));
     checkEqual('schema: show second zone default', schema[Constants.SHOW_SECOND_ZONE_KEY].default, true);
+    check(`schema: date-only default custom format (${schema['custom-format'].default})`,
+        !/%[HIklMSpPrRTX]/.test(schema['custom-format'].default));
     checkEqual('schema: zone id default', schema[Constants.SECOND_ZONE_ID_KEY].default, 'Asia/Ho_Chi_Minh');
     checkEqual('schema: label default', schema[Constants.SECOND_ZONE_LABEL_KEY].default, 'VN');
     check('schema: no keybinding setting', Object.values(schema).every(entry => entry.type !== 'keybinding'));
@@ -395,13 +397,89 @@ function testSchema() {
     checkEqual('metadata: uuid', metadata.uuid, Constants.UUID);
 }
 
-// Sizes in em or %, no colour, every class of constants.js styled.
-// The palette of the validated design, by role: each colour written once in the stylesheet.
 // The stylesheet's palette block: every colour rule sits above this line, by role.
 const SIZES_MARKER = '/* ---- Sizes ---- */';
 const HEX_COLOUR = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
 // Day cells grow with the theme's font: their sizes are in em or %, not px.
-const DAY_RULES = ['day', 'dayMarked', 'dayHeading', 'dayMarkerBox', 'dayMarker', 'weekNumber', 'monthRow', 'monthLabel'];
+const DAY_RULES = ['day', 'dayMarked', 'dayHeading', 'dayMarkerBox', 'weekNumber', 'monthRow', 'monthLabel'];
+// Classes set by the code with no rule of their own: the day marker takes its parent's
+// colour and size.
+const UNSTYLED_CLASSES = ['dayMarker'];
+
+// Colour rules of the palette block: [{selectors, property, hex}].
+function colourRules(paletteBlock) {
+    const rules = [];
+    for (const [, selectorText, body] of paletteBlock.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        const selectors = selectorText.split(',').map(selector => selector.trim());
+        for (const [, property, hex] of body.matchAll(/([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})\b/g))
+            rules.push({ selectors, property, hex: hex.toUpperCase() });
+    }
+    return rules;
+}
+
+// WCAG 2 contrast ratio of two #RRGGBB colours.
+function contrast(first, second) {
+    const luminance = hex => {
+        const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+            .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const [light, dark] = [luminance(first), luminance(second)].sort((a, b) => b - a);
+    return (light + 0.05) / (dark + 0.05);
+}
+
+// Where each colour is actually used: [foreground selector, property, background selector,
+// minimum]. Text needs 4.5:1; outlines, edges and the scroll bar handle (not text) 3:1.
+// Exceptions, on purpose: the thin #394761 lines (popup border, event card edges, line
+// between the clocks) are decoration, the card's own background marks it; the event accent
+// bar takes the calendar's colour from the data.
+const CONTRAST_PAIRS = [
+    ['.calendar-bgi-header-date', 'color', '.calendar-bgi-header', 4.5],
+    ['.calendar-bgi-header-count', 'color', '.calendar-bgi-header', 4.5],
+    ['.calendar-bgi-clock-time', 'color', '.calendar-bgi-header', 4.5],
+    ['.calendar-bgi-clock-suffix', 'color', '.calendar-bgi-header', 4.5],
+    ['.calendar-bgi-event-time', 'color', '.calendar-bgi-event-time-block', 4.5],
+    ['.calendar-bgi-event-title', 'color', '.calendar-bgi-event-row', 4.5],
+    ['.calendar-bgi-event-title', 'color', '.calendar-bgi-event-row:hover', 4.5],
+    ['.calendar-bgi-event-meta', 'color', '.calendar-bgi-event-row', 4.5],
+    ['.calendar-bgi-event-meta', 'color', '.calendar-bgi-event-row:hover', 4.5],
+    ['.calendar-bgi-event-countdown', 'color', '.calendar-bgi-event-row', 4.5],
+    ['.calendar-bgi-month-label', 'color', '.calendar-bgi-calendar-panel', 4.5],
+    ['.calendar-bgi-day-heading', 'color', '.calendar-bgi-calendar-panel', 4.5],
+    ['.calendar-bgi-day', 'color', '.calendar-bgi-calendar-panel', 4.5],
+    ['.calendar-bgi-day', 'color', '.calendar-bgi-day:hover', 4.5],
+    ['.calendar-bgi-day-selected', 'color', '.calendar-bgi-day-selected', 4.5],
+    ['.calendar-bgi-day-outside', 'color', '.calendar-bgi-calendar-panel', 4.5],
+    ['.calendar-bgi-day-outside:hover', 'color', '.calendar-bgi-day:hover', 4.5],
+    ['.calendar-bgi-week-number', 'color', '.calendar-bgi-calendar-panel', 4.5],
+    ['.calendar-bgi-today-button', 'color', '.calendar-bgi-today-button', 4.5],
+    ['.calendar-bgi-today-button', 'color', '.calendar-bgi-today-button:hover', 4.5],
+    ['.calendar-bgi-settings-button', 'color', '.calendar-bgi-settings-button', 4.5],
+    ['.menu.calendar-bgi-popup', 'color', '.menu.calendar-bgi-popup', 4.5],
+    ['.calendar-bgi-day-today', 'border-color', '.calendar-bgi-calendar-panel', 3],
+    ['.calendar-bgi-day-today', 'border-color', '.calendar-bgi-day-selected', 3],
+    ['.calendar-bgi-today-button', 'border-color', '.menu.calendar-bgi-popup', 3],
+    ['.calendar-bgi-settings-button', 'border-color', '.menu.calendar-bgi-popup', 3],
+    ['.calendar-bgi-today-button:focus', 'border-color', '.menu.calendar-bgi-popup', 3],
+    ['.calendar-bgi-events StScrollBar StButton#vhandle', 'background-color', '.menu.calendar-bgi-popup', 3],
+    ['.calendar-bgi-events StScrollBar StButton#vhandle:hover', 'border-color', '.menu.calendar-bgi-popup', 3],
+];
+
+function testContrast() {
+    const raw = readText(`${appletDir}/stylesheet.css`);
+    const rules = colourRules(raw.slice(0, raw.indexOf(SIZES_MARKER)).replace(/\/\*[\s\S]*?\*\//g, ''));
+    const colourOf = (selector, property) => {
+        const rule = rules.find(candidate => candidate.property === property && candidate.selectors.includes(selector));
+        return rule ? rule.hex : null;
+    };
+    for (const [selector, property, background, minimum] of CONTRAST_PAIRS) {
+        const front = colourOf(selector, property);
+        const back = colourOf(background, 'background-color');
+        const ratio = front && back ? contrast(front, back) : 0;
+        check(`contrast: ${selector} ${property} ${front} on ${background} ${back}: ${ratio.toFixed(2)}:1, at least ${minimum}`,
+            ratio >= minimum);
+    }
+}
 
 function listJs() {
     const names = [];
@@ -420,9 +498,11 @@ function testStylesheet() {
     check('stylesheet: palette block ends with the sizes marker', marker > 0);
     const paletteBlock = raw.slice(0, marker).replace(/\/\*[\s\S]*?\*\//g, '');
     const sizes = raw.slice(marker).replace(/\/\*[\s\S]*?\*\//g, '');
-    const hexes = (css.match(HEX_COLOUR) || []).map(hex => hex.toUpperCase());
-    const repeated = [...new Set(hexes.filter((hex, i) => hexes.indexOf(hex) !== i))];
-    check(`stylesheet: each colour written once${repeated.length ? ` (repeated ${repeated.join(', ')})` : ''}`,
+    // One role per colour and property: a colour may be a text colour and an edge colour,
+    // never two text roles.
+    const uses = colourRules(paletteBlock).map(rule => `${rule.property} ${rule.hex}`);
+    const repeated = [...new Set(uses.filter((use, i) => uses.indexOf(use) !== i))];
+    check(`stylesheet: each colour written once per property${repeated.length ? ` (repeated ${repeated.join(', ')})` : ''}`,
         repeated.length === 0);
     const palette = (paletteBlock.match(HEX_COLOUR) || []);
     const outside = sizes.match(HEX_COLOUR) || [];
@@ -449,7 +529,8 @@ function testStylesheet() {
     // class of the stylesheet set by the code.
     const styled = new Set([...css.matchAll(/\.(calendar-bgi-[\w-]+)/g)].map(match => match[1]));
     const used = new Set(Object.values(Constants.STYLE));
-    const unstyled = [...used].filter(name => !styled.has(name));
+    const exempt = UNSTYLED_CLASSES.map(key => Constants.STYLE[key]);
+    const unstyled = [...used].filter(name => !styled.has(name) && !exempt.includes(name));
     const unused = [...styled].filter(name => !used.has(name));
     const eventsRule = css.match(new RegExp(`\\.${Constants.STYLE.events}\\s*\\{([^}]*)\\}`));
     check('stylesheet: events column has no fixed height',
@@ -476,6 +557,7 @@ testAppearance();
 testEventCount();
 testSchema();
 testStylesheet();
+testContrast();
 
 if (failures > 0) {
     printerr(`${failures} check(s) failed`);

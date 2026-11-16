@@ -19,6 +19,9 @@ change, infra change, anything touching more than one file.
 ## Skip the ceremony
 
 - Trivial task (typo, one-line fix, "commit", "resume"): do it, add one line "skipped the ceremony".
+- UI changes on a running dev stack: "live first". Edit the component or tokens directly on the
+  branch, Vite reloads, the user validates on screen. No ASCII mockup when the live page can be
+  the mockup. Logic, tests and docs come only after the look is validated, in one agent pass.
 - Skip words in the request: `go`, `gogo`, `ok go`, `do it`, `just <verb>`. Execute directly.
   Step-by-step still applies when the execution has more than one step.
 - When in doubt whether a task is trivial, it is not.

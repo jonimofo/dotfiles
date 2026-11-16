@@ -42,8 +42,16 @@ and line, failure scenario, fix, and effort (S under 30 min, M 1 to 2 h, L half 
 the repo root. End with **Proposed rules**: up to 3 recurring patterns that should become a rule
 (project `CLAUDE.md`), an automated check (audit test, lint rule) or a resolved-item entry.
 
+## 4b. Record (diff mode)
+
+When the project keeps a resolved-items file (for example `prompts/audit_resolved.md`), append one
+line per audited PR: `- PR #N — audited YYYY-MM-DD — xH/yM/zL — fixed: … — accepted: …`, committed
+on the PR branch. A later `full` audit skips the PRs listed there.
+
 ## 5. Fix
 
-HIGH findings are fixed only after the user validates the report. In `diff` mode a PR is not merged
+HIGH findings are fixed only after the user validates the report. MEDIUM findings are fixed before
+the merge. LOW findings: ALWAYS ask the user whether to fix them now, one question listing them,
+never decide alone (user rule 2026-10-30: "everything is always clean"). In `diff` mode a PR is not merged
 while a HIGH is open. Recurrent patterns become anti-pattern entries in the project documentation
 or an automated test, so the LLM audit only keeps what cannot be automated.

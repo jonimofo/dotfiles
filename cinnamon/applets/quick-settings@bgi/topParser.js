@@ -2,22 +2,26 @@ const Constants = require('./constants');
 
 const FRAME_START = 'top - ';
 
+const CPU_COLUMN = '%CPU';
+const COMMAND_COLUMN = 'COMMAND';
+
 // The busiest process in the last frame of `top -b` output: { name, percent }, or null
 // when the frame has no process line. The columns are found by the header's names, so a
 // toprc that reorders them still works, as long as COMMAND stays last (it may hold spaces).
-// Decimal commas (a French locale) are read as points. Constants.CPU_IGNORED_COMMANDS
-// (top itself) are skipped.
+// Throws, naming the header, when it cannot be read: no header, translated names (top run
+// without Constants.CPU_TOP_ENV), or COMMAND not last. Decimal commas are read as points.
+// Constants.CPU_IGNORED_COMMANDS (top itself) are skipped.
 function busiestProcess(text) {
     const frames = text.split(`\n${FRAME_START}`);
     const lines = frames[frames.length - 1].split('\n');
-    const headerIndex = lines.findIndex(line => /\bPID\b/.test(line) && line.includes('%CPU'));
+    const headerIndex = lines.findIndex(line => /\bPID\b/.test(line));
     if (headerIndex < 0)
-        return null;
+        throw new Error('no PID header line in the top output');
     const columns = lines[headerIndex].trim().split(/\s+/);
-    const cpuColumn = columns.indexOf('%CPU');
-    const commandColumn = columns.indexOf('COMMAND');
-    if (commandColumn !== columns.length - 1)
-        return null;
+    const cpuColumn = columns.indexOf(CPU_COLUMN);
+    const commandColumn = columns.indexOf(COMMAND_COLUMN);
+    if (cpuColumn < 0 || commandColumn !== columns.length - 1)
+        throw new Error(`unreadable top header, ${CPU_COLUMN} and a last ${COMMAND_COLUMN} column expected: "${columns.join(' ')}"`);
 
     let busiest = null;
     for (const line of lines.slice(headerIndex + 1)) {

@@ -24,7 +24,6 @@ class ExpandArrow {
     // @ownerAvailable: whether the tile or row it belongs to works now.
     sync(ownerAvailable) {
         const works = ownerAvailable && this._hasAction;
-        UiHelpers.setButtonInactive(this.actor, !works);
-        UiHelpers.setDimmed(this.actor, !works);
+        UiHelpers.setButtonWorking(this.actor, works);
     }
 }

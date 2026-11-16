@@ -260,6 +260,8 @@ const CPU_LINE_ID = 'cpu-line';
 const CPU_LINE_ITEM = { id: CPU_LINE_ID, name: 'CPU line' };
 const CPU_LINE_TITLE = 'CPU';
 const CPU_TOP_COMMAND = ['top', '-b', '-n', '2', '-d', '0.5', '-o', '%CPU', '-w', '512'];
+// top translates its column names (COMMAND is COM. in French): run it untranslated.
+const CPU_TOP_ENV = { LC_ALL: 'C' };
 const CPU_IGNORED_COMMANDS = ['top'];
 const CPU_PERCENT_SUFFIX = '%';
 

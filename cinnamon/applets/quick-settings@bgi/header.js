@@ -43,8 +43,7 @@ class Header {
                 accessible_name: definition.label,
             });
             this._tooltips.push(new Tooltips.Tooltip(button, definition.label));
-            UiHelpers.setButtonInactive(button, true);
-            UiHelpers.setDimmed(button, true);
+            UiHelpers.setButtonWorking(button, false);
             this._buttons[definition.id] = button;
         }
         this.actor.add_child(buttons);
@@ -68,8 +67,7 @@ class Header {
     // @id: a HEADER_BUTTONS id.
     setOnButton(id, onClick) {
         const button = this._buttons[id];
-        UiHelpers.setButtonInactive(button, false);
-        UiHelpers.setDimmed(button, false);
+        UiHelpers.setButtonWorking(button, true);
         button.connect('clicked', () => onClick());
     }
 

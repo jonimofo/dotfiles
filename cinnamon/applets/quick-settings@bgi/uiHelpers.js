@@ -26,6 +26,12 @@ function setButtonInactive(button, inactive) {
     setPseudoClass(button, INSENSITIVE_PSEUDO_CLASS, inactive);
 }
 
+// A button that works (@working) or does nothing yet: inactive and dimmed together.
+function setButtonWorking(button, working) {
+    setButtonInactive(button, !working);
+    setDimmed(button, !working);
+}
+
 // Dims a part that does nothing yet, so it reads as inactive next to the working ones.
 // Used on icons, sliders and arrows, never on a label: text stays readable.
 function setDimmed(actor, dimmed) {

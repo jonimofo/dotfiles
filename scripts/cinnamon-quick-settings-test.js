@@ -634,6 +634,17 @@ async function testBooleanSettings() {
     dnd.destroy();
 }
 
+function testSettingsWrite() {
+    const GsettingsWrite = load('./gsettingsWrite');
+    errors = [];
+    const refusing = { schema_id: 'org.example.test', set_uint: () => false };
+    const accepted = GsettingsWrite.writeSetting({ schema_id: 'org.example.test', set_uint: () => true }, 'set_uint', 'level', 3);
+    const refused = GsettingsWrite.writeSetting(refusing, 'set_uint', 'level', 3);
+    check(`settings write: a refused write is logged with schema, key and value (${errors})`,
+        accepted && !refused && errors.length === 1 && errors[0].includes('setting org.example.test level to 3 failed'));
+    errors = [];
+}
+
 async function testNightLight() {
     const Model = load('./warmthModel');
     check('warmth: 6500 K is the left end, 1000 K the right end (warmer to the right)',
@@ -853,9 +864,22 @@ async function testTopProcess() {
     check(`cpu: a command name with spaces is kept whole (${Parser.label(Parser.busiestProcess(spaced))})`,
         Parser.label(Parser.busiestProcess(spaced)) === 'Isolated Web Co 16%');
     check('cpu: decimal points read too', Parser.busiestProcess(text.replace(/(\d),(\d)/g, '$1.$2')).percent === busiest.percent);
-    check('cpu: no process line, no process', Parser.busiestProcess(text.split('    PID')[0]) === null && Parser.label(null) === '');
-    check('cpu: COMMAND not last (a reordering toprc), no guess',
-        Parser.busiestProcess('  PID COMMAND %CPU\n 1 php 50,0\n') === null);
+    const headerOnly = text.slice(0, text.lastIndexOf('COMMAND') + 'COMMAND'.length);
+    check('cpu: a header without process lines, no process', Parser.busiestProcess(headerOnly) === null && Parser.label(null) === '');
+    const thrown = input => {
+        try {
+            Parser.busiestProcess(input);
+            return null;
+        } catch (e) {
+            return e.message;
+        }
+    };
+    check(`cpu: no header line is an error (${thrown(text.split('    PID')[0])})`, thrown(text.split('    PID')[0]) === 'no PID header line in the top output');
+    check(`cpu: COMMAND not last (a reordering toprc) is an error, no guess (${thrown('  PID COMMAND %CPU\n 1 php 50,0\n')})`,
+        (thrown('  PID COMMAND %CPU\n 1 php 50,0\n') || '').includes('"PID COMMAND %CPU"'));
+    const french = readText(`${topFixtures}/top-french-headers.txt`);
+    check(`cpu: translated headers are an error naming the header (${thrown(french)})`,
+        (thrown(french) || '').includes('"PID UTIL. PR NI VIRT RES SHR S %CPU %MEM TEMPS+ COM."'));
 
     const Constants = load('./constants');
     check('cpu: top runs from an argv array, never a shell',
@@ -863,10 +887,12 @@ async function testTopProcess() {
         && Constants.CPU_TOP_COMMAND.every(part => typeof part === 'string') && !Constants.CPU_TOP_COMMAND.includes('-c'));
     const TopProcess = load('./topProcess');
     const runs = [];
+    const envs = [];
     let pending = deferred();
     let changes = 0;
-    const top = new TopProcess.TopProcess(argv => {
+    const top = new TopProcess.TopProcess((argv, options) => {
         runs.push(argv);
+        envs.push(options && options.env);
         return pending.promise;
     }, () => changes++);
     const first = top.refresh();
@@ -875,20 +901,30 @@ async function testTopProcess() {
     pending.resolve(text);
     await first;
     check('cpu: the read shows the busiest process', changes === 1 && top.process.name === 'php');
+    check(`cpu: top runs with LC_ALL=C, so its headers are not translated (${JSON.stringify(envs[0])})`,
+        JSON.stringify(envs[0]) === '{"LC_ALL":"C"}' && runs[0] === Constants.CPU_TOP_COMMAND);
+    errors = [];
+    pending = deferred();
+    const translated = top.refresh();
+    pending.resolve(french);
+    await translated;
+    check(`cpu: an unreadable header is logged with the header, the title shows alone (${errors})`,
+        top.process === null && errors.length === 1 && errors[0].includes('reading the busiest process failed')
+        && errors[0].includes('COM.'));
     errors = [];
     pending = deferred();
     const failing = top.refresh();
     pending.reject(new Error('top exited with 1'));
     await failing;
     check(`cpu: a failed read is logged and shows the title alone (${errors})`,
-        top.process === null && changes === 2 && errors.length === 1 && errors[0].includes('top exited with 1'));
+        top.process === null && changes === 3 && errors.length === 1 && errors[0].includes('top exited with 1'));
     errors = [];
     pending = deferred();
     const late = top.refresh();
     top.destroy();
     pending.resolve(text);
     await late;
-    check('cpu: nothing shows after destroy', changes === 2);
+    check('cpu: nothing shows after destroy', changes === 3);
 }
 
 function testBatteryModel() {
@@ -1484,6 +1520,14 @@ async function testSubprocess() {
         failed !== null && failed.includes('exited with 3') && failed.includes('boom'));
     const missing = await Subprocess.runCommand(['/nonexistent/quick-settings-test']).then(() => null, e => e.message);
     check(`subprocess: a missing command rejects and names it (${missing})`, missing !== null && missing.includes('/nonexistent/quick-settings-test'));
+    const forced = await Subprocess.runCommand(['/usr/bin/env'], { env: { LC_ALL: 'C', QUICK_SETTINGS_TEST: 'set' } });
+    check('subprocess: env sets the variables for that command only',
+        forced.split('\n').includes('LC_ALL=C') && forced.split('\n').includes('QUICK_SETTINGS_TEST=set')
+        && GLib.getenv('QUICK_SETTINGS_TEST') === null);
+    const LIVE = load('./constants');
+    const live = await Subprocess.runCommand(LIVE.CPU_TOP_COMMAND, { env: LIVE.CPU_TOP_ENV });
+    const busiest = load('./topParser').busiestProcess(live);
+    check(`subprocess: the real top under LC_ALL=C parses (${busiest && busiest.name})`, busiest !== null);
 }
 
 const FakeObjectManager = GObject.registerClass({
@@ -1573,6 +1617,7 @@ async function main() {
     await testNordvpnBusyGuard();
     testPowerProfileModel();
     await testBooleanSettings();
+    testSettingsWrite();
     await testNightLight();
     testKeyboardLight();
     testAirplaneMode();

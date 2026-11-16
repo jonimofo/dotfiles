@@ -281,7 +281,9 @@ element too; an element no longer declared is dropped the same way.
   A checkbox can hide an icon, never show one its state hides.
 - Add, Remove and Edit come with the stock list and cannot be hidden. Edit only picks a
   name from the list; an added row repeating an element is ignored; a removed element comes
-  back at the end, shown. An emptied list shows everything again.
+  back at once at its default place (just before the first element that follows it in the
+  default order, else at the end), shown, and the list is saved that way. An emptied list
+  shows everything again, in the default order.
 
 The tabs and their defaults come from the ordered lists in
 `applets/quick-settings@bgi/constants.js`. After changing one of them, generate the schema

@@ -60,8 +60,7 @@ class SliderRow {
 
     // The switch takes clicks once it has an action, whatever the row's availability.
     setOnSwitch(onSwitch) {
-        UiHelpers.setButtonInactive(this._switchButton, false);
-        UiHelpers.setDimmed(this._switchButton, false);
+        UiHelpers.setButtonWorking(this._switchButton, true);
         this._switchButton.connect('clicked', () => onSwitch());
     }
 
@@ -119,8 +118,7 @@ class SliderRow {
             accessible_name: accessibleName,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        UiHelpers.setButtonInactive(this._switchButton, true);
-        UiHelpers.setDimmed(this._switchButton, true);
+        UiHelpers.setButtonWorking(this._switchButton, false);
         this.actor.add_child(this._switchButton);
     }
 

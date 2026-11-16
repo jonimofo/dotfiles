@@ -1,63 +1,78 @@
-// Hot corners that keep working over fullscreen windows.
-// Cinnamon adds each hot corner as chrome without visibleInFullscreen, so a fullscreen
-// window hides it on its monitor (layout.js _updateVisibility). HotCornerManager destroys
-// and recreates every corner on each hot corner setting or monitor change: the patched
-// update() sets the flag again on the new corners.
+// Hot corners that keep working over fullscreen windows, with Scale open or not.
+// Cinnamon hides chrome over a fullscreen window with Main.uiGroup.set_skip_paint, from two
+// paths of layout.js _updateVisibility: the normal one, and the modal one used while Scale
+// is open, which ignores visibleInFullscreen. A skipped actor is neither painted nor picked,
+// so the corner gets no hover and Scale cannot be closed from it. The override refuses to
+// skip the current hot corners, looked up at call time, so the corners Cinnamon rebuilds on
+// each setting or monitor change are covered too.
 // This relies on Cinnamon internals: on failure it logs and keeps the stock behaviour, so
 // the rest of the extension keeps running.
 const Main = imports.ui.main;
-const HotCorner = imports.ui.hotCorner;
 
-let originalUpdate = null;
-
-function setCornersVisibleInFullscreen(manager, visible) {
-    if (!manager)
-        return;
-
-    const chrome = Main.layoutManager._chrome;
-    for (const corner of Object.values(manager.corners)) {
-        if (corner)
-            chrome.modifyActorParams(corner.actor, { visibleInFullscreen: visible });
-    }
-    // modifyActorParams only queues the input region update: visibility is recomputed here.
-    chrome._updateVisibility();
-}
+let patchedGroup = null;
+let lookupFailureLogged = false;
 
 function logFailure(attempt, error) {
     global.logError(`[scale-wheel-switch] hot corners over fullscreen: ${attempt} failed: ${error}`);
 }
 
+function isHotCorner(actor) {
+    const manager = Main.layoutManager.hotCornerManager;
+    if (!manager)
+        return false;
+
+    return Object.values(manager.corners).some(corner => corner && corner.actor === actor);
+}
+
+function shouldSkip(child, skip) {
+    if (!skip)
+        return false;
+
+    try {
+        return !isHotCorner(child);
+    } catch (e) {
+        // Called on every visibility update: log once, then let Cinnamon hide as usual.
+        if (!lookupFailureLogged) {
+            lookupFailureLogged = true;
+            logFailure('finding the hot corners (they keep the stock behaviour)', e);
+        }
+        return true;
+    }
+}
+
+function refreshVisibility() {
+    Main.layoutManager._chrome._updateVisibility();
+}
+
 function enable() {
-    if (originalUpdate)
+    if (patchedGroup)
         return;
 
-    originalUpdate = HotCorner.HotCornerManager.prototype.update;
-    HotCorner.HotCornerManager.prototype.update = function (...args) {
-        const result = originalUpdate.apply(this, args);
-        try {
-            setCornersVisibleInFullscreen(this, true);
-        } catch (e) {
-            logFailure('flagging the rebuilt corners (they keep the stock behaviour)', e);
-        }
-        return result;
+    const uiGroup = Main.uiGroup;
+    const originalSetSkipPaint = uiGroup.set_skip_paint;
+    // An own property shadows UiActor's method for every caller, signal handlers included.
+    uiGroup.set_skip_paint = function (child, skip) {
+        return originalSetSkipPaint.call(this, child, shouldSkip(child, skip));
     };
+    patchedGroup = uiGroup;
+    lookupFailureLogged = false;
     try {
-        setCornersVisibleInFullscreen(Main.layoutManager.hotCornerManager, true);
+        refreshVisibility();
     } catch (e) {
-        HotCorner.HotCornerManager.prototype.update = originalUpdate;
-        originalUpdate = null;
+        delete uiGroup.set_skip_paint;
+        patchedGroup = null;
         logFailure('enable (stock behaviour kept)', e);
     }
 }
 
 function disable() {
-    if (!originalUpdate)
+    if (!patchedGroup)
         return;
 
-    HotCorner.HotCornerManager.prototype.update = originalUpdate;
-    originalUpdate = null;
+    delete patchedGroup.set_skip_paint;
+    patchedGroup = null;
     try {
-        setCornersVisibleInFullscreen(Main.layoutManager.hotCornerManager, false);
+        refreshVisibility();
     } catch (e) {
         logFailure('disable', e);
     }

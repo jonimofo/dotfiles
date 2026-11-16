@@ -1,6 +1,6 @@
 // Logic tests of hotCornerFullscreen.js (scale-wheel-switch@bgi), run by
-// cinnamon-hot-corner-test.sh. Cinnamon's layout chrome and HotCornerManager are fakes:
-// no running Cinnamon is touched.
+// cinnamon-hot-corner-test.sh. Cinnamon's uiGroup, layout chrome and HotCornerManager are
+// fakes: no running Cinnamon is touched.
 // Usage: gjs cinnamon-hot-corner-test.js <extension folder>
 const GLib = imports.gi.GLib;
 const ByteArray = imports.byteArray;
@@ -17,42 +17,67 @@ function check(label, condition) {
         failures++;
 }
 
-// Cinnamon's chrome: tracked actor params, and how often visibility was recomputed.
-const chrome = {
-    params: new Map(),
-    visibilityUpdates: 0,
-    track(actor) {
-        this.params.set(actor, { visibleInFullscreen: false });
-    },
-    modifyActorParams(actor, params) {
-        if (!this.params.has(actor))
-            throw new Error('could not find actor in chrome');
-        Object.assign(this.params.get(actor), params);
-    },
-    _updateVisibility() {
-        this.visibilityUpdates++;
-    },
-};
+function noThrow(action) {
+    try {
+        action();
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
 
-// Cinnamon's HotCornerManager: update() destroys the corners and creates new ones.
-let nextActorId = 0;
-class FakeHotCornerManager {
+// Cinnamon's UiActor: set_skip_paint lives on the prototype, the skipped set on the instance.
+class FakeUiGroup {
     constructor() {
+        this.skipped = new Set();
+        this.setSkipPaintCalls = 0;
+    }
+
+    set_skip_paint(child, skip) {
+        this.setSkipPaintCalls++;
+        if (skip)
+            this.skipped.add(child);
+        else
+            this.skipped.delete(child);
+    }
+
+    get_skip_paint(child) {
+        return this.skipped.has(child);
+    }
+}
+
+// layout.js _updateVisibility, both paths reduced to their effect: over a fullscreen
+// window, chrome is hidden through Main.uiGroup.set_skip_paint (as Cinnamon calls it).
+function makeChrome(main) {
+    return {
+        tracked: new Set(),
+        fullscreen: true,
+        broken: false,
+        _updateVisibility() {
+            if (this.broken)
+                throw new Error('_updateVisibility is gone');
+            for (const actor of this.tracked)
+                main.uiGroup.set_skip_paint(actor, this.fullscreen);
+        },
+    };
+}
+
+// Cinnamon's HotCornerManager: update() destroys the corners and creates new actors.
+class FakeHotCornerManager {
+    constructor(chrome) {
+        this.chrome = chrome;
         this.corners = {};
-        this.updateCalls = 0;
     }
 
     update() {
-        this.updateCalls++;
-        this.corners = { 0: { actor: { id: nextActorId++ } }, 1: undefined };
-        chrome.track(this.corners[0].actor);
-        return 'original result';
+        for (const corner of Object.values(this.corners)) {
+            if (corner)
+                this.chrome.tracked.delete(corner.actor);
+        }
+        this.corners = { 0: { actor: { name: 'corner' } }, 1: undefined };
+        this.chrome.tracked.add(this.corners[0].actor);
     }
 }
-const originalUpdate = FakeHotCornerManager.prototype.update;
-
-const main = { layoutManager: { _chrome: chrome, hotCornerManager: null } };
-const extensionImports = { ui: { main, hotCorner: { HotCornerManager: FakeHotCornerManager } } };
 
 function readText(path) {
     return ByteArray.toString(GLib.file_get_contents(path)[1]);
@@ -65,112 +90,96 @@ function load(name, moduleImports) {
     return new Function('imports', `${source}\nreturn { ${names.join(', ')} };`)(moduleImports);
 }
 
-function visibleInFullscreen(manager) {
-    return chrome.params.get(manager.corners[0].actor).visibleInFullscreen;
+function setUp() {
+    const main = { uiGroup: new FakeUiGroup(), layoutManager: {} };
+    const chrome = makeChrome(main);
+    const manager = new FakeHotCornerManager(chrome);
+    manager.update();
+    const panel = { name: 'panel' };
+    chrome.tracked.add(panel);
+    main.layoutManager._chrome = chrome;
+    main.layoutManager.hotCornerManager = manager;
+    const module = load('hotCornerFullscreen', { ui: { main } });
+    return { main, chrome, manager, panel, module };
 }
 
-const HotCornerFullscreen = load('hotCornerFullscreen', extensionImports);
-const manager = new FakeHotCornerManager();
-manager.update();
-main.layoutManager.hotCornerManager = manager;
-
-HotCornerFullscreen.enable();
-check('enable marks the existing corner visible in fullscreen', visibleInFullscreen(manager) === true);
-check('enable recomputes the chrome visibility', chrome.visibilityUpdates === 1);
-
-const visibilityUpdatesBeforeRebuild = chrome.visibilityUpdates;
-const result = manager.update();
-check('a rebuilt corner is visible in fullscreen too', visibleInFullscreen(manager) === true);
-check('a rebuild recomputes the chrome visibility', chrome.visibilityUpdates === visibilityUpdatesBeforeRebuild + 1);
-check('the patched update returns the original result', result === 'original result');
-check('the patched update runs the original once', manager.updateCalls === 2);
-
-HotCornerFullscreen.enable();
-manager.update();
-check('a second enable does not wrap update twice', manager.updateCalls === 3);
-
-HotCornerFullscreen.disable();
-check('disable restores the original update', FakeHotCornerManager.prototype.update === originalUpdate);
-check('disable gives the corner back to stock fullscreen hiding', visibleInFullscreen(manager) === false);
-
-manager.update();
-check('after disable a rebuilt corner keeps stock behaviour', visibleInFullscreen(manager) === false);
-
-let secondDisableError = null;
-try {
-    HotCornerFullscreen.disable();
-} catch (e) {
-    secondDisableError = e;
+function cornerHidden(env) {
+    return env.main.uiGroup.get_skip_paint(env.manager.corners[0].actor);
 }
-check('a second disable is a no-op', secondDisableError === null);
 
-main.layoutManager.hotCornerManager = null;
-let noManagerError = null;
-try {
-    HotCornerFullscreen.enable();
-    HotCornerFullscreen.disable();
-} catch (e) {
-    noManagerError = e;
-}
-check('enable and disable work before the manager exists', noManagerError === null);
+// Normal and modal visibility updates.
+let env = setUp();
+env.chrome._updateVisibility();
+check('stock: the corner is hidden over a fullscreen window', cornerHidden(env));
 
-// Cinnamon internals renamed or broken: the module logs and keeps the stock behaviour.
-const brokenChrome = {
-    modifyActorParams() {
-        throw new Error('modifyActorParams is gone');
-    },
-    _updateVisibility() {},
-};
-class BrokenHotCornerManager extends FakeHotCornerManager {}
-BrokenHotCornerManager.prototype.update = function () {
-    this.corners = { 0: { actor: {} } };
-    return 'broken result';
-};
-const brokenOriginalUpdate = BrokenHotCornerManager.prototype.update;
-const brokenMain = { layoutManager: { _chrome: brokenChrome, hotCornerManager: null } };
-const BrokenModule = load('hotCornerFullscreen',
-    { ui: { main: brokenMain, hotCorner: { HotCornerManager: BrokenHotCornerManager } } });
-const brokenManager = new BrokenHotCornerManager();
-brokenManager.update();
-brokenMain.layoutManager.hotCornerManager = brokenManager;
+env.module.enable();
+check('enable shows the corner again over a fullscreen window', !cornerHidden(env));
+check('other chrome is still hidden over a fullscreen window', env.main.uiGroup.get_skip_paint(env.panel));
 
-let enableError = null;
+env.chrome._updateVisibility();
+check('a later visibility update (modal, Scale open) keeps the corner shown', !cornerHidden(env));
+
+env.main.uiGroup.set_skip_paint(env.manager.corners[0].actor, true);
+check('a direct hide request on the corner is refused', !cornerHidden(env));
+
+env.manager.update();
+env.chrome._updateVisibility();
+check('a rebuilt corner (new actor) is protected too', !cornerHidden(env));
+
+env.chrome.fullscreen = false;
+env.chrome._updateVisibility();
+check('without fullscreen the corner and other chrome are shown',
+    !cornerHidden(env) && !env.main.uiGroup.get_skip_paint(env.panel));
+env.chrome.fullscreen = true;
+
+const callsBefore = env.main.uiGroup.setSkipPaintCalls;
+env.module.enable();
+env.main.uiGroup.set_skip_paint(env.panel, true);
+check('a second enable does not wrap set_skip_paint twice', env.main.uiGroup.setSkipPaintCalls === callsBefore + 1);
+
+env.module.disable();
+check('disable removes the override', !Object.prototype.hasOwnProperty.call(env.main.uiGroup, 'set_skip_paint'));
+check('disable gives the corner back to stock fullscreen hiding', cornerHidden(env));
+check('a second disable is a no-op', noThrow(() => env.module.disable()));
+check('no error was logged on the normal path', loggedErrors.length === 0);
+
+// No hot corner manager yet.
+env = setUp();
+env.main.layoutManager.hotCornerManager = null;
+check('enable and disable work before the manager exists', noThrow(() => {
+    env.module.enable();
+    env.main.uiGroup.set_skip_paint(env.panel, true);
+    env.module.disable();
+}));
+
+// Cinnamon internals renamed or broken: log, keep the stock behaviour, never throw.
+env = setUp();
+env.chrome.broken = true;
 loggedErrors.length = 0;
-try {
-    BrokenModule.enable();
-} catch (e) {
-    enableError = e;
-}
-check('a failing enable does not throw (the other modules keep running)', enableError === null);
-check('a failing enable logs what failed', loggedErrors.length === 1 && loggedErrors[0].includes('enable (stock behaviour kept)') && loggedErrors[0].includes('modifyActorParams is gone'));
-check('a failing enable leaves the original update', BrokenHotCornerManager.prototype.update === brokenOriginalUpdate);
+check('a failing enable does not throw (the other modules keep running)', noThrow(() => env.module.enable()));
+check('a failing enable logs what failed',
+    loggedErrors.length === 1 && loggedErrors[0].includes('enable (stock behaviour kept)') && loggedErrors[0].includes('_updateVisibility is gone'));
+check('a failing enable leaves no override', !Object.prototype.hasOwnProperty.call(env.main.uiGroup, 'set_skip_paint'));
 
-// Enable works, then a later rebuild hits the broken internals.
-brokenMain.layoutManager.hotCornerManager = null;
-BrokenModule.enable();
-let rebuildError = null;
-let rebuildResult = null;
+env = setUp();
+env.module.enable();
+Object.defineProperty(env.manager, 'corners', { get: () => { throw new Error('corners is gone'); } });
 loggedErrors.length = 0;
-try {
-    rebuildResult = brokenManager.update();
-} catch (e) {
-    rebuildError = e;
-}
-check('a failing rebuild does not throw into Cinnamon', rebuildError === null);
-check('a failing rebuild still returns the original result', rebuildResult === 'broken result');
-check('a failing rebuild logs what failed', loggedErrors.length === 1 && loggedErrors[0].includes('flagging the rebuilt corners'));
+const lookupOk = noThrow(() => {
+    env.chrome._updateVisibility();
+    env.chrome._updateVisibility();
+});
+check('a failing corner lookup does not throw into Cinnamon', lookupOk);
+check('a failing corner lookup lets Cinnamon hide as usual', env.main.uiGroup.get_skip_paint(env.panel));
+check('a failing corner lookup is logged once', loggedErrors.length === 1 && loggedErrors[0].includes('finding the hot corners'));
 
-brokenMain.layoutManager.hotCornerManager = brokenManager;
-let disableError = null;
+env = setUp();
+env.module.enable();
+env.chrome.broken = true;
 loggedErrors.length = 0;
-try {
-    BrokenModule.disable();
-} catch (e) {
-    disableError = e;
-}
-check('a failing disable does not throw', disableError === null);
+check('a failing disable does not throw', noThrow(() => env.module.disable()));
 check('a failing disable logs what failed', loggedErrors.length === 1 && loggedErrors[0].includes('disable failed'));
-check('a failing disable still restores the original update', BrokenHotCornerManager.prototype.update === brokenOriginalUpdate);
+check('a failing disable still removes the override', !Object.prototype.hasOwnProperty.call(env.main.uiGroup, 'set_skip_paint'));
 
 if (failures > 0) {
     print(`${failures} failure(s)`);

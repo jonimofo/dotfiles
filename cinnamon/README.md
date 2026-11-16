@@ -215,27 +215,50 @@ Assumptions about behaviour:
 
 ## Quick Settings: what it does
 
-One button on the panel. Its icons, left to right: Wi-Fi, Bluetooth (only while the adapter
-is on), VPN (only while a NetworkManager VPN or NordVPN is up), volume. A click opens the menu:
+One button on the panel. Its icons, left to right: Wi-Fi, VPN (only while a NetworkManager
+VPN or NordVPN is up), Bluetooth (only while the adapter is on; struck through while airplane
+mode is on), volume, then the battery
+icon and level, like `87%` (only with a battery). The VPN icon is followed by the name of
+the VPN that is up: NordVPN's country, or the NetworkManager profile's name; with both up,
+`<country> + <profile>`. The Bluetooth icon is followed by the connected device's name; with
+several connected, the first in alphabetical order and `+N` for the others (`Headset +1`);
+nothing after it while none is connected. A name longer than 16 characters is cut with `…`. A click opens
+the menu:
 
 - Header: battery level and charging state on the left (hidden without a battery), then
   four round buttons. Screenshot starts `flameshot gui`, Settings opens System Settings,
   Lock locks the screen, Power opens Cinnamon's end-session dialog (suspend, restart, shut
   down). Each closes the menu first.
-- Sliders: Sound (default output), Microphone (default input), Brightness. Sound and
+- Sliders: Sound (default output), Microphone (default input), Brightness, Warmth. Sound and
   Microphone follow the handle live, like the stock sound applet. Brightness sets every
   external monitor that answers DDC/CI to the same value when the handle is released, or
-  the laptop panel when no such monitor is connected.
+  the laptop panel when no such monitor is connected. Warmth is the Night Light
+  temperature, 6500 K (no tint) on the left to 1000 K (deepest red) on the right in steps
+  of 100 K, wider than Cinnamon's Night Light page (1700 K to 4700 K), shown as `3400 K`;
+  a value set elsewhere outside that range is shown as is, the handle at the nearest end.
+  The switch at its right end turns Night Light on and off; while it is off the slider is
+  dimmed.
 - Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
   - Wi-Fi: wireless on or off. Shows the network in use.
-  - Bluetooth: adapter on or off. Shows the device when exactly one is connected.
+  - Bluetooth: adapter on or off. Shows the connected device's name, with `+N` when several
+    are connected (same name as on the panel).
   - VPN: the active NetworkManager VPN or WireGuard profile, else the last used one. Shows
     its name.
   - NordVPN: connect (quick connect) or disconnect. Shows the country while connected.
   - Power profile: shows the active profile. A click goes back to Balanced, or from
     Balanced to the last other profile used (Power Saver the first time).
-  - Night Light, Dark style, Do Not Disturb (notifications off), Keep awake (no screen
-    blanking or dimming), Mic mute.
+  - Airplane mode: a click turns Wi-Fi and Bluetooth off; a second click turns back on the
+    ones that were on. Turning one back on by hand ends airplane mode. While it is on, the
+    panel shows Wi-Fi and Bluetooth struck through instead of hiding Bluetooth.
+  - Keyboard light: a click goes to the next backlight level, back to off after the
+    brightest, through UPower. Shows the level: Off, Low, High for a two-level light (On
+    for a one-level light, Medium above half on a light with more levels). Follows the
+    keyboard's own hotkey. Dimmed without a keyboard backlight.
+  - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
+    dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
+- CPU line, under the tiles: the process using the most CPU and its share, like
+  `CPU  php 212%` (per core, as `top` counts: 212% is a bit over two cores). Read each time
+  the menu opens, with `top` over half a second, never in the background.
 - '>' on a tile or a slider opens its list under that row, in the menu: networks, paired
   devices, VPN profiles, NordVPN countries, power profiles, output and input devices. The
   active entry has a check mark; a click switches to that entry. The last entry opens the
@@ -251,14 +274,21 @@ does what you need: right-click each > Remove from panel.
 
 Right-click the button > Configure... Four tabs, Tiles, Sliders, Header and Panel, each a
 list with a Show checkbox per row. Move up and Move down change the order. Changes apply at
-once, without a reload.
+once, without a reload. An element added in a later version appears in a saved list, shown,
+just before the first element that follows it in the default order, or at the end. The
+applet writes that list back to its settings when it loads, so the dialog lists the new
+element too; an element no longer declared is dropped the same way.
 
 - The battery stays on the left of the header; the order applies to the buttons.
+- The Tiles tab ends with the CPU line: its checkbox shows or hides it, its place in the
+  list does not move it from under the tiles.
 - With every panel icon hidden or absent, one settings icon keeps the button on the panel.
   A checkbox can hide an icon, never show one its state hides.
 - Add, Remove and Edit come with the stock list and cannot be hidden. Edit only picks a
   name from the list; an added row repeating an element is ignored; a removed element comes
-  back at the end, shown. An emptied list shows everything again.
+  back at once at its default place (just before the first element that follows it in the
+  default order, else at the end), shown, and the list is saved that way. An emptied list
+  shows everything again, in the default order.
 
 The tabs and their defaults come from the ordered lists in
 `applets/quick-settings@bgi/constants.js`. After changing one of them, generate the schema
@@ -309,6 +339,8 @@ or does nothing, and the reason goes to the journal once:
 | `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed and shown off, no VPN panel icon from NordVPN |
 | `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
 | `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
+| `top` (procps) | CPU line | the line shows `CPU` alone, the failure goes to the journal |
+| UPower with a keyboard backlight | Keyboard light tile | tile dimmed |
 
 NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon and the session
 manager come with the desktop.
@@ -328,9 +360,19 @@ manager come with the desktop.
   no click.
 - An unavailable tile or row keeps its label readable; only its icon and background dim.
 - The hover and list tints are white overlays that suit dark themes: issue #35.
+- Airplane mode is not kept across a reload of the applet: after one, the tile starts
+  unchecked and a click turns the radios off again.
 - A size changed in `stylesheet.css` shows after the next login.
 - NordVPN's own NetworkManager connection (interface `nordlynx`) is left out of the VPN
-  tile; it was only checked while NordVPN was disconnected.
+  tile. Its going up or down (NordVPN connected or disconnected from a terminal or NordVPN's
+  own app) triggers one `nordvpn status` read, so the VPN name on the panel follows. With
+  NordVPN's OpenVPN technology no such link exists in NetworkManager: the panel then
+  follows only when the menu opens.
+- A Warmth above 4700 K may be set back to 4700 K when Cinnamon Settings > Night Light is
+  opened. Verified by reading the page's code only (`cs_nightlight.py` and the xapp `Range`
+  widget: a 1700 K to 4700 K scale bound to the key, whose clamped value is written back
+  300 ms after it changes); not tried on screen, since that would change the setting. A
+  value below 1700 K is not affected by that path.
 
 ## Quick Settings: tests
 
@@ -350,9 +392,13 @@ Prerequisites: `node` and `jq` for the check, `gjs` with the libnm and Cvc typel
 logic tests.
 
 `cinnamon-quick-settings-test.sh` runs on the memory GSettings backend and on fakes: fake
-NetworkManager objects (Wi-Fi, VPN), a fake system bus (BlueZ, power profiles), a fake
-session bus (Keep awake), fake Cvc streams, and fake ddcutil and nordvpn commands fed with
-output captured on this machine (`scripts/fixtures/`). It never talks to the real
-NetworkManager, BlueZ or session manager.
+NetworkManager objects (Wi-Fi, VPN), a fake system bus (BlueZ, power profiles, UPower's
+keyboard backlight), a fake session bus (Keep awake), fake Cvc streams, fake radios
+(Airplane mode), and fake ddcutil, nordvpn and top commands fed with output captured on
+this machine (`scripts/fixtures/`, `top` in English and with French headers). One check
+runs the real `top` under `LC_ALL=C`, read only. It never talks to the real
+NetworkManager, BlueZ, UPower or session manager.
 
-Design record: [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md).
+Design records:
+[`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md),
+[`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md).

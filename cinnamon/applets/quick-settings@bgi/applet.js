@@ -11,7 +11,10 @@ const PanelIcons = require('./panelIcons');
 const MenuContent = require('./menuContent');
 const WifiState = require('./wifiState');
 const NmClient = require('./nmClient');
-const DarkStyleState = require('./darkStyleState');
+const StringSetting = require('./stringSetting');
+const KbdBacklight = require('./kbdBacklight');
+const KbdBacklightModel = require('./kbdBacklightModel');
+const AirplaneMode = require('./airplaneMode');
 const Brightness = require('./brightness');
 const DdcBrightness = require('./ddcBrightness');
 const ScreenBrightness = require('./screenBrightness');
@@ -21,15 +24,19 @@ const VolumeMapping = require('./volumeMapping');
 const Bluetooth = require('./bluetooth');
 const BluetoothModel = require('./bluetoothModel');
 const VpnState = require('./vpnState');
+const VpnModel = require('./vpnModel');
 const Nordvpn = require('./nordvpn');
 const ListSpecs = require('./listSpecs');
 const Battery = require('./battery');
 const BooleanSetting = require('./booleanSetting');
+const NightLight = require('./nightLight');
+const WarmthModel = require('./warmthModel');
 const KeepAwake = require('./keepAwake');
 const PowerProfiles = require('./powerProfiles');
 const PowerProfileModel = require('./powerProfileModel');
 const Settings = imports.ui.settings;
 const LayoutModel = require('./layoutModel');
+const TopProcess = require('./topProcess');
 
 class QuickSettingsApplet extends Applet.Applet {
     constructor(metadata, orientation, panelHeight, instanceId) {
@@ -53,6 +60,8 @@ class QuickSettingsApplet extends Applet.Applet {
                     this._brightness.refresh();
                 if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'nordvpn'))
                     this._nordvpn.refresh();
+                if (this._isShown(Constants.LAYOUT_KEYS.tiles, Constants.CPU_LINE_ID))
+                    this._topProcess.refresh();
             } else {
                 this._content.lists.close();
             }
@@ -63,20 +72,20 @@ class QuickSettingsApplet extends Applet.Applet {
         this._requestNmClient = (cancellable, onReady) => this._nmClient.request(cancellable, onReady);
         this._setUpWifi();
 
-        this._darkStyleTile = this._content.tiles['dark-style'];
-        this._darkStyle = new DarkStyleState.DarkStyleState(() => this._syncDarkStyle());
-        this._darkStyleTile.setOnToggle(() => this._darkStyle.toggle());
-        this._syncDarkStyle();
-
         this._setUpBrightness();
         this._setUpVolume();
         this._setUpBluetooth();
+        this._setUpAirplaneMode();
         this._setUpVpn();
         this._setUpNordvpn();
         this._setUpPowerProfile();
         this._setUpSettingTiles();
+        this._setUpNightLight();
         this._setUpKeepAwake();
+        this._setUpKeyboardLight();
         this._setUpMicMute();
+        this._topProcess = new TopProcess.TopProcess(Subprocess.runCommand,
+            () => this._content.setTopProcess(this._topProcess.process));
         this._setUpHeader();
         this._setUpLayoutSettings(metadata.uuid, instanceId);
     }
@@ -109,6 +118,8 @@ class QuickSettingsApplet extends Applet.Applet {
         this._wifi.destroy();
         this._nmClient.destroy();
         this._darkStyle.destroy();
+        this._keyboardLight.destroy();
+        this._topProcess.destroy();
         this._content.destroy();
         this.menu.destroy();
     }
@@ -154,6 +165,7 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setLabel(ssid || tile.defaultLabel);
         this._panelIcons.setWifiEnabled(enabled);
         this._content.lists.refresh('wifi');
+        this._syncAirplaneMode();
     }
 
     _setUpBluetooth() {
@@ -175,12 +187,13 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setChecked(summary.powered);
         tile.setIconName(summary.powered ? Constants.BLUETOOTH_ON_ICON : Constants.BLUETOOTH_OFF_ICON);
         tile.setLabel(BluetoothModel.tileLabel(summary, tile.defaultLabel));
-        this._panelIcons.setBluetoothIconName(BluetoothModel.panelIconName(summary));
         this._content.lists.refresh('bluetooth');
+        this._syncAirplaneMode();
     }
 
     _setUpVpn() {
         const tile = this._content.tiles.vpn;
+        this._nordvpnLinkUp = null;
         this._vpn = new VpnState.VpnState(() => this._syncVpn(), this._requestNmClient);
         tile.setOnToggle(() => this._vpn.toggle());
         this._registerList('vpn', tile, () => this._tileAnchor('vpn'),
@@ -197,6 +210,7 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setAvailable(summary.available);
         tile.setChecked(summary.active !== null);
         tile.setLabel(summary.label);
+        this._refreshNordvpnOnLinkChange();
         this._syncVpnPanelIcon();
         this._content.lists.refresh('vpn');
     }
@@ -226,10 +240,22 @@ class QuickSettingsApplet extends Applet.Applet {
         this._content.lists.refresh('nordvpn');
     }
 
+    // NordVPN connected or disconnected elsewhere (a terminal, its own app) brings its
+    // NordLynx link up or down in NetworkManager: one status read then, no polling.
+    _refreshNordvpnOnLinkChange() {
+        const linkUp = this._vpn.nordvpnLinkUp;
+        const changed = this._nordvpnLinkUp !== null && linkUp !== this._nordvpnLinkUp;
+        this._nordvpnLinkUp = linkUp;
+        if (changed && this._nordvpn && this._isShown(Constants.LAYOUT_KEYS.tiles, 'nordvpn'))
+            this._nordvpn.refresh();
+    }
+
     _syncVpnPanelIcon() {
-        const vpnUp = Boolean(this._vpn && this._vpn.summary.active);
+        const active = this._vpn ? this._vpn.summary.active : null;
+        const country = this._nordvpn ? this._nordvpn.connectedCountry : null;
         const nordvpnUp = Boolean(this._nordvpn && this._nordvpn.status.connected);
-        this._panelIcons.setVpnVisible(vpnUp || nordvpnUp);
+        this._panelIcons.setVpn(Boolean(active) || nordvpnUp,
+            VpnModel.panelName(country, active ? active.id : null));
     }
 
     _openSettings(argv) {
@@ -263,18 +289,40 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     _setUpSettingTiles() {
-        this._nightLight = this._wireSettingTile('night-light',
-            Constants.NIGHT_LIGHT_SCHEMA, Constants.NIGHT_LIGHT_KEY, false);
-        this._doNotDisturb = this._wireSettingTile('do-not-disturb',
-            Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, true);
+        this._doNotDisturb = this._wireSettingTile('do-not-disturb', onChange => new BooleanSetting.BooleanSetting(
+            Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, true, onChange));
+        this._darkStyle = this._wireSettingTile('dark-style', onChange => new StringSetting.StringSetting(
+            Constants.DARK_STYLE_SCHEMA, Constants.DARK_STYLE_KEY,
+            { on: Constants.DARK_STYLE_ON, off: Constants.DARK_STYLE_OFF }, onChange));
     }
 
-    _wireSettingTile(tileId, schema, key, inverted) {
+    // @create(onChange): a BooleanSetting or a StringSetting calling onChange on each change.
+    _wireSettingTile(tileId, create) {
         const tile = this._content.tiles[tileId];
-        const setting = new BooleanSetting.BooleanSetting(schema, key, inverted, () => tile.setChecked(setting.enabled));
+        const setting = create(() => tile.setChecked(setting.enabled));
         tile.setOnToggle(() => setting.toggle());
         tile.setChecked(setting.enabled);
         return setting;
+    }
+
+    // The Warmth row's switch turns Night Light on and off; the temperature follows the
+    // handle live, one write per step.
+    _setUpNightLight() {
+        const row = this._content.sliders.warmth;
+        this._nightLight = new NightLight.NightLight(() => this._syncNightLight());
+        row.setOnSwitch(() => this._nightLight.toggle());
+        row.onLiveChange(value => this._nightLight.setTemperature(WarmthModel.fractionToKelvin(value)));
+        this._syncNightLight();
+    }
+
+    // Night Light off: the Warmth slider is dimmed and inert, the switch stays usable.
+    _syncNightLight() {
+        const state = WarmthModel.rowState(this._nightLight.enabled, this._nightLight.temperature);
+        const row = this._content.sliders.warmth;
+        row.setAvailable(state.available);
+        row.setSwitchState(state.switchOn);
+        row.showValue(state.fraction);
+        row.setValueText(state.text);
     }
 
     _setUpKeepAwake() {
@@ -285,6 +333,54 @@ class QuickSettingsApplet extends Applet.Applet {
         });
         tile.setOnToggle(() => this._keepAwake.toggle());
         tile.setAvailable(false);
+    }
+
+    // A click goes one level up, back to off after the brightest.
+    _setUpKeyboardLight() {
+        const tile = this._content.tiles['keyboard-light'];
+        this._keyboardLight = new KbdBacklight.KbdBacklight(() => {
+            const light = this._keyboardLight;
+            tile.setAvailable(light.available);
+            tile.setChecked(light.level > 0);
+            tile.setLabel(KbdBacklightModel.tileLabel(tile.defaultLabel, light.level, light.max));
+        });
+        tile.setOnToggle(() => this._keyboardLight.cycle());
+        tile.setAvailable(false);
+    }
+
+    // Wi-Fi and Bluetooth through their own tiles' code; checked while airplane mode is on.
+    _setUpAirplaneMode() {
+        const tile = this._content.tiles['airplane-mode'];
+        this._airplaneMode = new AirplaneMode.AirplaneMode([
+            { isOn: () => this._wifi.enabled, setOn: (on, onFailed) => this._wifi.setEnabled(on, onFailed) },
+            { isOn: () => this._bluetooth.summary.powered, setOn: (on, onFailed) => this._bluetooth.setPowered(on, onFailed) },
+        ], () => this._syncAirplaneMode());
+        tile.setOnToggle(() => {
+            this._airplaneMode.toggle();
+            this._syncAirplaneMode();
+        });
+        this._syncAirplaneMode();
+    }
+
+    // Runs on every Wi-Fi and Bluetooth change, also before airplane mode is set up. The
+    // Bluetooth panel item follows both, so it is drawn here.
+    _syncAirplaneMode() {
+        if (this._airplaneMode) {
+            const tile = this._content.tiles['airplane-mode'];
+            this._airplaneMode.sync();
+            tile.setAvailable(this._wifi.available || this._bluetooth.summary.available);
+            tile.setChecked(this._airplaneMode.active);
+        }
+        this._syncBluetoothPanel();
+    }
+
+    // Struck through while airplane mode holds the adapter off, hidden while it is off otherwise.
+    _syncBluetoothPanel() {
+        if (!this._bluetooth)
+            return;
+        const summary = this._bluetooth.summary;
+        const airplaneActive = Boolean(this._airplaneMode && this._airplaneMode.active);
+        this._panelIcons.setBluetooth(BluetoothModel.panelIconName(summary, airplaneActive), BluetoothModel.deviceName(summary));
     }
 
     // Same stream as the Microphone row: dimmed while there is no source.
@@ -305,7 +401,11 @@ class QuickSettingsApplet extends Applet.Applet {
     // Each button closes the menu first, then acts as the stock applets do.
     _setUpHeader() {
         const header = this._content.header;
-        this._battery = new Battery.Battery(battery => header.setBattery(battery));
+        // One battery read for the header figure and the panel level.
+        this._battery = new Battery.Battery(battery => {
+            header.setBattery(battery);
+            this._panelIcons.setBattery(battery);
+        });
         header.setOnButton('screenshot', () => this._closeThen(() => Util.spawn(Constants.SCREENSHOT_COMMAND)));
         header.setOnButton('settings', () => this._closeThen(() => Util.spawn(Constants.SYSTEM_SETTINGS_COMMAND)));
         header.setOnButton('lock', () => this._closeThen(() => this._lockScreen()));
@@ -320,13 +420,26 @@ class QuickSettingsApplet extends Applet.Applet {
         this._nordvpnShown = false;
         this.settings = new Settings.AppletSettings(this._layout, uuid, instanceId);
         for (const key of Object.values(Constants.LAYOUT_KEYS))
-            this.settings.bind(key, key, () => this._applyLayout());
+            this.settings.bind(key, key, () => this._onLayoutSettingChanged());
+        this._onLayoutSettingChanged();
+    }
+
+    _onLayoutSettingChanged() {
+        this._writeBackLayouts();
         this._applyLayout();
+    }
+
+    // A list saved by an older version lacks the new elements (or holds removed ones): it is
+    // written back normalized, so the dialog lists every element. setValue() saves the file
+    // without calling the bind callback; a later settings change finds nothing to write.
+    _writeBackLayouts() {
+        for (const key of Object.values(Constants.LAYOUT_KEYS))
+            LayoutModel.writeBackLayout(this.settings, key, this._declared(key));
     }
 
     _declared(key) {
         return {
-            [Constants.LAYOUT_KEYS.tiles]: Constants.TILES,
+            [Constants.LAYOUT_KEYS.tiles]: Constants.TILE_LAYOUT_ITEMS,
             [Constants.LAYOUT_KEYS.sliders]: Constants.SLIDERS,
             [Constants.LAYOUT_KEYS.header]: Constants.HEADER_ITEMS,
             [Constants.LAYOUT_KEYS.panelIcons]: Constants.PANEL_ICON_ITEMS,
@@ -429,10 +542,6 @@ class QuickSettingsApplet extends Applet.Applet {
                     openSettings: () => this._openSettings(Constants.SETTINGS_COMMANDS.sound),
                 }));
         }
-    }
-
-    _syncDarkStyle() {
-        this._darkStyleTile.setChecked(this._darkStyle.enabled);
     }
 }
 

@@ -3,7 +3,10 @@
 // (no test touches the real NetworkManager); brightness runs against fake ddcutil
 // and laptop backends fed with captured ddcutil output; NordVPN runs against a fake client
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
-// models run on plain data; Night Light and Do Not Disturb run on the memory GSettings backend.
+// models run on plain data; Night Light (the Warmth row) and Do Not Disturb run on the
+// memory GSettings backend; the keyboard light runs on a fake UPower bus; Airplane mode on
+// fake radios and on the Wi-Fi and Bluetooth fakes; the CPU line parser on captured top
+// output.
 // No real setting is changed.
 // Usage: GSETTINGS_BACKEND=memory gjs cinnamon-quick-settings-test.js <applet folder> <fixtures folder>
 const GLib = imports.gi.GLib;
@@ -22,6 +25,7 @@ const [appletDir, fixturesRoot] = ARGV;
 const fixturesDir = `${fixturesRoot}/ddcutil`;
 const nordvpnFixtures = `${fixturesRoot}/nordvpn`;
 const powerFixtures = `${fixturesRoot}/power`;
+const topFixtures = `${fixturesRoot}/top`;
 const SCROLL_DELAY_MS = 30;
 const VOLUME_NORM = 65536;
 let failures = 0;
@@ -54,6 +58,16 @@ function load(name) {
     return modules[file];
 }
 
+// The message of what @call throws, or null.
+function thrownBy(call) {
+    try {
+        call();
+        return null;
+    } catch (e) {
+        return e.message;
+    }
+}
+
 function check(label, condition) {
     print(`${condition ? 'PASS' : 'FAIL'} ${label}`);
     if (!condition)
@@ -81,11 +95,12 @@ class FakeSlider {
 Signals.addSignalMethods(FakeSlider.prototype);
 
 async function testDarkStyle() {
-    const Dark = load('./darkStyleState');
+    const StringSetting = load('./stringSetting');
     const settings = new Gio.Settings({ schema_id: 'org.x.apps.portal' });
     settings.set_string('color-scheme', 'prefer-dark');
     let changes = 0;
-    const dark = new Dark.DarkStyleState(() => changes++);
+    const dark = new StringSetting.StringSetting('org.x.apps.portal', 'color-scheme',
+        { on: 'prefer-dark', off: 'default' }, () => changes++);
     check('dark: prefer-dark reads as on', dark.enabled === true);
     dark.toggle();
     check('dark: toggle off writes default', settings.get_string('color-scheme') === 'default' && !dark.enabled);
@@ -451,6 +466,38 @@ function testBluetoothModel() {
     const off = Model.summarize([{ path: adapter, powered: false }], devices);
     check('bluetooth: adapter off hides the panel icon', Model.panelIconName(off) === null && Model.tileLabel(off, 'Bluetooth') === 'Bluetooth');
     check('bluetooth: no adapter means unavailable', Model.summarize([], devices).available === false);
+    check('bluetooth: airplane mode with the adapter off shows the struck-through panel icon, no name',
+        Model.panelIconName(off, true) === 'bluetooth-disabled-symbolic' && Model.deviceName(off) === null);
+    check('bluetooth: airplane mode off, adapter off still hides the panel icon', Model.panelIconName(off, false) === null);
+    check('bluetooth: adapter on, the airplane flag changes nothing',
+        Model.panelIconName(on, true) === 'bluetooth-active-symbolic' && Model.panelIconName(idle, true) === 'bluetooth-symbolic');
+    const PanelModel = load('./layoutModel');
+    check('bluetooth: the Panel-tab Show flag still hides the struck-through icon',
+        !PanelModel.panelIconVisibility(['wifi'], { wifi: true, bluetooth: Model.panelIconName(off, true) !== null }).visible.bluetooth
+        && PanelModel.panelIconVisibility(['bluetooth'], { bluetooth: Model.panelIconName(off, true) !== null }).visible.bluetooth);
+    check('bluetooth: the panel names the connected device, nothing when idle or off',
+        Model.deviceName(on) === 'Speaker' && Model.deviceName(idle) === null && Model.deviceName(off) === null);
+    const pair = [
+        { path: 'm', adapter, name: 'Mouse', icon: 'input-mouse', paired: true, connected: true },
+        { path: 'h', adapter, name: 'Headset', icon: 'audio-headset', paired: true, connected: true },
+    ];
+    const two = Model.summarize([{ path: adapter, powered: true }], pair);
+    const swapped = Model.summarize([{ path: adapter, powered: true }], [...pair].reverse());
+    check(`bluetooth: two devices give the first in alphabetical order and +1 (${Model.deviceName(two)})`,
+        Model.deviceName(two) === 'Headset +1' && Model.deviceName(swapped) === 'Headset +1'
+        && Model.tileLabel(two, 'Bluetooth') === 'Headset +1');
+    const three = Model.summarize([{ path: adapter, powered: true }],
+        [...pair, { path: 'k', adapter, name: 'Keyboard', icon: null, paired: true, connected: true }]);
+    check(`bluetooth: three devices give +2 (${Model.deviceName(three)})`, Model.deviceName(three) === 'Headset +2');
+    const long = Model.summarize([{ path: adapter, powered: true }],
+        [{ path: 'l', adapter, name: 'Wireless Headset Pro', icon: null, paired: true, connected: true }]);
+    check(`bluetooth: a long name is cut like the VPN name (${Model.deviceName(long)})`, Model.deviceName(long) === 'Wireless Headse…');
+    const PanelText = load('./panelText');
+    check('panel text: 16 characters kept, 17 cut to 16 with the ellipsis',
+        PanelText.shortName('Sixteen chars ok') === 'Sixteen chars ok' && PanelText.shortName('Seventeen chars!!') === 'Seventeen chars…'
+        && [...PanelText.shortName('Seventeen chars!!')].length === 16);
+    check('panel text: the count follows the cut first name, none gives null',
+        PanelText.countedName(['Seventeen chars!!', 'Mouse']) === 'Seventeen chars… +1' && PanelText.countedName([]) === null);
 }
 
 function testVpnModel() {
@@ -470,6 +517,17 @@ function testVpnModel() {
     check('vpn: the active profile names the tile and is marked',
         up.label === 'VPN Office' && up.target.id === 'Office' && up.profiles.find(p => p.id === 'Office').active);
     check('vpn: no profile means unavailable', Model.summarize([wifi], []).available === false);
+    check('vpn: NordVPN link up only while its NordLynx connection is active',
+        Model.nordvpnLinkUp([{ id: 'nordlynx', iface: 'nordlynx' }]) && Model.nordvpnLinkUp([{ id: 'x', iface: 'nordlynx' }])
+        && !Model.nordvpnLinkUp([{ id: 'Office', iface: null }]) && !Model.nordvpnLinkUp([]));
+    check('vpn panel: no VPN up, no name', Model.panelName(null, null) === null && Model.panelName('', '') === null);
+    check('vpn panel: NordVPN shows its country', Model.panelName('France', null) === 'France');
+    check('vpn panel: a NetworkManager VPN shows its profile name', Model.panelName(null, 'Office') === 'Office');
+    check(`vpn panel: both up, NordVPN first (${Model.panelName('France', 'Office')})`, Model.panelName('France', 'Office') === 'France + Office');
+    const long = Model.panelName(null, 'Head Office Datacenter');
+    check(`vpn panel: a name over 16 characters is cut with an ellipsis (${long})`,
+        long === 'Head Office Dat…' && [...long].length === 16 && Model.panelName('Bosnia_and_Herzeg', null) === 'Bosnia_and_Herz…');
+    check('vpn panel: a name of exactly 16 characters is kept', Model.panelName(null, 'Sixteen chars ok') === 'Sixteen chars ok');
 }
 
 function testNordvpnParser() {
@@ -605,11 +663,12 @@ async function testBooleanSettings() {
     color.set_boolean('night-light-enabled', true);
     notifications.set_boolean('display-notifications', true);
     let changes = 0;
+    // A key read as is (not inverted): no tile uses one now, any boolean key serves.
     const night = new BooleanSetting.BooleanSetting('org.cinnamon.settings-daemon.plugins.color', 'night-light-enabled', false, () => changes++);
     const dnd = new BooleanSetting.BooleanSetting('org.cinnamon.desktop.notifications', 'display-notifications', true, () => changes++);
-    check('night light: on while the key is true', night.enabled);
+    check('boolean setting: on while the key is true', night.enabled);
     night.toggle();
-    check('night light: toggle writes false', !color.get_boolean('night-light-enabled') && !night.enabled);
+    check('boolean setting: toggle writes false', !color.get_boolean('night-light-enabled') && !night.enabled);
     check('do not disturb: off while notifications are shown', !dnd.enabled);
     dnd.toggle();
     check('do not disturb: toggle turns notifications off', !notifications.get_boolean('display-notifications') && dnd.enabled);
@@ -619,6 +678,358 @@ async function testBooleanSettings() {
     check(`settings tiles: every change notifies (${changes})`, changes >= 3);
     night.destroy();
     dnd.destroy();
+}
+
+function testSettingsWrite() {
+    const GsettingsWrite = load('./gsettingsWrite');
+    errors = [];
+    const refusing = { schema_id: 'org.example.test', set_uint: () => false };
+    const accepted = GsettingsWrite.writeSetting({ schema_id: 'org.example.test', set_uint: () => true }, 'set_uint', 'level', 3);
+    const refused = GsettingsWrite.writeSetting(refusing, 'set_uint', 'level', 3);
+    check(`settings write: a refused write is logged with schema, key and value (${errors})`,
+        accepted && !refused && errors.length === 1 && errors[0].includes('setting org.example.test level to 3 failed'));
+    errors = [];
+}
+
+async function testNightLight() {
+    const Model = load('./warmthModel');
+    check('warmth: 6500 K is the left end, 1000 K the right end (warmer to the right)',
+        Model.kelvinToFraction(6500) === 0 && Model.kelvinToFraction(1000) === 1);
+    check(`warmth: 3700 K sits at ${Model.kelvinToFraction(3700).toFixed(3)}`, Math.abs(Model.kelvinToFraction(3700) - 28 / 55) < 1e-9);
+    check('warmth: out-of-range values are clamped on the slider', Model.kelvinToFraction(9000) === 0 && Model.kelvinToFraction(500) === 1);
+    check(`warmth: positions round to the 100 K step (${Model.fractionToKelvin(0.5)})`,
+        Model.fractionToKelvin(0.5) === 3800 && Model.fractionToKelvin(0) === 6500 && Model.fractionToKelvin(1) === 1000);
+    const steps = [];
+    for (let kelvin = 1000; kelvin <= 6500; kelvin += 100)
+        steps.push(kelvin);
+    check(`warmth: every one of the ${steps.length} steps survives a round trip`,
+        steps.length === 56 && steps.every(k => Model.fractionToKelvin(Model.kelvinToFraction(k)) === k));
+    check('warmth: row state, Night Light on', JSON.stringify(Model.rowState(true, 3700))
+        === JSON.stringify({ available: true, switchOn: true, fraction: Model.kelvinToFraction(3700), text: '3700 K' }));
+    check('warmth: row state, Night Light off dims the slider and turns the switch off',
+        !Model.rowState(false, 3700).available && !Model.rowState(false, 3700).switchOn);
+    check('warmth: row state, a stored 9000 K puts the handle at the left end and shows 9000 K',
+        Model.rowState(true, 9000).fraction === 0 && Model.rowState(true, 9000).text === '9000 K');
+    check('warmth: label', Model.label(3400) === '3400 K');
+
+    const NightLight = load('./nightLight');
+    const color = new Gio.Settings({ schema_id: 'org.cinnamon.settings-daemon.plugins.color' });
+    color.set_boolean('night-light-enabled', false);
+    color.set_uint('night-light-temperature', 3400);
+    let changes = 0;
+    const night = new NightLight.NightLight(() => changes++);
+    check('night light: off and 3400 K read', !night.enabled && night.temperature === 3400);
+    night.toggle();
+    check('night light: the Warmth switch writes night-light-enabled', color.get_boolean('night-light-enabled') && night.enabled);
+    night.setTemperature(2500);
+    check('night light: the slider writes night-light-temperature', color.get_uint('night-light-temperature') === 2500);
+    await wait(0);
+    const seen = changes;
+    night.setTemperature(2500);
+    await wait(0);
+    check('night light: a move within the same step writes nothing', changes === seen);
+    color.set_boolean('night-light-enabled', false);
+    await wait(0);
+    check(`night light: follows a change made elsewhere (${changes} changes)`, !night.enabled && changes > seen);
+    // A stored value outside the slider's range is shown, never rewritten by reading it.
+    color.set_uint('night-light-temperature', 9000);
+    await wait(0);
+    const beforeRead = changes;
+    const outside = night.temperature;
+    await wait(0);
+    check(`night light: a stored 9000 K reads back as 9000, the key unchanged (${outside})`,
+        outside === 9000 && color.get_uint('night-light-temperature') === 9000 && changes === beforeRead);
+    night.destroy();
+}
+
+// UPower's KbdBacklight on a fake system bus: calls are answered at once, or fail when the
+// object is absent.
+class FakeKbdBus {
+    constructor({ max = 2, level = 0, absent = false } = {}) {
+        this.max = max;
+        this.level = level;
+        this.absent = absent;
+        this.calls = [];
+        // With holdSets, SetBrightness replies wait in held until answered by hand.
+        this.holdSets = false;
+        this.held = [];
+        this.subscriptions = new Map();
+        this.nextSubscription = 1;
+    }
+
+    signal_subscribe(name, iface, signal, path, arg0, flags, callback) {
+        const id = this.nextSubscription++;
+        this.subscriptions.set(id, { signal, callback });
+        return id;
+    }
+
+    signal_unsubscribe(id) {
+        this.subscriptions.delete(id);
+    }
+
+    call(name, path, iface, method, parameters, replyType, flags, timeout, cancellable, callback) {
+        const call = { method, args: parameters ? parameters.deepUnpack() : [] };
+        this.calls.push(`${method}${call.args.length ? ` ${call.args}` : ''}`);
+        if (this.holdSets && method === 'SetBrightness')
+            this.held.push(() => callback(this, call));
+        else
+            callback(this, call);
+    }
+
+    call_finish(call) {
+        if (this.absent)
+            throw new GLib.Error(Gio.DBusError, Gio.DBusError.UNKNOWN_OBJECT, 'No such object');
+        if (call.method === 'GetMaxBrightness')
+            return new GLib.Variant('(i)', [this.max]);
+        if (call.method === 'GetBrightness')
+            return new GLib.Variant('(i)', [this.level]);
+        this.level = call.args[0];
+        return null;
+    }
+
+    emitChanged(level) {
+        this.level = level;
+        for (const { signal, callback } of this.subscriptions.values()) {
+            if (signal === 'BrightnessChanged')
+                callback(this, ':1.1', '/org/freedesktop/UPower/KbdBacklight', 'org.freedesktop.UPower.KbdBacklight',
+                    signal, new GLib.Variant('(i)', [level]));
+        }
+    }
+}
+
+function testKeyboardLight() {
+    const Model = load('./kbdBacklightModel');
+    check('keyboard: levels cycle 0, 1, 2, back to 0',
+        Model.nextLevel(0, 2) === 1 && Model.nextLevel(1, 2) === 2 && Model.nextLevel(2, 2) === 0);
+    check('keyboard: maximum 2 reads Off, Low, High',
+        `${[0, 1, 2].map(level => Model.levelWord(level, 2))}` === 'Off,Low,High');
+    check('keyboard: maximum 1 reads Off, On', `${[0, 1].map(level => Model.levelWord(level, 1))}` === 'Off,On');
+    check(`keyboard: maximum 4 reads ${[0, 1, 2, 3, 4].map(level => Model.levelWord(level, 4))}`,
+        `${[0, 1, 2, 3, 4].map(level => Model.levelWord(level, 4))}` === 'Off,Low,Low,Medium,High');
+    check('keyboard: tile label', Model.tileLabel('Keyboard', 1, 2) === 'Keyboard Low');
+
+    const KbdBacklight = load('./kbdBacklight');
+    errors = [];
+    const bus = new FakeKbdBus({ max: 2, level: 1 });
+    let changes = 0;
+    const light = new KbdBacklight.KbdBacklight(() => changes++, bus);
+    check(`keyboard: reads the maximum and the level (${bus.calls})`, light.available && light.max === 2 && light.level === 1);
+    light.cycle();
+    light.cycle();
+    check(`keyboard: clicks set 2 then 0 through UPower (${bus.calls.slice(2)})`,
+        `${bus.calls.slice(2)}` === 'SetBrightness 2,SetBrightness 0' && light.level === 0);
+    const seen = changes;
+    bus.emitChanged(2);
+    check('keyboard: follows BrightnessChanged (the keyboard hotkey)', light.level === 2 && changes === seen + 1);
+    light.destroy();
+    check('keyboard: destroy unsubscribes', bus.subscriptions.size === 0);
+
+    const absentBus = new FakeKbdBus({ absent: true });
+    const absent = new KbdBacklight.KbdBacklight(() => {}, absentBus);
+    absent.cycle();
+    check(`keyboard: no KbdBacklight object leaves the tile unavailable, no SetBrightness (${absentBus.calls})`,
+        !absent.available && `${absentBus.calls}` === 'GetMaxBrightness');
+    absent.destroy();
+    const noLevels = new KbdBacklight.KbdBacklight(() => {}, new FakeKbdBus({ max: 0 }));
+    check('keyboard: a maximum of 0 leaves the tile unavailable', !noLevels.available);
+    noLevels.destroy();
+    check('keyboard: a maximum of 0 stays at 0', Model.nextLevel(0, 0) === 0 && Model.levelWord(0, 0) === 'Off');
+
+    const slowBus = new FakeKbdBus({ max: 2, level: 0 });
+    const slow = new KbdBacklight.KbdBacklight(() => {}, slowBus);
+    slowBus.holdSets = true;
+    slow.cycle();
+    slow.cycle();
+    check(`keyboard: two quick clicks go two steps (${slowBus.calls.slice(2)})`, `${slowBus.calls.slice(2)}` === 'SetBrightness 1,SetBrightness 2');
+    slowBus.held.shift()();
+    check('keyboard: the reply of an older click does not show its level', slow.level === 0);
+    slowBus.held.shift()();
+    check('keyboard: the reply of the last click shows its level', slow.level === 2);
+    slow.cycle();
+    slowBus.emitChanged(1);
+    slowBus.held.shift()();
+    check(`keyboard: a late reply never overwrites a level reported since (${slow.level})`, slow.level === 1);
+    slow.destroy();
+    errors = [];
+}
+
+// Radios whose change arrives later, as libnm and BlueZ report it.
+function fakeRadio(on, { refuseOff = false } = {}) {
+    const radio = { on, writes: [] };
+    radio.isOn = () => radio.on;
+    radio.setOn = (value, onFailed) => {
+        radio.writes.push(value);
+        if (refuseOff && !value)
+            onFailed();
+    };
+    radio.arrive = () => {
+        if (radio.writes.length)
+            radio.on = radio.writes[radio.writes.length - 1];
+    };
+    return radio;
+}
+
+function testAirplaneMode() {
+    const AirplaneMode = load('./airplaneMode');
+    {
+        const stubborn = fakeRadio(true, { refuseOff: true });
+        const other = fakeRadio(true);
+        let notified = 0;
+        const refused = new AirplaneMode.AirplaneMode([stubborn, other], () => notified++);
+        refused.toggle();
+        check(`airplane: a radio that refuses to turn off ends airplane mode, the tile unchecks (${notified} notice)`,
+            !refused.active && notified === 1 && stubborn.on);
+        other.arrive();
+        refused.sync();
+        check('airplane: after a refusal, a later radio change keeps it unchecked', !refused.active);
+    }
+    let wifi = fakeRadio(true);
+    let bluetooth = fakeRadio(true);
+    let airplane = new AirplaneMode.AirplaneMode([wifi, bluetooth]);
+    airplane.toggle();
+    airplane.sync();
+    check('airplane: a click turns both radios off, checked while their change is on its way',
+        airplane.active && `${wifi.writes}` === 'false' && `${bluetooth.writes}` === 'false');
+    wifi.arrive();
+    airplane.sync();
+    bluetooth.arrive();
+    airplane.sync();
+    check('airplane: stays checked once both are off', airplane.active);
+    airplane.toggle();
+    check('airplane: a second click turns both back on', !airplane.active && `${wifi.writes}` === 'false,true' && `${bluetooth.writes}` === 'false,true');
+
+    wifi = fakeRadio(false);
+    bluetooth = fakeRadio(true);
+    airplane = new AirplaneMode.AirplaneMode([wifi, bluetooth]);
+    airplane.toggle();
+    bluetooth.arrive();
+    airplane.sync();
+    airplane.toggle();
+    check('airplane: Wi-Fi already off stays off after restore, Bluetooth comes back',
+        wifi.writes.length === 0 && `${bluetooth.writes}` === 'false,true');
+
+    wifi = fakeRadio(true);
+    bluetooth = fakeRadio(true);
+    airplane = new AirplaneMode.AirplaneMode([wifi, bluetooth]);
+    airplane.toggle();
+    wifi.arrive();
+    bluetooth.arrive();
+    airplane.sync();
+    bluetooth.on = true;
+    airplane.sync();
+    check('airplane: Bluetooth turned on by hand unchecks the tile', !airplane.active);
+    airplane.toggle();
+    check('airplane: the next click starts airplane mode again, it restores nothing old',
+        airplane.active && `${wifi.writes}` === 'false' && `${bluetooth.writes}` === 'false,false');
+
+    // The real Wi-Fi and Bluetooth code paths that airplane mode calls.
+    const Wifi = load('./wifiState');
+    const device = new FakeNmDevice();
+    const client = new FakeNmClient(device);
+    const wifiState = new Wifi.WifiState(() => {}, (cancellable, onReady) => onReady(client, null));
+    wifiState.setEnabled(false);
+    wifiState.setEnabled(true);
+    check(`airplane: Wi-Fi goes through WirelessEnabled (${client.writes})`, `${client.writes}` === 'WirelessEnabled=false,WirelessEnabled=true');
+    errors = [];
+    let wifiRefused = 0;
+    client.dbus_set_property_finish = () => {
+        throw new GLib.Error(Gio.DBusError, Gio.DBusError.ACCESS_DENIED, 'Not authorized');
+    };
+    wifiState.setEnabled(false, () => wifiRefused++);
+    check(`airplane: a refused WirelessEnabled write is logged and reported (${errors})`, wifiRefused === 1 && errors.length === 1);
+    errors = [];
+    wifiState.destroy();
+    check('airplane: no NetworkManager disconnect() call', device.disconnectCalls === 0 && client.disconnectCalls === 0);
+    const Bluetooth = load('./bluetooth');
+    const calls = [];
+    const system = {
+        bus: { call: (name, path, iface, method, parameters) => calls.push(`${method} ${parameters.deepUnpack()[2].unpack()}`) },
+        newManager: () => {},
+    };
+    const bluetoothState = new Bluetooth.Bluetooth(() => {}, system);
+    let bluetoothRefused = 0;
+    bluetoothState.setPowered(false, () => bluetoothRefused++);
+    check('airplane: no adapter, no Bluetooth call, reported as refused', calls.length === 0 && bluetoothRefused === 1);
+    bluetoothState.summary = { available: true, powered: true, adapterPath: '/org/bluez/hci0', devices: [], connectedNames: [] };
+    bluetoothState.setPowered(false);
+    check(`airplane: Bluetooth goes through Adapter1.Powered (${calls})`, `${calls}` === 'Set false');
+}
+
+async function testTopProcess() {
+    const Parser = load('./topParser');
+    const text = readText(`${topFixtures}/top-two-frames.txt`);
+    const busiest = Parser.busiestProcess(text);
+    check(`cpu: the last frame's busiest process, top itself skipped, decimal comma read (${JSON.stringify(busiest)})`,
+        busiest !== null && busiest.name === 'php' && Math.abs(busiest.percent - 211.8) < 1e-9);
+    check(`cpu: label (${Parser.label(busiest)})`, Parser.label(busiest) === 'php 212%');
+    const spaced = text.replace('211,8   0,6   1:03.17 php', '  1,0   0,6   1:03.17 php');
+    check(`cpu: a command name with spaces is kept whole (${Parser.label(Parser.busiestProcess(spaced))})`,
+        Parser.label(Parser.busiestProcess(spaced)) === 'Isolated Web Co 16%');
+    check('cpu: empty output is an error, not a process', thrownBy(() => Parser.busiestProcess('')) === 'no PID header line in the top output');
+    check('cpu: a line whose %CPU is not a number is skipped',
+        Parser.label(Parser.busiestProcess(text.replace('211,8   0,6   1:03.17 php', 'n/a   0,6   1:03.17 php'))) === 'Isolated Web Co 16%');
+    check('cpu: decimal points read too', Parser.busiestProcess(text.replace(/(\d),(\d)/g, '$1.$2')).percent === busiest.percent);
+    const headerOnly = text.slice(0, text.lastIndexOf('COMMAND') + 'COMMAND'.length);
+    check('cpu: a header without process lines, no process', Parser.busiestProcess(headerOnly) === null && Parser.label(null) === '');
+    const thrown = input => {
+        try {
+            Parser.busiestProcess(input);
+            return null;
+        } catch (e) {
+            return e.message;
+        }
+    };
+    check(`cpu: no header line is an error (${thrown(text.split('    PID')[0])})`, thrown(text.split('    PID')[0]) === 'no PID header line in the top output');
+    check(`cpu: COMMAND not last (a reordering toprc) is an error, no guess (${thrown('  PID COMMAND %CPU\n 1 php 50,0\n')})`,
+        (thrown('  PID COMMAND %CPU\n 1 php 50,0\n') || '').includes('"PID COMMAND %CPU"'));
+    const french = readText(`${topFixtures}/top-french-headers.txt`);
+    check(`cpu: translated headers are an error naming the header (${thrown(french)})`,
+        (thrown(french) || '').includes('"PID UTIL. PR NI VIRT RES SHR S %CPU %MEM TEMPS+ COM."'));
+
+    const Constants = load('./constants');
+    check('cpu: top runs from an argv array, never a shell',
+        Array.isArray(Constants.CPU_TOP_COMMAND) && Constants.CPU_TOP_COMMAND[0] === 'top'
+        && Constants.CPU_TOP_COMMAND.every(part => typeof part === 'string') && !Constants.CPU_TOP_COMMAND.includes('-c'));
+    const TopProcess = load('./topProcess');
+    const runs = [];
+    const envs = [];
+    let pending = deferred();
+    let changes = 0;
+    const top = new TopProcess.TopProcess((argv, options) => {
+        runs.push(argv);
+        envs.push(options && options.env);
+        return pending.promise;
+    }, () => changes++);
+    const first = top.refresh();
+    top.refresh();
+    check('cpu: a request while a read runs starts no second top', runs.length === 1 && changes === 0);
+    pending.resolve(text);
+    await first;
+    check('cpu: the read shows the busiest process', changes === 1 && top.process.name === 'php');
+    check(`cpu: top runs with LC_ALL=C, so its headers are not translated (${JSON.stringify(envs[0])})`,
+        JSON.stringify(envs[0]) === '{"LC_ALL":"C"}' && runs[0] === Constants.CPU_TOP_COMMAND);
+    errors = [];
+    pending = deferred();
+    const translated = top.refresh();
+    pending.resolve(french);
+    await translated;
+    check(`cpu: an unreadable header is logged with the header, the title shows alone (${errors})`,
+        top.process === null && errors.length === 1 && errors[0].includes('reading the busiest process failed')
+        && errors[0].includes('COM.'));
+    errors = [];
+    pending = deferred();
+    const failing = top.refresh();
+    pending.reject(new Error('top exited with 1'));
+    await failing;
+    check(`cpu: a failed read is logged and shows the title alone (${errors})`,
+        top.process === null && changes === 3 && errors.length === 1 && errors[0].includes('top exited with 1'));
+    errors = [];
+    pending = deferred();
+    const late = top.refresh();
+    top.destroy();
+    pending.resolve(text);
+    await late;
+    check('cpu: nothing shows after destroy', changes === 3);
 }
 
 function testBatteryModel() {
@@ -667,7 +1078,7 @@ function testSchemaMatchesDeclarations() {
     const tabs = schema.layout.pages.map(page => schema.layout[page].title);
     check(`settings dialog: four tabs (${tabs})`, `${tabs}` === 'Tiles,Sliders,Header,Panel');
     const groups = [
-        ['tiles', Constants.TILES], ['sliders', Constants.SLIDERS], ['header', Constants.HEADER_ITEMS], ['panel-icons', Constants.PANEL_ICON_ITEMS],
+        ['tiles', Constants.TILE_LAYOUT_ITEMS], ['sliders', Constants.SLIDERS], ['header', Constants.HEADER_ITEMS], ['panel-icons', Constants.PANEL_ICON_ITEMS],
     ];
     for (const [key, declared] of groups) {
         check(`settings dialog: ${key} defaults are every element shown, in declaration order`,
@@ -676,10 +1087,10 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute'
-        && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Airplane mode,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,CPU line'
+        && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
-        && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume');
+        && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,VPN,Bluetooth,Volume,Battery');
 }
 
 function testLayoutModel() {
@@ -690,9 +1101,100 @@ function testLayoutModel() {
     const hidden = [{ show: true, id: 'b' }, { show: false, id: 'a' }, { show: true, id: 'c' }, { show: true, id: 'd' }];
     check('layout: a hidden row is left out', `${Model.visibleIds(hidden, declared)}` === 'b,c,d');
     const messy = [{ show: true, id: 'zz' }, { show: true, id: 'c' }, { show: false, id: 'c' }, null, { show: true }, { show: true, id: 'a' }];
-    check(`layout: unknown ids ignored, first duplicate kept, missing appended shown (${Model.visibleIds(messy, declared)})`,
-        `${Model.visibleIds(messy, declared)}` === 'c,a,b,d');
+    check(`layout: unknown ids ignored, first duplicate kept, missing ones back shown (${Model.visibleIds(messy, declared)})`,
+        `${Model.visibleIds(messy, declared)}` === 'b,c,a,d');
     check('layout: an emptied list brings everything back', `${Model.visibleIds([], declared)}` === 'a,b,c,d');
+    // A declared element missing from the stored list goes just before its first declared
+    // successor the list holds, else at the end.
+    const ids = stored => stored.map(id => ({ show: true, id }));
+    check(`layout: a missing element goes before its successor (${Model.visibleIds(ids(['a', 'c', 'd']), declared)})`,
+        `${Model.visibleIds(ids(['a', 'c', 'd']), declared)}` === 'a,b,c,d'
+        && `${Model.visibleIds(ids(['d', 'c', 'a']), declared)}` === 'd,b,c,a');
+    check(`layout: a missing element with no successor stored is appended (${Model.visibleIds(ids(['b', 'a', 'c']), declared)})`,
+        `${Model.visibleIds(ids(['b', 'a', 'c']), declared)}` === 'b,a,c,d');
+    check(`layout: several missing in a row keep their declared order (${Model.visibleIds(ids(['a', 'd']), declared)})`,
+        `${Model.visibleIds(ids(['a', 'd']), declared)}` === 'a,b,c,d'
+        && `${Model.visibleIds(ids(['c']), declared)}` === 'a,b,c,d');
+    check('layout: a missing element keeps the hidden state of the others',
+        JSON.stringify(Model.normalize([{ show: false, id: 'c' }], declared))
+        === '[{"id":"a","show":true},{"id":"b","show":true},{"id":"c","show":false},{"id":"d","show":true}]');
+    const Constants = load('./constants');
+    // The owner's saved Tiles list: it still holds night-light, a tile that no longer exists.
+    const saved = [
+        ...['wifi', 'bluetooth', 'night-light', 'nordvpn', 'vpn', 'power-profile'].map(id => ({ show: true, id })),
+        ...['dark-style', 'do-not-disturb', 'keep-awake', 'mic-mute'].map(id => ({ show: false, id })),
+    ];
+    const ownerTiles = Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS);
+    check(`layout: the owner's saved Tiles list drops night-light and places the new tiles by the defaults (${ownerTiles})`,
+        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,cpu-line');
+    const ownerSplit = Model.splitTileLayout(ownerTiles, Constants.CPU_LINE_ID);
+    check('layout: the CPU line is split off the tiles and shows', ownerSplit.cpuLine && !ownerSplit.tileIds.includes(Constants.CPU_LINE_ID));
+    check('layout: a hidden CPU line does not show', !Model.splitTileLayout(['wifi', 'vpn'], Constants.CPU_LINE_ID).cpuLine);
+    const ownerRows = Model.rows(ownerSplit.tileIds, Constants.TILES_PER_ROW);
+    check(`layout: the owner's tile rows (${JSON.stringify(ownerRows)})`,
+        JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["power-profile","airplane-mode"],["keyboard-light"]]');
+    check('layout: the owner\'s hidden tiles stay hidden',
+        Model.normalize(saved, Constants.TILE_LAYOUT_ITEMS).filter(row => !row.show).map(row => row.id).join() === 'dark-style,do-not-disturb,keep-awake,mic-mute');
+    check(`layout: default tile order (${Constants.TILES.map(item => item.id)})`,
+        `${Constants.TILES.map(item => item.id)}` === 'wifi,bluetooth,vpn,nordvpn,power-profile,airplane-mode,keyboard-light,dark-style,do-not-disturb,keep-awake,mic-mute');
+    check('layout: no touchpad tile is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'touchpad'));
+    const defaultRows = Model.rows(Constants.TILES.map(item => item.id), Constants.TILES_PER_ROW);
+    check(`layout: in the default order VPN and NordVPN share one row (${JSON.stringify(defaultRows[1])})`,
+        defaultRows.some(row => row.includes('vpn') && row.includes('nordvpn'))
+        && JSON.stringify(defaultRows[1]) === '["vpn","nordvpn"]');
+    check('layout: no night-light tile is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'night-light'));
+    check('layout: a saved Sliders list gets Warmth after Brightness, a saved Panel list gets Battery after the icons',
+        `${Model.visibleIds(Model.defaults(Constants.SLIDERS.slice(0, 3)), Constants.SLIDERS)}` === 'output,input,monitors,warmth'
+        && `${Model.visibleIds(Model.defaults(Constants.PANEL_ICON_ITEMS.slice(0, 4)).reverse(), Constants.PANEL_ICON_ITEMS)}` === 'volume,bluetooth,vpn,wifi,battery');
+    check(`panel: default order (${Constants.PANEL_ICON_ITEMS.map(item => item.id)})`,
+        `${Constants.PANEL_ICON_ITEMS.map(item => item.id)}` === 'wifi,vpn,bluetooth,volume,battery');
+    const savedPanel = ['wifi', 'bluetooth', 'vpn', 'volume'].map(id => ({ show: true, id }));
+    check(`panel: the owner's saved Panel list keeps its order, Battery appended (${Model.visibleIds(savedPanel, Constants.PANEL_ICON_ITEMS)})`,
+        `${Model.visibleIds(savedPanel, Constants.PANEL_ICON_ITEMS)}` === 'wifi,bluetooth,vpn,volume,battery');
+    check('layout: a saved Header list is kept as stored',
+        `${Model.visibleIds(Model.defaults(Constants.HEADER_ITEMS).reverse(), Constants.HEADER_ITEMS)}` === 'power,lock,settings,screenshot,battery');
+    // The owner's lists as saved on disk by an older version: written back once, normalized.
+    const disk = {
+        tiles: saved,
+        sliders: ['output', 'input', 'monitors'].map(id => ({ show: true, id })),
+        header: Model.defaults(Constants.HEADER_ITEMS),
+        'panel-icons': ['bluetooth', 'vpn', 'volume', 'wifi'].map(id => ({ show: true, id })),
+    };
+    const declaredFor = {
+        tiles: Constants.TILE_LAYOUT_ITEMS, sliders: Constants.SLIDERS,
+        header: Constants.HEADER_ITEMS, 'panel-icons': Constants.PANEL_ICON_ITEMS,
+    };
+    const store = {
+        values: JSON.parse(JSON.stringify(disk)),
+        writes: [],
+        getValue(key) {
+            return this.values[key];
+        },
+        setValue(key, value) {
+            this.writes.push(key);
+            this.values[key] = value;
+        },
+    };
+    const pass = () => Object.keys(declaredFor).filter(key => Model.writeBackLayout(store, key, declaredFor[key]));
+    const first = pass();
+    check(`layout write-back: the lists missing ids are written once (${first})`, `${first}` === 'tiles,sliders,panel-icons');
+    const second = pass();
+    check('layout write-back: a second pass writes nothing (no loop)', second.length === 0 && store.writes.length === 3);
+    const rowsText = key => store.values[key].map(row => `${row.id}${row.show ? '' : ' (hidden)'}`).join(', ');
+    check(`layout write-back: tiles keep their order and show flags (${rowsText('tiles')})`,
+        rowsText('tiles') === 'wifi, bluetooth, nordvpn, vpn, power-profile, airplane-mode, keyboard-light, dark-style (hidden), do-not-disturb (hidden), keep-awake (hidden), mic-mute (hidden), cpu-line');
+    check(`layout write-back: panel-icons (${rowsText('panel-icons')})`, rowsText('panel-icons') === 'bluetooth, vpn, volume, wifi, battery');
+    check(`layout write-back: sliders (${rowsText('sliders')})`, rowsText('sliders') === 'output, input, monitors, warmth');
+    check('layout write-back: rows keep the dialog shape { show, id }',
+        Object.values(store.values).every(list => list.every(row => JSON.stringify(Object.keys(row)) === '["show","id"]')));
+    check('layout write-back: a list already normalized is left alone',
+        Model.storedUpdate(Model.defaults(Constants.SLIDERS), Constants.SLIDERS) === null);
+    check('layout write-back: a row without a show flag is written back shown',
+        JSON.stringify(Model.storedUpdate([{ id: 'output' }, ...Model.defaults(Constants.SLIDERS).slice(1)], Constants.SLIDERS)[0]) === '{"show":true,"id":"output"}');
+    check('layout write-back: nothing stored writes the defaults',
+        JSON.stringify(Model.storedUpdate(null, Constants.SLIDERS)) === JSON.stringify(Model.defaults(Constants.SLIDERS)));
+    check('layout write-back: a removed id alone is enough to write',
+        Model.storedUpdate([...Model.defaults(Constants.SLIDERS), { show: true, id: 'gone' }], Constants.SLIDERS) !== null);
     check('layout: odd count leaves one tile on the last row',
         JSON.stringify(Model.rows(['a', 'b', 'c'], 2)) === '[["a","b"],["c"]]');
     const all = { wifi: true, bluetooth: false, vpn: false, volume: true };
@@ -701,6 +1203,11 @@ function testLayoutModel() {
     check('panel: the settings never force an icon on', !Model.panelIconVisibility(['bluetooth'], all).visible.bluetooth);
     check('panel: every icon hidden gives the fallback', Model.panelIconVisibility([], all).fallback);
     check('panel: allowed icons all absent by state gives the fallback', Model.panelIconVisibility(['bluetooth', 'vpn'], all).fallback);
+    const withBattery = { ...all, battery: true };
+    check('panel: the battery level shows after the icons when allowed and present',
+        Model.panelIconVisibility(['wifi', 'volume', 'battery'], withBattery).visible.battery);
+    check('panel: no battery, no level', !Model.panelIconVisibility(['battery'], all).visible.battery);
+    check('panel: the battery level alone needs no fallback', !Model.panelIconVisibility(['battery'], withBattery).fallback);
     const header = (ids, present) => JSON.stringify(Model.headerVisibility(ids, 'battery', present));
     check('header: battery shows only when allowed and present',
         header(['battery', 'lock'], true) === '{"battery":true,"line":true}' && header(['lock'], true) === '{"battery":false,"line":true}');
@@ -1123,6 +1630,14 @@ async function testSubprocess() {
         failed !== null && failed.includes('exited with 3') && failed.includes('boom'));
     const missing = await Subprocess.runCommand(['/nonexistent/quick-settings-test']).then(() => null, e => e.message);
     check(`subprocess: a missing command rejects and names it (${missing})`, missing !== null && missing.includes('/nonexistent/quick-settings-test'));
+    const forced = await Subprocess.runCommand(['/usr/bin/env'], { env: { LC_ALL: 'C', QUICK_SETTINGS_TEST: 'set' } });
+    check('subprocess: env sets the variables for that command only',
+        forced.split('\n').includes('LC_ALL=C') && forced.split('\n').includes('QUICK_SETTINGS_TEST=set')
+        && GLib.getenv('QUICK_SETTINGS_TEST') === null);
+    const LIVE = load('./constants');
+    const live = await Subprocess.runCommand(LIVE.CPU_TOP_COMMAND, { env: LIVE.CPU_TOP_ENV });
+    const busiest = load('./topParser').busiestProcess(live);
+    check(`subprocess: the real top under LC_ALL=C parses (${busiest && busiest.name})`, busiest !== null);
 }
 
 const FakeObjectManager = GObject.registerClass({
@@ -1212,6 +1727,11 @@ async function main() {
     await testNordvpnBusyGuard();
     testPowerProfileModel();
     await testBooleanSettings();
+    testSettingsWrite();
+    await testNightLight();
+    testKeyboardLight();
+    testAirplaneMode();
+    await testTopProcess();
     testBatteryModel();
     testMicMute();
     testSchemaMatchesDeclarations();

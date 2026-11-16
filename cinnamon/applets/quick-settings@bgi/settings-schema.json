@@ -84,11 +84,13 @@
                     "VPN": "vpn",
                     "NordVPN": "nordvpn",
                     "Power profile": "power-profile",
-                    "Night Light": "night-light",
+                    "Airplane mode": "airplane-mode",
+                    "Keyboard light": "keyboard-light",
                     "Dark style": "dark-style",
                     "Do Not Disturb": "do-not-disturb",
                     "Keep awake": "keep-awake",
-                    "Mic mute": "mic-mute"
+                    "Mic mute": "mic-mute",
+                    "CPU line": "cpu-line"
                 }
             }
         ],
@@ -115,7 +117,11 @@
             },
             {
                 "show": true,
-                "id": "night-light"
+                "id": "airplane-mode"
+            },
+            {
+                "show": true,
+                "id": "keyboard-light"
             },
             {
                 "show": true,
@@ -132,6 +138,10 @@
             {
                 "show": true,
                 "id": "mic-mute"
+            },
+            {
+                "show": true,
+                "id": "cpu-line"
             }
         ]
     },
@@ -152,7 +162,8 @@
                 "options": {
                     "Sound": "output",
                     "Microphone": "input",
-                    "Brightness": "monitors"
+                    "Brightness": "monitors",
+                    "Warmth": "warmth"
                 }
             }
         ],
@@ -168,6 +179,10 @@
             {
                 "show": true,
                 "id": "monitors"
+            },
+            {
+                "show": true,
+                "id": "warmth"
             }
         ]
     },
@@ -233,9 +248,10 @@
                 "type": "string",
                 "options": {
                     "Wi-Fi": "wifi",
-                    "Bluetooth": "bluetooth",
                     "VPN": "vpn",
-                    "Volume": "volume"
+                    "Bluetooth": "bluetooth",
+                    "Volume": "volume",
+                    "Battery": "battery"
                 }
             }
         ],
@@ -246,15 +262,19 @@
             },
             {
                 "show": true,
-                "id": "bluetooth"
-            },
-            {
-                "show": true,
                 "id": "vpn"
             },
             {
                 "show": true,
+                "id": "bluetooth"
+            },
+            {
+                "show": true,
                 "id": "volume"
+            },
+            {
+                "show": true,
+                "id": "battery"
             }
         ]
     }

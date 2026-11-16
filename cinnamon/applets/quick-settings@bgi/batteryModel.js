@@ -16,5 +16,5 @@ function pickBattery(devices, primaryId, kinds) {
 }
 
 function label(percent) {
-    return `${percent}${Constants.BATTERY_LABEL_SUFFIX}`;
+    return `${percent}${Constants.PERCENT_SUFFIX}`;
 }

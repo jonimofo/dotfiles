@@ -27,15 +27,26 @@ const PANEL_ICONS = {
     vpn: 'network-vpn-symbolic',
     volume: 'audio-volume-high-symbolic',
 };
+// Names after a panel icon and on a tile (VPN, Bluetooth device): each name longer than the
+// limit is cut, ending in the ellipsis; several Bluetooth devices show the first and "+N".
+const PANEL_NAME_MAX = 16;
+const PANEL_NAME_ELLIPSIS = '…';
+const PANEL_NAME_MORE_PREFIX = ' +';
+// The VPN name after its panel icon: NordVPN's country, the NetworkManager profile's name,
+// both joined by this when both are up (NordVPN first).
+const PANEL_VPN_NAME_SEPARATOR = ' + ';
 // Shown alone when every panel icon is hidden or absent, so the button never disappears.
 const PANEL_FALLBACK_ICON = 'preferences-system-symbolic';
 
 // Panel icons, left to right: this array is the only place that sets their order.
 const PANEL_ICON_ITEMS = [
     { id: 'wifi', name: 'Wi-Fi' },
-    { id: 'bluetooth', name: 'Bluetooth' },
+    // The VPN icon, then the name of the VPN that is up.
     { id: 'vpn', name: 'VPN' },
+    { id: 'bluetooth', name: 'Bluetooth' },
     { id: 'volume', name: 'Volume' },
+    // The battery icon and level ("87%"), the header's figure.
+    { id: 'battery', name: 'Battery' },
 ];
 
 // Header elements as the settings dialog lists them: the battery figure (always on the
@@ -57,6 +68,10 @@ const SLIDERS = [
     { id: 'output', label: 'Sound', name: 'Sound', icon: 'audio-volume-high-symbolic', hasMenu: true },
     { id: 'input', label: 'Microphone', name: 'Microphone', icon: 'audio-input-microphone-symbolic', hasMenu: true },
     { id: 'monitors', label: 'Brightness', name: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
+    // The Night Light temperature, its value as text, and on the right a switch for Night
+    // Light (switchLabel: what it toggles, for screen readers).
+    { id: 'warmth', label: 'Warmth', name: 'Warmth', icon: 'night-light-symbolic', hasMenu: false, hasSwitch: true,
+        switchLabel: 'Night Light' },
 ];
 
 // Tiles, left to right then top to bottom, two per row: this array is the only place that
@@ -67,7 +82,8 @@ const TILES = [
     { id: 'vpn', label: 'VPN', name: 'VPN', icon: 'network-vpn-symbolic', hasMenu: true },
     { id: 'nordvpn', label: 'NordVPN', name: 'NordVPN', icon: 'globe-symbolic', hasMenu: true },
     { id: 'power-profile', label: 'Balanced', name: 'Power profile', icon: 'power-profile-balanced-symbolic', hasMenu: true },
-    { id: 'night-light', label: 'Night Light', name: 'Night Light', icon: 'night-light-symbolic', hasMenu: false },
+    { id: 'airplane-mode', label: 'Airplane mode', name: 'Airplane mode', icon: 'airplane-mode-symbolic', hasMenu: false },
+    { id: 'keyboard-light', label: 'Keyboard', name: 'Keyboard light', icon: 'keyboard-brightness-symbolic', hasMenu: false },
     { id: 'dark-style', label: 'Dark style', name: 'Dark style', icon: 'dark-mode-symbolic', hasMenu: false },
     { id: 'do-not-disturb', label: 'Do Not Disturb', name: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
     { id: 'keep-awake', label: 'Keep awake', name: 'Keep awake', icon: 'my-caffeine-on-symbolic', hasMenu: false },
@@ -84,7 +100,8 @@ const DARK_STYLE_OFF = 'default';
 
 // Battery, from cinnamon-settings-daemon like the stock power applet.
 const POWER_PROXY = 'org.cinnamon.SettingsDaemon.Power';
-const BATTERY_LABEL_SUFFIX = '%';
+// After the battery level and the CPU line's figure.
+const PERCENT_SUFFIX = '%';
 
 // Brightness of the external monitors, through DDC/CI. Buses are detected at runtime: they
 // change with the dock.
@@ -164,6 +181,7 @@ const BLUEZ_DEVICE_INTERFACE = 'org.bluez.Device1';
 const DBUS_PROPERTIES_INTERFACE = 'org.freedesktop.DBus.Properties';
 const BLUETOOTH_ON_ICON = 'bluetooth-active-symbolic';
 const BLUETOOTH_IDLE_ICON = 'bluetooth-symbolic';
+// The tile while off, and the panel while airplane mode holds the adapter off.
 const BLUETOOTH_OFF_ICON = 'bluetooth-disabled-symbolic';
 const BLUETOOTH_DEVICE_ICON = 'bluetooth-symbolic';
 
@@ -206,9 +224,26 @@ const POWER_PROFILE_FIRST_OTHER = 'power-saver';
 const POWER_PROFILE_ICON_PREFIX = 'power-profile-';
 const POWER_SETTINGS_COMMAND = ['cinnamon-settings', 'power'];
 
-// Night Light: the key of Cinnamon Settings > Night Light.
+// Night Light: the keys of Cinnamon Settings > Night Light.
 const NIGHT_LIGHT_SCHEMA = 'org.cinnamon.settings-daemon.plugins.color';
 const NIGHT_LIGHT_KEY = 'night-light-enabled';
+const NIGHT_LIGHT_TEMPERATURE_KEY = 'night-light-temperature';
+// The Warmth row, wider than Cinnamon's Night Light page (1700 K to 4700 K): from 6500 K, no
+// tint, to 1000 K, the deepest red. Warmer is fewer kelvin, so the slider runs from
+// WARMTH_MAX_KELVIN on the left to WARMTH_MIN_KELVIN on the right.
+const WARMTH_MIN_KELVIN = 1000;
+const WARMTH_MAX_KELVIN = 6500;
+const WARMTH_STEP_KELVIN = 100;
+const WARMTH_UNIT_SUFFIX = ' K';
+
+// Keyboard light, through UPower on the system bus. The tile shows "Keyboard" and the level's
+// word: Off at 0, On for a light with one level, High at the maximum, Low up to half of it,
+// Medium above.
+const UPOWER_NAME = 'org.freedesktop.UPower';
+const KBD_BACKLIGHT_PATH = '/org/freedesktop/UPower/KbdBacklight';
+const KBD_BACKLIGHT_INTERFACE = 'org.freedesktop.UPower.KbdBacklight';
+const KBD_BACKLIGHT_SIGNAL = 'BrightnessChanged';
+const KBD_LEVEL_WORDS = { off: 'Off', on: 'On', low: 'Low', medium: 'Medium', high: 'High' };
 
 // Do Not Disturb: the key Cinnamon's message tray reads (Settings > Notifications >
 // Enable notifications). The tile is on when notifications are off.
@@ -223,6 +258,20 @@ const SESSION_MANAGER_INTERFACE = 'org.gnome.SessionManager';
 const INHIBIT_IDLE_FLAG = 8;
 const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming';
 
+// The CPU line under the tiles: the process using the most CPU, read with top when the menu
+// opens. Two frames half a second apart: the first covers the time since each process
+// started, the second measures that half second. Per-core percent (212% is a bit over two
+// cores); wide lines so no command name is cut.
+const CPU_LINE_ID = 'cpu-line';
+const CPU_LINE_ITEM = { id: CPU_LINE_ID, name: 'CPU line' };
+const CPU_LINE_TITLE = 'CPU';
+// The column top sorts by and the parser reads.
+const CPU_TOP_CPU_COLUMN = '%CPU';
+const CPU_TOP_COMMAND = ['top', '-b', '-n', '2', '-d', '0.5', '-o', CPU_TOP_CPU_COLUMN, '-w', '512'];
+// top translates its column names (COMMAND is COM. in French): run it untranslated.
+const CPU_TOP_ENV = { LC_ALL: 'C' };
+const CPU_IGNORED_COMMANDS = ['top'];
+
 // Settings dialog (settings-schema.json): one list per group, rows { show, id }.
 const LAYOUT_KEYS = {
     tiles: 'tiles',
@@ -233,3 +282,7 @@ const LAYOUT_KEYS = {
 
 // The header as the settings dialog lists it.
 const HEADER_ITEMS = [HEADER_BATTERY_ITEM, ...HEADER_BUTTONS];
+
+// The Tiles tab: the tiles, then the CPU line. The line stays under the tiles whatever its
+// place in the list, as the battery stays on the left of the header.
+const TILE_LAYOUT_ITEMS = [...TILES, CPU_LINE_ITEM];

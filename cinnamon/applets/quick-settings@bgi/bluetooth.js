@@ -38,12 +38,19 @@ class Bluetooth {
     }
 
     toggle() {
-        if (!this.summary.available)
+        this.setPowered(!this.summary.powered);
+    }
+
+    // The adapter power, as Airplane mode sets it. @onFailed() runs when BlueZ refuses it or
+    // there is no adapter.
+    setPowered(powered, onFailed = () => {}) {
+        if (!this.summary.available) {
+            onFailed();
             return;
-        const powered = !this.summary.powered;
+        }
         const value = new GLib.Variant('(ssv)', [Constants.BLUEZ_ADAPTER_INTERFACE, 'Powered', GLib.Variant.new_boolean(powered)]);
         this._call(this.summary.adapterPath, Constants.DBUS_PROPERTIES_INTERFACE, 'Set', value,
-            `setting the Bluetooth adapter power to ${powered}`);
+            `setting the Bluetooth adapter power to ${powered}`, onFailed);
     }
 
     // Connects a paired device, or disconnects it when it is connected.
@@ -103,8 +110,8 @@ class Bluetooth {
         this._onChange();
     }
 
-    _call(path, iface, method, parameters, what) {
+    _call(path, iface, method, parameters, what, onFailure = null) {
         AsyncHelpers.callDbus(this._system.bus, { name: Constants.BLUEZ_NAME, path, iface }, method, parameters,
-            this._cancellable, what, () => {});
+            this._cancellable, what, () => {}, onFailure);
     }
 }

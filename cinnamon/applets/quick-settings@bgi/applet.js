@@ -329,7 +329,11 @@ class QuickSettingsApplet extends Applet.Applet {
     // Each button closes the menu first, then acts as the stock applets do.
     _setUpHeader() {
         const header = this._content.header;
-        this._battery = new Battery.Battery(battery => header.setBattery(battery));
+        // One battery read for the header figure and the panel level.
+        this._battery = new Battery.Battery(battery => {
+            header.setBattery(battery);
+            this._panelIcons.setBattery(battery);
+        });
         header.setOnButton('screenshot', () => this._closeThen(() => Util.spawn(Constants.SCREENSHOT_COMMAND)));
         header.setOnButton('settings', () => this._closeThen(() => Util.spawn(Constants.SYSTEM_SETTINGS_COMMAND)));
         header.setOnButton('lock', () => this._closeThen(() => this._lockScreen()));

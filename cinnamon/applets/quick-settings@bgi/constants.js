@@ -36,6 +36,8 @@ const PANEL_ICON_ITEMS = [
     { id: 'bluetooth', name: 'Bluetooth' },
     { id: 'vpn', name: 'VPN' },
     { id: 'volume', name: 'Volume' },
+    // The battery level as text ("87%"), the header's figure.
+    { id: 'battery', name: 'Battery' },
 ];
 
 // Header elements as the settings dialog lists them: the battery figure (always on the

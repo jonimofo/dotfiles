@@ -1,15 +1,20 @@
+const Clutter = imports.gi.Clutter;
 const St = imports.gi.St;
 const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
+const BatteryModel = require('./batteryModel');
 const LayoutModel = require('./layoutModel');
 
-// The stock style of panel status icons (as IconApplet uses for symbolic icons).
+// The stock style of panel status icons (as IconApplet uses for symbolic icons) and of
+// panel text (as TextIconApplet uses for its label).
 const PANEL_ICON_STYLE_CLASS = 'system-status-icon';
+const PANEL_LABEL_STYLE_CLASS = 'applet-label';
 
-// The status icons shown on the panel: Wi-Fi, Bluetooth, VPN, volume, in the order and with
-// the selection of applyLayout(). Bluetooth shows only while the adapter is on, VPN only
-// while a VPN is up: the settings can hide an icon, never force one on. With no icon left,
-// one fallback icon keeps the button on the panel.
+// The status items shown on the panel: Wi-Fi, Bluetooth, VPN, volume icons and the battery
+// level, in the order and with the selection of applyLayout(). Bluetooth shows only while
+// the adapter is on, VPN only while a VPN is up, the battery only when there is one: the
+// settings can hide an item, never force one on. With nothing left, one fallback icon keeps
+// the button on the panel.
 class PanelIcons {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-panel-icons' });
@@ -19,19 +24,21 @@ class PanelIcons {
             vpn: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.vpn, PANEL_ICON_STYLE_CLASS),
             volume: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.volume, PANEL_ICON_STYLE_CLASS),
         };
-        // Whether the state wants each icon shown.
-        this._wanted = { wifi: true, bluetooth: false, vpn: false, volume: true };
-        this._allowed = Object.keys(this._icons);
+        this._batteryLabel = new St.Label({ style_class: PANEL_LABEL_STYLE_CLASS, y_align: Clutter.ActorAlign.CENTER });
+        this._items = { ...this._icons, battery: this._batteryLabel };
+        // Whether the state wants each item shown.
+        this._wanted = { wifi: true, bluetooth: false, vpn: false, volume: true, battery: false };
+        this._allowed = Object.keys(this._items);
         this._fallback = UiHelpers.symbolicIcon(Constants.PANEL_FALLBACK_ICON, PANEL_ICON_STYLE_CLASS);
         this.applyLayout(Constants.PANEL_ICON_ITEMS.map(item => item.id));
     }
 
-    // @ids: the icons allowed on the panel, in order.
+    // @ids: the items allowed on the panel, in order.
     applyLayout(ids) {
         this.actor.remove_all_children();
         this._allowed = ids;
         for (const id of ids)
-            this.actor.add_child(this._icons[id]);
+            this.actor.add_child(this._items[id]);
         this.actor.add_child(this._fallback);
         this._sync();
     }
@@ -64,10 +71,18 @@ class PanelIcons {
         this._icons.volume.icon_name = iconName;
     }
 
+    // @battery: from BatteryModel.pickBattery(), null hides the level.
+    setBattery(battery) {
+        this._wanted.battery = battery !== null;
+        if (battery)
+            this._batteryLabel.text = BatteryModel.label(battery.percent);
+        this._sync();
+    }
+
     _sync() {
         const { visible, fallback } = LayoutModel.panelIconVisibility(this._allowed, this._wanted);
-        for (const [id, icon] of Object.entries(this._icons))
-            icon.visible = visible[id];
+        for (const [id, item] of Object.entries(this._items))
+            item.visible = visible[id];
         this._fallback.visible = fallback;
     }
 }

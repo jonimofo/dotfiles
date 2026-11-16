@@ -240,7 +240,8 @@
                     "Wi-Fi": "wifi",
                     "Bluetooth": "bluetooth",
                     "VPN": "vpn",
-                    "Volume": "volume"
+                    "Volume": "volume",
+                    "Battery": "battery"
                 }
             }
         ],
@@ -260,6 +261,10 @@
             {
                 "show": true,
                 "id": "volume"
+            },
+            {
+                "show": true,
+                "id": "battery"
             }
         ]
     }

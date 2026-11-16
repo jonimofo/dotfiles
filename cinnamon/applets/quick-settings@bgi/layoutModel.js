@@ -41,8 +41,8 @@ function defaults(declared) {
     return declared.map(item => ({ show: true, id: item.id }));
 }
 
-// Panel icons: each shows when the settings allow it AND its state wants it (Bluetooth on,
-// a VPN up). The fallback shows when none does. @allowedIds: ids; @wanted: { id: bool }.
+// Panel items: each shows when the settings allow it AND its state wants it (Bluetooth on,
+// a VPN up, a battery present). The fallback shows when none does. @allowedIds: ids; @wanted: { id: bool }.
 function panelIconVisibility(allowedIds, wanted) {
     const visible = {};
     for (const id of Object.keys(wanted))

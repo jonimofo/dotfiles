@@ -713,7 +713,7 @@ function testSchemaMatchesDeclarations() {
         `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
-        && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume');
+        && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume,Battery');
 }
 
 function testLayoutModel() {
@@ -735,6 +735,11 @@ function testLayoutModel() {
     check('panel: the settings never force an icon on', !Model.panelIconVisibility(['bluetooth'], all).visible.bluetooth);
     check('panel: every icon hidden gives the fallback', Model.panelIconVisibility([], all).fallback);
     check('panel: allowed icons all absent by state gives the fallback', Model.panelIconVisibility(['bluetooth', 'vpn'], all).fallback);
+    const withBattery = { ...all, battery: true };
+    check('panel: the battery level shows after the icons when allowed and present',
+        Model.panelIconVisibility(['wifi', 'volume', 'battery'], withBattery).visible.battery);
+    check('panel: no battery, no level', !Model.panelIconVisibility(['battery'], all).visible.battery);
+    check('panel: the battery level alone needs no fallback', !Model.panelIconVisibility(['battery'], withBattery).fallback);
     const header = (ids, present) => JSON.stringify(Model.headerVisibility(ids, 'battery', present));
     check('header: battery shows only when allowed and present',
         header(['battery', 'lock'], true) === '{"battery":true,"line":true}' && header(['lock'], true) === '{"battery":false,"line":true}');

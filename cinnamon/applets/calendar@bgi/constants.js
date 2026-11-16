@@ -38,16 +38,20 @@ const SETTINGS_PAGES = [
 // px sizes of the validated design (time 13px, title 14px, metadata 12px, countdown 11px).
 const EVENTS_BASE_FONT_PX = 12;
 
-// Panel text: "Lun 16 Nov · 15:52 · VN 21:52".
+// Panel text: "Mon 16 Nov · 15:52 · VN 21:52".
 const PANEL_SEPARATOR = ' · ';
 // Between a time and its city or label: "15:52 Paris", "VN 21:52".
 const WORD_SEPARATOR = ' ';
 
-// GLib.DateTime.format() conversions of the date parts, in the locale's LC_TIME.
-const SHORT_DATE_FORMATS = { weekday: '%a', month: '%b' };
-const LONG_DATE_FORMATS = { weekday: '%A', month: '%B' };
-// Trailing characters removed from an abbreviation: "lun." reads "Lun".
-const ABBREVIATION_TRAILING = /\.+$/;
+// Dates are worded in English whatever LC_TIME says: "Mon 16 Nov. 2026" in the header,
+// "Mon 16 Nov" on the panel, "November 2026" over the month. Sunday first, as Date.getDay().
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const WEEKDAY_ABBREVIATIONS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+    'September', 'October', 'November', 'December'];
+const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// After an abbreviated month in the header ("Nov."), not after a full name ("May").
+const ABBREVIATION_DOT = '.';
 
 // Local and second-zone times, after the desktop's 24h and seconds settings.
 const TIME_FORMATS = {

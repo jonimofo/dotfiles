@@ -1,41 +1,50 @@
-// Panel and popup texts of calendar@bgi, built from date parts already formatted by GLib.
+// Panel and popup texts of calendar@bgi. Dates are worded in English from the tables of
+// constants.js, not from the locale.
 const Constants = require('./constants');
 
-function capitaliseFirst(text) {
-    return text.charAt(0).toLocaleUpperCase() + text.slice(1);
-}
-
-// "lun." -> "Lun", "nov." -> "Nov", "mai" -> "Mai".
-function tidyAbbreviation(word) {
-    return capitaliseFirst(word.replace(Constants.ABBREVIATION_TRAILING, ''));
-}
-
-// The parts of @datetime (a GLib.DateTime) named by @formats (SHORT_ or LONG_DATE_FORMATS).
-function datePartsOf(datetime, formats) {
+// The date parts of @datetime (a GLib.DateTime): weekday 0 (Sunday) to 6, day, month 1 to 12,
+// year.
+function datePartsOf(datetime) {
     return {
-        weekday: datetime.format(formats.weekday),
+        weekday: datetime.get_day_of_week() % 7,
         day: datetime.get_day_of_month(),
-        month: datetime.format(formats.month),
+        month: datetime.get_month(),
         year: datetime.get_year(),
     };
 }
 
-// "Lun 16 Nov".
-function formatShortDate(parts) {
-    return [tidyAbbreviation(parts.weekday), parts.day, tidyAbbreviation(parts.month)]
+// "Nov." for November, "May" for May: the dot marks a shortened name.
+function monthWithDot(month) {
+    const abbreviation = Constants.MONTH_ABBREVIATIONS[month - 1];
+    const shortened = Constants.MONTH_NAMES[month - 1].length > abbreviation.length;
+    return shortened ? `${abbreviation}${Constants.ABBREVIATION_DOT}` : abbreviation;
+}
+
+// Header: "Mon 16 Nov. 2026".
+function formatHeaderDate(parts) {
+    return [Constants.WEEKDAY_ABBREVIATIONS[parts.weekday], parts.day, monthWithDot(parts.month), parts.year]
         .join(Constants.WORD_SEPARATOR);
 }
 
-// "Lundi 16 novembre 2026".
-function formatLongDate(parts) {
-    return capitaliseFirst([parts.weekday, parts.day, parts.month, parts.year]
-        .join(Constants.WORD_SEPARATOR));
+// Panel: "Mon 16 Nov".
+function formatPanelDate(parts) {
+    return [Constants.WEEKDAY_ABBREVIATIONS[parts.weekday], parts.day, Constants.MONTH_ABBREVIATIONS[parts.month - 1]]
+        .join(Constants.WORD_SEPARATOR);
 }
 
-// "Novembre 2026", or "2026 Novembre" where GTK puts the year first.
-function formatMonthHeading(month, year, monthFirst) {
-    const parts = monthFirst ? [month, year] : [year, month];
-    return capitaliseFirst(parts.join(Constants.WORD_SEPARATOR));
+// Event spans over several days: "16 Nov. 2026".
+function formatDayMonthYear(parts) {
+    return [parts.day, monthWithDot(parts.month), parts.year].join(Constants.WORD_SEPARATOR);
+}
+
+// Event spans within a few days: "Wednesday".
+function weekdayName(parts) {
+    return Constants.WEEKDAY_NAMES[parts.weekday];
+}
+
+// Over the month: "November 2026". @month is 1 to 12.
+function formatMonthHeading(month, year) {
+    return [Constants.MONTH_NAMES[month - 1], year].join(Constants.WORD_SEPARATOR);
 }
 
 // {title, meta} of an event summary, cut at its first SUMMARY_SEPARATOR. Without one, the

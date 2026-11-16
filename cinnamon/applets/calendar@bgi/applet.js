@@ -19,7 +19,6 @@ const SecondZone = require('./secondZone');
 const DaySummary = require('./daySummary');
 const Appearance = require('./appearance');
 
-const DATE_FORMAT_FULL = CinnamonDesktop.WallClock.lctime_format("cinnamon", _("%A, %B %-e, %Y"));
 
 class CinnamonCalendarApplet extends Applet.TextApplet {
     constructor(orientation, panel_height, instance_id) {
@@ -391,7 +390,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
         let date_text = this.use_custom_format ?
             this.clock.get_clock() :
-            DateText.formatShortDate(DateText.datePartsOf(now, Constants.SHORT_DATE_FORMATS));
+            DateText.formatPanelDate(DateText.datePartsOf(now));
         return DateText.formatPanelText(date_text, now.format(this._timeFormat()), this._secondTime(now));
     }
 
@@ -410,7 +409,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
         this.set_applet_label(label_string);
 
-        let dateFormattedTooltip = this.clock.get_clock_for_format(DATE_FORMAT_FULL).capitalize();
+        let dateFormattedTooltip = DateText.formatHeaderDate(DateText.datePartsOf(now));
         if (this.use_custom_format) {
             dateFormattedTooltip = this.clock.get_clock_for_format(this.custom_tooltip_format).capitalize();
             if (!dateFormattedTooltip) {
@@ -420,8 +419,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         }
 
         this._updateClocks(now);
-        this._headerDate.set_text(DateText.formatLongDate(DateText.datePartsOf(
-            EventView.js_date_to_gdatetime(this._calendar.getSelectedDate()), Constants.LONG_DATE_FORMATS)));
+        this._headerDate.set_text(DateText.formatHeaderDate(DateText.datePartsOf(
+            EventView.js_date_to_gdatetime(this._calendar.getSelectedDate()))));
         this.set_applet_tooltip(dateFormattedTooltip);
 
         this.events_manager.select_date(this._calendar.getSelectedDate());

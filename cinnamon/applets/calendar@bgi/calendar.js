@@ -13,6 +13,7 @@ const Settings = imports.ui.settings;
 const Mainloop = imports.mainloop;
 const Constants = require('./constants');
 const DateText = require('./dateText');
+const DayMarker = require('./dayMarker');
 
 const MSECS_IN_DAY = 24 * 60 * 60 * 1000;
 const WEEKDATE_HEADER_WIDTH_DIGITS = 3;
@@ -444,7 +445,7 @@ class Calendar {
 
             let dot_box = new Cinnamon.GenericContainer(
                 {
-                    style_class: "calendar-day-event-dot-box",
+                    style_class: Constants.STYLE.dayMarkerBox,
                 }
             );
             dot_box.connect('allocate', this._allocate_dot_box.bind(this));
@@ -496,24 +497,17 @@ class Calendar {
             }
 
             let color_set = this.events_manager.get_colors_for_date(iter);
+            let marker_count = DayMarker.dayMarkerCount(this.events_enabled, color_set);
 
-            if (this.events_enabled && color_set !== null) {
-                let node = dot_box.get_theme_node();
-                let dot_box_width = node.get_width();
-                let dot_width = dot_box_width / color_set.length;
+            for (let i = 0; i < marker_count; i++) {
+                let marker = new St.Label(
+                    {
+                        style_class: Constants.STYLE.dayMarker,
+                        text: Constants.DAY_MARKER_TEXT
+                    }
+                );
 
-                for (let i = 0; i < color_set.length; i++) {
-                    let color = color_set[i];
-                    let dot = new St.Bin(
-                        {
-                            style_class: "calendar-day-event-dot",
-                            style: `background-color: ${color};`,
-                            x_align: Clutter.ActorAlign.CENTER
-                        }
-                    );
-
-                    dot_box.add_actor(dot);
-                }
+                dot_box.add_actor(marker);
             }
 
             iter.setTime(iter.getTime() + MSECS_IN_DAY);

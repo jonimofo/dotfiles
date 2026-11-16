@@ -429,9 +429,11 @@ Cinnamon 6.4) with a second time zone and its own look:
   filled violet, today has a thin light outline, a selected today has both; days of the
   other months are greyed.
 - Under the month, a card with the selected day's number of events (`1 event`,
-  `16 events`) and nothing else; a day without events has no card. Under it, a `Today`
+  `16 events`), large and centred, and nothing else; a day without events has no card. Under it, a `Today`
   button goes back to today's date and month, like a click on the clocks; it is dimmed
   while today is already shown.
+- At the bottom left, the stock "Date and Time Settings" entry is a button as wide as its
+  label, with the Today button's look.
 
 The look lives in `applets/calendar@bgi/stylesheet.css`, under the applet's own classes:
 other menus and the stock calendar are not touched. Its colours are the owner's validated

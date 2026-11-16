@@ -137,7 +137,7 @@ For a future re-sync with upstream. Everything else is the stock code.
 |---|---|---|
 | `metadata.json` | | uuid, name, description, version fields |
 | `settings-schema.json` | | "Second time zone" section with three keys |
-| `applet.js` | `constructor` | settings uuid, second zone settings, popup class, header band (date label moved from the event list, clocks), calendar panel, day summary card |
+| `applet.js` | `constructor` | settings uuid, second zone settings, popup class, header band (date label moved from the event list, clocks), calendar panel, day summary card, Today button, the settings entry as a button instead of the stock separator and menu item |
 | `applet.js` | `constructor`, `_setKeybinding` (removed), `on_applet_removed_from_panel` | `keyOpen` binding and the `<Super>c` hotkey removed |
 | `settings-schema.json` | `keyOpen` | removed |
 | `applet.js` | `_onSettingsChanged` | resolves the second zone |
@@ -452,6 +452,42 @@ Decisions:
 4. `Today button` switch in Shown elements (`show-today-button`, on), live like the others.
 5. Hiding the header clocks no longer removes the only way back to today (README updated).
 
+## Larger count, settings button (sixth review round)
+
+Owner's words, after loading round five live: "nb of events should be bigger and centered,
+date and time setting should also be a button + be just regular size of button, not too
+wide".
+
+Look to build:
+
+```
++----------------------------------+
+|             7 events             |     bigger text, centred
++----------------------------------+
+
++----------------------------------+
+|              Today               |     unchanged, full width
++----------------------------------+
+
+ [ Date and Time Settings ]              bottom left, a button
+                                         as wide as its label plus padding
+```
+
+Decisions:
+
+1. The count is centred, bold, `18px` (the event title's 14px at 100% times 1.3, rounded);
+   before, it inherited the theme's font size, normal weight, left-aligned. The card sits
+   under none of the three text sizes (Events scales the event list, Days the calendar grid,
+   Header the header band), so the count does not scale.
+2. The stock separator and "Date and Time Settings" menu item are replaced by a footer with
+   an St.Button of its label's width, left-aligned, with the Today button's colours, border,
+   radius and padding (no new colour), hover, an accessible name, and keyboard focus as the
+   menu item had (focus border from the palette). Its click calls `_onLaunchSettings`, the
+   stock item's handler. The label is the stock translation `_("Date and Time Settings")`.
+3. The Today button is unchanged.
+4. The footer has 12px padding on every side, as the columns have on theirs, so no band is
+   left where the menu item was.
+
 ## To confirm on the live panel
 
 - Sizes and the place of the dot under the number, under Dracula.
@@ -461,6 +497,7 @@ Decisions:
   the header band, rows of 48 to 56 px, the time block width with 12-hour times, the
   ellipsis and tooltip, the larger day cells with the dot under the digit, a six-week month,
   the day card for today and for another day.
+- Sixth round: the count size and centring, the settings button's width, look, hover, keyboard focus and click, the bottom spacing.
 - Fifth round: the count card alone, the Today button's look, hover, click from another month, and its dimmed state on today.
 - Fourth round: the two tabs in Configure, `<Super>c` free again, each slider and the gap applying at once, 100%
   looking as before, the switches leaving no gap, the sizes at 70% and 160%.

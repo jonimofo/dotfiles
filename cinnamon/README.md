@@ -63,6 +63,9 @@ own strip at its very top.
 - The mouse wheel switches workspace.
 - A middle click on a window does nothing (stock Scale closes the application).
 - A right click on a window opens it, like a left click (stock Scale shows the window menu).
+- The hot corners keep working over a fullscreen window (stock Cinnamon turns them off on
+  that screen while a window is fullscreen). Disabling the extension gives back the stock
+  behaviour.
 - The dock shows the apps pinned in the panel's window list, then, after a separator, the
   other running apps. A dot under an icon means the app has a window open.
 - A click on a dock icon goes to the app's most recent window, switching workspace if
@@ -334,6 +337,7 @@ manager come with the desktop.
 scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema.json, module references, no libnm disconnect()
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
+scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 ```
 

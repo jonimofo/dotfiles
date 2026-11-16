@@ -414,9 +414,10 @@ Cinnamon 6.4) with a second time zone and its own look:
 - The panel reads `Lun 16 Nov · 15:52 · VN 21:52`: short date, local time, then a second
   time zone with its label. Weekday and month come from the locale (`LC_TIME`), without
   their trailing dot. The time follows the desktop's 24h or 12h and seconds settings.
-- The popup opens on a header band: the selected day's full date on the left
-  (`Lundi 16 novembre 2026`), the clocks on the right (`15:52 Paris`, `21:52 VN`). A click
-  on the clocks goes back to today, as the stock date did.
+- The popup opens on a header band: the selected day's full date over the events column
+  (`Lundi 16 novembre 2026`), the clocks centred over the calendar column (`15:52 Paris`,
+  `21:52 VN`, a thin line between them). A click on the clocks goes back to today, as the
+  stock date did.
 - Left column, the selected day's events, one row each: the calendar's colour bar, the
   time block `10:00 – 11:00`, then the title over its metadata. A summary such as
   `Team meeting | Alex | [R1]` is cut at its first ` | `: title `Team meeting`, metadata
@@ -428,10 +429,9 @@ Cinnamon 6.4) with a second time zone and its own look:
   move one month), larger day cells, one dot under a day with events. The selected day is
   filled violet, today has a thin light outline, a selected today has both; days of the
   other months are greyed.
-- Under the month, a card with the selected day's number of events (`1 event`,
-  `16 events`), large and centred, and nothing else; a day without events has no card. Under it, a `Today`
-  button goes back to today's date and month, like a click on the clocks; it is dimmed
-  while today is already shown.
+- Under the month, the selected day's number of events as plain centred text (`1 event`,
+  `16 events`); nothing for a day without events. Under it, a `Today` button goes back to
+  today's date and month, like a click on the clocks; it is always active.
 - At the bottom left, the stock "Date and Time Settings" entry is a button as wide as its
   label, with the Today button's look.
 
@@ -468,7 +468,7 @@ reload.
 | Metadata line | on | the second line of each event |
 | Countdown | on | "Starting in 5 minutes", "In progress" |
 | Dot under days | on | the dot under a day with events; off, the digits are centred |
-| Summary card | on | the number of events under the month |
+| Summary card | on | the number of events under the month (plain text) |
 | Today button | on | the button under the card |
 | Week numbers | off | stock switch |
 

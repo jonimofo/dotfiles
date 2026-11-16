@@ -137,6 +137,7 @@ For a future re-sync with upstream. Everything else is the stock code.
 |---|---|---|
 | `metadata.json` | | uuid, name, description, version fields |
 | `settings-schema.json` | | "Second time zone" section with three keys |
+| `applet.js` | `constructor` (seventh round) | header band and columns in one `St.Table` instead of two boxes (the stock `calendar-main-box` is gone) |
 | `applet.js` | `constructor` | settings uuid, second zone settings, popup class, header band (date label moved from the event list, clocks), calendar panel, day summary card, Today button, the settings entry as a button instead of the stock separator and menu item |
 | `applet.js` | `constructor`, `_setKeybinding` (removed), `on_applet_removed_from_panel` | `keyOpen` binding and the `<Super>c` hotkey removed |
 | `settings-schema.json` | `keyOpen` | removed |
@@ -144,7 +145,7 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `applet.js` | `_updateClockAndDate` | panel text, clocks, header date and day card from the pure formatters |
 | `applet.js` | `_has_calendars_changed` | updates the day card |
 | `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height |
-| `applet.js` | new `_updateTodayButton` | the Today button's visibility and inactive state |
+| `applet.js` | new `_updateTodayButton` | the Today button's visibility |
 | `applet.js` | new `_inVerticalPanel`, `_timeFormat`, `_panelText`, `_secondTime`, `_updateSecondZone`, `_buildClock`, `_updateClocks`, `_updateDaySummary`, `_applyAppearance` | |
 | `calendar.js` | `_getCalendarDayAbbreviation` | trailing dot removed, capitalised |
 | `calendar.js` | `_buildHeader` | one month row instead of the month and year rows, day heading class |
@@ -164,7 +165,7 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `eventView.js` | `EventRow.update_variations` | one time class |
 
 New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
-`dayCell.js`, `daySummary.js`, `appearance.js`, `todayButton.js`,
+`dayCell.js`, `daySummary.js`, `appearance.js`,
 `stylesheet.css`.
 
 ## Steps
@@ -488,6 +489,58 @@ Decisions:
 4. The footer has 12px padding on every side, as the columns have on theirs, so no band is
    left where the menu item was.
 
+## Plain count, Today never dimmed, centred clocks (seventh review round)
+
+Owner's words, after loading round six live: "nb events font is too big, button todays is
+not enough, also nb events should not look like a button it should be text, also the time
+should be centered in the header".
+
+A. Clocks, chosen "Centred over the calendar":
+
+```
++-------------------------------+------------------------------+
+| Lundi 16 novembre 2026        |    19:41 Paris | 01:41 VN    |
++-------------------------------+------------------------------+
+| | 10:00 - 11:00  Event        |   <   Novembre 2026    >     |
+| | 11:00 - 12:00  Event        |  Lun Mar Mer Jeu Ven Sam Dim |
+```
+
+B. Today button, chosen "Never dimmed, clearer text", with the count as text:
+
+```
+  7 events                  plain text, smaller, centred
+
++----------------------------------+
+|              Today               |   full contrast, bold
++----------------------------------+
+
+ [ Date and Time Settings ]
+```
+
+The words at the right of each line are design notes, not UI text.
+
+Decisions:
+
+1. The count is plain centred text: no background, border, radius or padding; 14px (the
+   event title at 100%), weight 600, primary text. The column's 12px spacing keeps it off
+   the calendar panel and the button.
+2. The Today button is always reactive and at full contrast, bold, primary text. Its
+   inactive state is gone: `todayButton.js` (`todayButtonActive`), the opacity code, the
+   `INACTIVE_OPACITY` and `FULL_OPACITY` constants and their tests. A click on today runs
+   the same handler.
+3. The header band and the two columns are one `St.Table` (`calendar-bgi-layout`): row 0
+   holds the date cell and the clocks cell, row 1 the events column and the calendar
+   column. A table column has one width for both rows, so the clocks cell is exactly as
+   wide as the calendar column, and the clocks are centred in it; both have the same side
+   padding (12px), so the clocks share the month title's centre. No width is computed in
+   code. The table has no spacing: the two header cells make one strip, and the columns'
+   own padding (2px + 12px) makes the 14px gap between them. With the events switched off,
+   the events column is hidden and the first column is as wide as the date: the date stays
+   on the left, the clocks centred over the calendar. With one clock (second zone off), the
+   single clock is centred. The thin line is now only between the two clocks, not before
+   the first.
+4. Nothing else changes.
+
 ## To confirm on the live panel
 
 - Sizes and the place of the dot under the number, under Dracula.
@@ -497,6 +550,7 @@ Decisions:
   the header band, rows of 48 to 56 px, the time block width with 12-hour times, the
   ellipsis and tooltip, the larger day cells with the dot under the digit, a six-week month,
   the day card for today and for another day.
+- Seventh round: the clocks centred over the month title, with a long date, with the events off and with one clock; the header strip without a seam; the count as text; the Today button on today.
 - Sixth round: the count size and centring, the settings button's width, look, hover, keyboard focus and click, the bottom spacing.
 - Fifth round: the count card alone, the Today button's look, hover, click from another month, and its dimmed state on today.
 - Fourth round: the two tabs in Configure, `<Super>c` free again, each slider and the gap applying at once, 100%

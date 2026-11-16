@@ -388,7 +388,7 @@ scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
 scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
-scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, day marker, stylesheet rules
+scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, tick clock, day marker, stylesheet rules
 ```
 
 Prerequisites: `node` and `jq` for the check, `gjs` with the libnm and Cvc typelibs for the
@@ -458,20 +458,20 @@ reload.
 |---|---|---|
 | Events | 100 % | time, title, metadata and countdown of the event rows |
 | Days | 100 % | day digits and headings; the day cells grow with them (the month row too) |
-| Header | 100 % | the date and the clocks of the header band |
+| Header | 100 % | the whole header band: date, event count and clocks |
 | Gap between events | 8 px | 0 to 24 px between two event rows |
 
 **Appearance**, shown elements; an element switched off leaves no empty space:
 
 | Setting | Default | |
 |---|---|---|
-| Calendar events | on | stock switch: the event list, the dots and the day card |
+| Calendar events | on | stock switch: the event list, the dots and the event count |
 | Clocks in the header | on | both clocks; the second one also needs "Show a second time zone". Hidden, their click back to today goes too; the Today button stays |
 | Metadata line | on | the second line of each event |
 | Countdown | on | "Starting in 5 minutes", "In progress" |
 | Dot under days | on | the dot under a day with events; off, the digits are centred |
 | Event count | on | the number of events in the middle of the header band |
-| Today button | on | the button under the card |
+| Today button | on | the button under the month |
 | Week numbers | off | stock switch |
 
 **Panel**: the stock custom date format (switch, panel format, tooltip format, syntax
@@ -492,7 +492,9 @@ global shortcut.
 
 The tabs, keys, defaults, ranges and labels are in `applets/calendar@bgi/constants.js`;
 `settings-schema.json` is written by hand and the test checks that the two agree. The
-applet's own wording is in English, dates included, whatever the locale.
+applet's own wording is in English whatever the locale: dates, and every phrase it shows
+("No Events", "All day", "Today", the countdowns, "Date and Time Settings"), which come from
+`constants.js` instead of Cinnamon's translations.
 
 ## Calendar: install
 

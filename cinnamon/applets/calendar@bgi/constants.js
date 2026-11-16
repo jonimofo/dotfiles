@@ -8,6 +8,36 @@ const SHOW_SECOND_ZONE_KEY = 'show-second-zone';
 const SECOND_ZONE_ID_KEY = 'second-zone-id';
 const SECOND_ZONE_LABEL_KEY = 'second-zone-label';
 
+// Appearance settings (Configure > Apparence). settings-schema.json is written by hand; the
+// test checks that it holds each of these keys with this default, range, step and label.
+// Text sizes, in percent of the validated look.
+const TEXT_SCALES = {
+    events: { key: 'events-text-scale', label: 'Événements', default: 100, min: 70, max: 160, step: 5 },
+    days: { key: 'days-text-scale', label: 'Jours', default: 100, min: 70, max: 160, step: 5 },
+    header: { key: 'header-text-scale', label: 'En-tête', default: 100, min: 70, max: 160, step: 5 },
+};
+// Space between two event rows, in px.
+const EVENT_GAP = { key: 'event-gap', label: 'Espace entre événements', default: 8, min: 0, max: 24, step: 1 };
+// Elements shown or hidden. Week numbers and events are stock keys, with their stock labels.
+const ELEMENT_SWITCHES = {
+    headerClocks: { key: 'show-header-clocks', label: "Horloges dans l'en-tête", default: true },
+    eventMeta: { key: 'show-event-meta', label: 'Ligne de métadonnées', default: true },
+    eventCountdown: { key: 'show-event-countdown', label: 'Compte à rebours', default: true },
+    dayMarker: { key: 'show-day-marker', label: 'Point sous les jours', default: true },
+    daySummary: { key: 'show-day-summary', label: 'Carte de résumé', default: true },
+    weekNumbers: { key: 'show-week-numbers', label: 'Show week numbers in calendar', default: false },
+    events: { key: 'show-events', label: 'Show calendar events', default: true },
+};
+// Configure dialog tabs, in order, with their section titles.
+const SETTINGS_PAGES = [
+    { title: 'Apparence', sections: ['Taille du texte', 'Éléments affichés'] },
+    { title: 'Barre', sections: ['Date', 'Second fuseau'] },
+    { title: 'Raccourci', sections: ['Raccourci clavier'] },
+];
+// Font size of the event list at 100%: the event texts are in em of it, so 100% gives the
+// px sizes of the validated design (time 13px, title 14px, metadata 12px, countdown 11px).
+const EVENTS_BASE_FONT_PX = 12;
+
 // Panel text: "Lun 16 Nov · 15:52 · VN 21:52".
 const PANEL_SEPARATOR = ' · ';
 // Between a time and its city or label: "15:52 Paris", "VN 21:52".

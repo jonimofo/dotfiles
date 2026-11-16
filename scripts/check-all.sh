@@ -6,6 +6,11 @@
 # Usage: scripts/check-all.sh (from any directory). Needs bash, git, node, jq, gjs, shellcheck.
 set -euo pipefail
 
+# Run from a hook, git exports GIT_DIR and friends: the tests' throwaway repos would write
+# into the caller's repository. The checks locate the repo from this script's path instead.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Sourced configuration files of tmux-powerline: their variables are read by that tool, and
 # they carry no shebang by its convention.

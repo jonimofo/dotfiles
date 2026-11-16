@@ -47,6 +47,12 @@ if [ "${SKIP_CHECKS:-}" = "1" ]; then
 fi
 
 # Every test, the Cinnamon checks and shellcheck (scripts/check-all.sh, under a minute).
+# git exports GIT_DIR, GIT_INDEX_FILE and friends to hooks (githooks(5)): the tests' own
+# `git init` and `git config` would then write into this repository (core.bare=true broke
+# the main checkout on 2026-11-16). The hook runs from the work tree root, so plain git
+# commands still find the repository without them.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
 repo_root="$(git rev-parse --show-toplevel)"
 if [ -x "$repo_root/scripts/check-all.sh" ]; then
     if ! "$repo_root/scripts/check-all.sh"; then

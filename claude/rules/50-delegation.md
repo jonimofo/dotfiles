@@ -6,8 +6,10 @@ plans and review, not on execution.
 ## Split
 
 **Fable (main session) keeps:** analysis, action plans, mockups, questions to the user, briefs,
-review of agent hand-backs, memory updates, trivial edits (one file, a few lines), and all PR
-mechanics (mark ready, merge, branch deletion, retarget, rebase) because agent sessions are denied them.
+review of agent hand-backs, memory updates, trivial edits (one file, a few lines), visual tweak
+rounds (components, tokens, layout) on a running dev stack so the user sees each change within
+minutes, and all PR mechanics (mark ready, merge, branch deletion, retarget, rebase) because agent
+sessions are denied them.
 
 **Opus agents (`Agent` with `model: "opus"`) do:** every implementation step of a validated plan:
 code, tests, docs, screenshots, browser checks. One agent per step or per PR, resumed with
@@ -17,6 +19,8 @@ Planning and design are never delegated, even for research-heavy plans.
 
 ## Brief format (every agent gets this)
 
+0. Visible change: the validated ASCII mockup and the user's answers, verbatim. No mockup in the
+   brief, no brief.
 1. Goal in one sentence, and what is explicitly out of scope.
 2. Files and docs to read first (paths), decisions already made, patterns to reuse.
 3. Steps, in order.
@@ -32,3 +36,6 @@ Planning and design are never delegated, even for research-heavy plans.
 - [ ] Doubts raised by the agent answered or surfaced to the user.
 
 A hand-back that fails a check goes back to the same agent with the exact gap, not to a new one.
+
+One audit per PR, at the end. Intermediate pushes use `--no-verify`; the full suite runs on the
+final push.

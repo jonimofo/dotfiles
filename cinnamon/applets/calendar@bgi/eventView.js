@@ -597,6 +597,14 @@ class EventsManager {
         }
     }
 
+    // The events of the day of @js_date, in the list's order, or [] when none is known.
+    get_events_for_date(js_date) {
+        let gdate_only = date_only(js_date_to_gdatetime(js_date));
+        let event_data_list = this.events_by_date[gdate_only.to_unix()];
+
+        return event_data_list !== undefined ? event_data_list.get_event_list() : [];
+    }
+
     get_colors_for_date(js_date) {
         let gdate = js_date_to_gdatetime(js_date);
         let gdate_only = date_only(gdate);

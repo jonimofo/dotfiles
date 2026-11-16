@@ -16,6 +16,7 @@ const Separator = imports.ui.separator;
 const Constants = require('./constants');
 const DateText = require('./dateText');
 const SecondZone = require('./secondZone');
+const DaySummary = require('./daySummary');
 
 const DATE_FORMAT_FULL = CinnamonDesktop.WallClock.lctime_format("cinnamon", _("%A, %B %-e, %Y"));
 
@@ -42,10 +43,20 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.events_manager = new EventView.EventsManager(this.settings, this.desktop_settings);
             this.events_manager.connect("events-manager-ready", this._events_manager_ready.bind(this));
             this.events_manager.connect("has-calendars-changed", this._has_calendars_changed.bind(this));
+            this.events_manager.connect("events-updated", () => this._updateDaySummary());
+
+            // Header band: the selected day's date, then the clocks
+            let header = new St.BoxLayout(
+                {
+                    style_class: Constants.STYLE.header,
+                    vertical: false
+                }
+            );
+            this.menu.addActor(header);
 
             let box = new St.BoxLayout(
                 {
-                    style_class: 'calendar-main-box',
+                    style_class: `calendar-main-box ${Constants.STYLE.columns}`,
                     vertical: false
                 }
             );
@@ -64,8 +75,18 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
             box.add_actor(this.event_list.actor);
 
+            // The event list's date label moves to the header band, where it stays shown
+            // with the events switched off.
+            this._headerDate = this.event_list.selected_date_label;
+            this.event_list.actor.remove_actor(this._headerDate);
+            this._headerDate.set_style_class_name(Constants.STYLE.headerDate);
+            this._headerDate.x_expand = true;
+            this._headerDate.y_align = Clutter.ActorAlign.CENTER;
+            header.add_actor(this._headerDate);
+
             let calbox = new St.BoxLayout(
                 {
+                    style_class: Constants.STYLE.calendarColumn,
                     vertical: true
                 }
             );
@@ -73,9 +94,10 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.go_home_button = new St.BoxLayout(
                 {
                     style_class: "calendar-today-home-button",
-                    x_align: Clutter.ActorAlign.CENTER,
+                    x_align: Clutter.ActorAlign.END,
+                    y_align: Clutter.ActorAlign.CENTER,
                     reactive: true,
-                    vertical: true
+                    vertical: false
                 }
             );
 
@@ -102,19 +124,43 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 }
             }));
 
-            calbox.add_actor(this.go_home_button);
+            header.add_actor(this.go_home_button);
 
-            // Local and second-zone times
-            this._headerTimes = new St.Label(
+            // Local and second-zone clocks: time, then city or label
+            this._headerTimes = new St.BoxLayout(
                 {
                     style_class: Constants.STYLE.headerTime
                 }
             );
             this.go_home_button.add_actor(this._headerTimes);
+            this._clocks = [this._buildClock(), this._buildClock()];
 
             this._calendar = new Calendar.Calendar(this.settings, this.events_manager);
             this._calendar.connect("selected-date-changed", Lang.bind(this, this._updateClockAndDate));
-            calbox.add_actor(this._calendar.actor);
+            let calendar_panel = new St.BoxLayout(
+                {
+                    style_class: Constants.STYLE.calendarPanel,
+                    vertical: true
+                }
+            );
+            calendar_panel.add_actor(this._calendar.actor);
+            calbox.add_actor(calendar_panel);
+
+            // Summary of the selected day: heading, number of events, first start to last end
+            this._daySummary = new St.BoxLayout(
+                {
+                    style_class: Constants.STYLE.daySummary,
+                    vertical: true,
+                    visible: false
+                }
+            );
+            this._daySummaryHeading = new St.Label({ style_class: Constants.STYLE.daySummaryHeading });
+            this._daySummaryCount = new St.Label();
+            this._daySummaryRange = new St.Label();
+            this._daySummary.add_actor(this._daySummaryHeading);
+            this._daySummary.add_actor(this._daySummaryCount);
+            this._daySummary.add_actor(this._daySummaryRange);
+            calbox.add_actor(this._daySummary);
 
             box.add_actor(calbox);
 
@@ -230,6 +276,60 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
     _has_calendars_changed(em) {
         this.event_list.actor.visible = this.events_manager.is_active();
+        this._updateDaySummary();
+    }
+
+    _buildClock() {
+        let clock = {
+            actor: new St.BoxLayout({ style_class: Constants.STYLE.clock }),
+            time: new St.Label({ style_class: Constants.STYLE.clockTime }),
+            suffix: new St.Label({ style_class: Constants.STYLE.clockSuffix })
+        };
+        clock.actor.add_actor(clock.time);
+        clock.actor.add_actor(clock.suffix);
+        this._headerTimes.add_actor(clock.actor);
+        return clock;
+    }
+
+    _updateClocks(now) {
+        let city = DateText.cityFromZoneId(GLib.TimeZone.new_local().get_identifier());
+        let clocks = DateText.headerClocks(now.format(this._timeFormat()), city, this._secondTime(now));
+        this._clocks.forEach((clock, i) => {
+            clock.actor.visible = i < clocks.length;
+            if (clock.actor.visible) {
+                clock.time.set_text(clocks[i].time);
+                clock.suffix.set_text(clocks[i].suffix);
+                clock.suffix.visible = clocks[i].suffix !== "";
+            }
+        });
+    }
+
+    // The card under the calendar, for the selected day; hidden when it has no event.
+    _updateDaySummary() {
+        let selected = this._calendar.getSelectedDate();
+        let day_start = EventView.date_only(EventView.js_date_to_gdatetime(selected));
+        let events = this.events_manager.is_active() ? this.events_manager.get_events_for_date(selected) : [];
+        let summary = DaySummary.summariseDay(events.map(event => ({
+            allDay: event.all_day,
+            start: DaySummary.minutesFrom(day_start, event.start),
+            end: DaySummary.minutesFrom(day_start, event.end)
+        })));
+
+        this._daySummary.visible = summary.count > 0;
+        if (!this._daySummary.visible) {
+            return;
+        }
+
+        let long_date = DateText.formatLongDate(DateText.datePartsOf(day_start, Constants.LONG_DATE_FORMATS));
+        this._daySummaryHeading.set_text(DaySummary.summaryHeading(this._calendar.todaySelected(), long_date));
+        this._daySummaryCount.set_text(DaySummary.formatEventCount(summary.count));
+        this._daySummaryRange.visible = summary.range !== null;
+        if (summary.range !== null) {
+            let format = this._timeFormat();
+            this._daySummaryRange.set_text(DaySummary.formatRange(
+                day_start.add_minutes(summary.range.start).format(format),
+                day_start.add_minutes(summary.range.end).format(format)));
+        }
     }
 
     _updateSecondZone() {
@@ -270,11 +370,6 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         return DateText.formatPanelText(date_text, now.format(this._timeFormat()), this._secondTime(now));
     }
 
-    _headerText(now) {
-        let city = DateText.cityFromZoneId(GLib.TimeZone.new_local().get_identifier());
-        return DateText.formatHeaderTimes(now.format(this._timeFormat()), city, this._secondTime(now));
-    }
-
     _updateClockAndDate() {
         let now = GLib.DateTime.new_now_local();
         let label_string = this._panelText(now);
@@ -299,10 +394,13 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             }
         }
 
-        this._headerTimes.set_text(this._headerText(now));
+        this._updateClocks(now);
+        this._headerDate.set_text(DateText.formatLongDate(DateText.datePartsOf(
+            EventView.js_date_to_gdatetime(this._calendar.getSelectedDate()), Constants.LONG_DATE_FORMATS)));
         this.set_applet_tooltip(dateFormattedTooltip);
 
         this.events_manager.select_date(this._calendar.getSelectedDate());
+        this._updateDaySummary();
     }
 
     on_applet_added_to_panel() {

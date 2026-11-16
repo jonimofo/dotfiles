@@ -10,8 +10,6 @@ const SECOND_ZONE_LABEL_KEY = 'second-zone-label';
 
 // Panel text: "Lun 16 Nov · 15:52 · VN 21:52".
 const PANEL_SEPARATOR = ' · ';
-// Popup header: "15:52 Paris  ·  21:52 VN".
-const HEADER_SEPARATOR = '  ·  ';
 // Between a time and its city or label: "15:52 Paris", "VN 21:52".
 const WORD_SEPARATOR = ' ';
 
@@ -46,6 +44,13 @@ const SUMMARY_SEPARATOR = ' | ';
 // scrolls.
 const EVENTS_MAX_HEIGHT_RATIO = 0.7;
 
+// Day summary card under the calendar: heading for today (another day shows its date), the
+// number of events, and the range from the first start to the last end, never a duration.
+const SUMMARY_TODAY_HEADING = "Aujourd'hui";
+const SUMMARY_COUNT_ONE = 'activité';
+const SUMMARY_COUNT_MANY = 'activités';
+const MINUTES_IN_DAY = 24 * 60;
+
 // One marker under a day that has events, drawn in the text colour of the theme.
 const DAY_MARKER_TEXT = '•';
 const DAY_MARKER_MAX = 1;
@@ -53,7 +58,17 @@ const DAY_MARKER_MAX = 1;
 // Class names of stylesheet.css. They replace the stock classes whose sizes the themes set.
 const STYLE = {
     popup: 'calendar-bgi-popup',
+    header: 'calendar-bgi-header',
+    headerDate: 'calendar-bgi-header-date',
     headerTime: 'calendar-bgi-header-time',
+    clock: 'calendar-bgi-clock',
+    clockTime: 'calendar-bgi-clock-time',
+    clockSuffix: 'calendar-bgi-clock-suffix',
+    columns: 'calendar-bgi-columns',
+    calendarColumn: 'calendar-bgi-calendar-column',
+    calendarPanel: 'calendar-bgi-calendar-panel',
+    daySummary: 'calendar-bgi-day-summary',
+    daySummaryHeading: 'calendar-bgi-day-summary-heading',
     monthRow: 'calendar-bgi-month-row',
     monthLabel: 'calendar-bgi-month-label',
     dayHeading: 'calendar-bgi-day-heading',

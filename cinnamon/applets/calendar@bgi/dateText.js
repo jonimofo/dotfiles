@@ -83,11 +83,11 @@ function cityFromZoneId(zoneId) {
     return parts[parts.length - 1].replace(Constants.ZONE_ID_SPACE, Constants.WORD_SEPARATOR);
 }
 
-// "15:52 Paris  ·  21:52 VN". @second is {label, time}, or null when hidden.
-function formatHeaderTimes(localTime, city, second) {
-    const local = joinNonEmpty([localTime, city], Constants.WORD_SEPARATOR);
-    if (!second)
-        return local;
-    const other = joinNonEmpty([second.time, second.label], Constants.WORD_SEPARATOR);
-    return joinNonEmpty([local, other], Constants.HEADER_SEPARATOR);
+// The header clocks, left to right: [{time, suffix}], the local one ("15:52", "Paris"),
+// then the second zone's ("21:52", "VN") unless @second is null.
+function headerClocks(localTime, city, second) {
+    const clocks = [{ time: localTime, suffix: city }];
+    if (second)
+        clocks.push({ time: second.time, suffix: second.label });
+    return clocks;
 }

@@ -18,17 +18,16 @@ const Util = imports.misc.util;
 const Mainloop = imports.mainloop;
 const Tweener = imports.ui.tweener;
 const Interfaces = imports.misc.interfaces;
+const Constants = require('./constants');
+const DateText = require('./dateText');
 
 const STATUS_UNKNOWN = 0;
 const STATUS_NO_CALENDARS = 1;
 const STATUS_HAS_CALENDARS = 2;
 
-// TODO: this is duplicated from applet.js
-const DATE_FORMAT_FULL = CinnamonDesktop.WallClock.lctime_format("cinnamon", _("%A, %B %-e, %Y"));
 const DAY_FORMAT = CinnamonDesktop.WallClock.lctime_format("cinnamon", "%A");
 
-// https://www.w3schools.com/charsets/ref_utf_geometric.asp
-const ARROW_SEPARATOR = "  ►  "
+const ARROW_SEPARATOR = Constants.EVENT_TIME_SEPARATOR
 const EDS_BUS_NAME = "org.gnome.evolution.dataserver.Calendar8"
 
 function locale_cap(str) {
@@ -327,7 +326,7 @@ class EventsManager {
         this._bus_watch_id = 0;
 
         if (this._calendar_server == null) {
-            log("calendar@cinnamon.org: Calendar events supported.")
+            log(`${Constants.LOG_PREFIX}: Calendar events supported.`)
 
             Cinnamon.CalendarServerProxy.new_for_bus(
                 Gio.BusType.SESSION,
@@ -341,7 +340,7 @@ class EventsManager {
     }
 
     log_dbus_error(e) {
-        global.logError(`calendar@cinnamon.org: Could not check for calendar event support: ${e.toString()}`);
+        global.logError(`${Constants.LOG_PREFIX}: Could not check for calendar event support: ${e.toString()}`);
     }
 
     _calendar_server_ready(obj, res) {
@@ -630,7 +629,7 @@ class EventList {
 
         this.actor = new St.BoxLayout(
             {
-                style_class: "calendar-events-main-box",
+                style_class: `calendar-events-main-box ${Constants.STYLE.events}`,
                 vertical: true,
                 visible: false
             }
@@ -742,7 +741,7 @@ class EventList {
     }
 
     set_date(gdate) {
-        this.selected_date_label.set_text(locale_cap(gdate.format(DATE_FORMAT_FULL)));
+        this.selected_date_label.set_text(DateText.formatLongDate(DateText.datePartsOf(gdate, Constants.LONG_DATE_FORMATS)));
         this.selected_date = gdate;
     }
 
@@ -905,7 +904,7 @@ class EventRow {
             {
                 x_align: Clutter.ActorAlign.START,
                 text: "",
-                style_class: "calendar-event-time-present"
+                style_class: Constants.STYLE.eventTime
             }
         );
         label_box.add(this.event_time, { expand: true, x_fill: true });
@@ -924,7 +923,7 @@ class EventRow {
             {
                 text: this.event.summary,
                 y_expand: true,
-                style_class: "calendar-event-summary"
+                style_class: Constants.STYLE.eventTitle
             }
         );
 
@@ -944,12 +943,8 @@ class EventRow {
         let starts_today = dt_equals(today, this.event.start_date);
 
         if (time_until_finish < 0) {
-            this.event_time.set_style_class_name("calendar-event-time-past");
-
             this.countdown_label.set_text("");
         } else if (time_until_start > 0) {
-            this.event_time.set_style_class_name("calendar-event-time-future");
-
             if (starts_today) {
                 let [countdown_pclass, text] = format_timespan(time_until_start);
                 this.countdown_label.set_text(text);
@@ -959,8 +954,6 @@ class EventRow {
                 this.countdown_label.set_text("");
             }
         } else {
-            this.event_time.set_style_class_name("calendar-event-time-present");
-
             if (this.event.all_day || this.event.multi_day) {
                 this.countdown_label.set_text("");
                 this.event_time.set_style_pseudo_class("all-day");

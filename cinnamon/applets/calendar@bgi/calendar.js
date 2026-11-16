@@ -11,6 +11,8 @@ const Gettext_gtk30 = imports.gettext.domain('gtk30');
 const Cinnamon = imports.gi.Cinnamon;
 const Settings = imports.ui.settings;
 const Mainloop = imports.mainloop;
+const Constants = require('./constants');
+const DateText = require('./dateText');
 
 const MSECS_IN_DAY = 24 * 60 * 60 * 1000;
 const WEEKDATE_HEADER_WIDTH_DIGITS = 3;
@@ -113,7 +115,7 @@ function _getCalendarDayAbbreviation(dayNumber) {
         new Date(2014, 2, 8).toLocaleFormat('%a')
     ];
 
-    return abbreviations[dayNumber];
+    return DateText.tidyAbbreviation(abbreviations[dayNumber]);
 }
 
 // Abstraction for an appointment/event in a calendar
@@ -321,7 +323,7 @@ class Calendar {
         iter.setSeconds(0); // Leap second protection. Hah!
         iter.setHours(12);
         for (let i = 0; i < 7; i++) {
-            let styleClass = 'calendar-day-base calendar-day-heading';
+            let styleClass = Constants.STYLE.dayHeading;
             if (_isWorkDay(iter))
                 styleClass += ' calendar-work-day';
             else
@@ -457,7 +459,7 @@ class Calendar {
                 this.setDate(newlySelectedDate, false);
             }));
 
-            let styleClass = 'calendar-day-base calendar-day';
+            let styleClass = Constants.STYLE.day;
             if (_isWorkDay(iter))
                 styleClass += ' calendar-work-day';
             else

@@ -1,0 +1,56 @@
+/* Sizes of calendar@bgi, relative to the theme's font. No colour here: text, today, the
+   selected day, weekends and other-month days take the theme's colours. These classes
+   replace the stock ones whose sizes the themes shrink (calendar-day-base,
+   calendar-day-heading, calendar-event-summary). */
+
+/* Popup header, right column: "15:52 Paris  ·  21:52 VN". */
+.calendar-bgi-header-time {
+    font-size: 120%;
+    font-weight: bold;
+    text-align: center;
+}
+
+/* Left column: room for the larger event titles. Two classes, to win over the theme's
+   calendar-events-main-box sizes. */
+.calendar-events-main-box.calendar-bgi-events {
+    min-width: 24em;
+    height: 26em;
+}
+
+.calendar-bgi-event-title {
+    font-size: 125%;
+    font-weight: bold;
+}
+
+.calendar-bgi-event-time {
+    font-size: 100%;
+    font-weight: normal;
+}
+
+/* Right column: day headings and day numbers. */
+.calendar-bgi-day-heading {
+    font-size: 100%;
+    font-weight: bold;
+    text-align: center;
+    padding-top: 0.5em;
+}
+
+.calendar-bgi-day {
+    font-size: 125%;
+    text-align: center;
+    width: 2.6em;
+    height: 2.6em;
+    padding: 0;
+    margin: 0.1em;
+    border-radius: 1.3em;
+}
+
+/* The marker sits under the number, inside the day's cell. */
+.calendar-bgi-day-marker-box {
+    font-size: 80%;
+    margin-top: 2.6em;
+}
+
+.calendar-bgi-day-marker {
+    font-size: 100%;
+}

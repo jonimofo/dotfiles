@@ -50,6 +50,7 @@ CSS. On this machine: Text Editor, Calculator, Files (Nautilus), System Monitor,
 Analyzer, Image Viewer (Loupe), Font Viewer. Disks, Seahorse and Nemo are GTK3.
 
 ```bash
+mkdir -p ~/.config/gtk-4.0
 ln -sfn ~/.themes/Dracula/gtk-4.0/gtk.css ~/.config/gtk-4.0/gtk.css
 ln -sfn ~/.themes/Dracula/gtk-4.0/gtk-dark.css ~/.config/gtk-4.0/gtk-dark.css
 ln -sfn ~/.themes/Dracula/assets ~/.config/assets
@@ -72,8 +73,8 @@ gsettings set org.cinnamon.desktop.interface cursor-theme 'Adwaita'
 rm ~/.config/gtk-4.0/gtk.css ~/.config/gtk-4.0/gtk-dark.css ~/.config/assets
 ```
 
-## Panel: no GNOME-style quick settings
+## Panel: GNOME-style quick settings
 
-Cinnamon 6.4 has no applet that merges network, sound and power into one menu like GNOME's
-top-right corner, and none exists on Cinnamon Spices (searched 2026-11-11). Network, sound and
-power stay separate applets on the panel.
+Cinnamon 6.4 ships no applet that merges network, sound and power into one menu like GNOME's
+top-right corner, and none exists on Cinnamon Spices (searched 2026-11-11). The own applet
+`applets/quick-settings@bgi/` fills that gap, see `README.md`.

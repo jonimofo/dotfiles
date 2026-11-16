@@ -1,5 +1,5 @@
 [/]
-custom-list=['custom0', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'custom6']
+custom-list=['custom0', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'custom6', '__dummy__']
 
 [custom-keybindings/custom0]
 binding=['<Primary><Alt>p']
@@ -33,7 +33,7 @@ name='Bluetooth'
 
 [custom-keybindings/custom6]
 binding=['<Super>e']
-command='/home/bgi/Repos/dotfiles/scripts/tdrop_toggle_filemanager.sh'
+command='/home/bgi/Repos/dotfiles/scripts/nemo_dropdown_toggle.sh'
 name='Dropdown Nemo'
 
 [media-keys]

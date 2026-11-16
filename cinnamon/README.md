@@ -28,7 +28,7 @@ Restored from the GNOME backup (`gnome/gnome_custom_shortcuts.dconf`) on 2026-11
 | Ctrl+Shift+Alt+P | Display settings |
 | Shift+Alt+D | Night Light settings |
 | Shift+Alt+C | Bluetooth (blueman) |
-| Super+E | `scripts/tdrop_toggle_filemanager.sh`, dropdown Nemo |
+| Super+E | `scripts/nemo_dropdown_toggle.sh`, dropdown Nemo (its header lists the dependencies and why tdrop is not used) |
 
 Super+E was Cinnamon's "open Home folder"; that action keeps only the Explorer media key.
 Print (screenshot) and Ctrl+Alt+Escape (restart Cinnamon) are left to Cinnamon on purpose.
@@ -44,12 +44,6 @@ dconf load /org/cinnamon/desktop/keybindings/ < ~/Repos/dotfiles/cinnamon/cinnam
 The dump covers the whole keybindings path, not only `custom-keybindings/`: it also holds
 `custom-list`, without which Cinnamon ignores a custom shortcut, and the changed built-in
 bindings (`media-keys`, `wm`).
-
-## Custom shortcut: dropdown Nemo
-
-Super+E toggles a dropdown Nemo window through a Cinnamon custom shortcut named
-"Dropdown Nemo", command `/home/bgi/Repos/dotfiles/scripts/nemo_dropdown_toggle.sh`.
-Its header lists the dependencies and why tdrop is not used.
 
 ## What scale-wheel-switch does
 

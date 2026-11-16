@@ -56,12 +56,12 @@
 /* Primary text: titles, times, dates, day numbers */
 .menu.calendar-bgi-popup,
 .calendar-bgi-header-date,
+.calendar-bgi-header-count,
 .calendar-bgi-clock-time,
 .calendar-bgi-month-label,
 .calendar-bgi-day,
 .calendar-bgi-event-time,
 .calendar-bgi-event-title,
-.calendar-bgi-day-summary,
 .calendar-bgi-today-button,
 .calendar-bgi-settings-button {
     color: #F1F4FB;
@@ -121,15 +121,23 @@
     border-radius: 12px;
 }
 
-/* Header band: two cells of the layout table, the date over the events column, the clocks
-   centred over the calendar column. Same side padding as the columns below. */
+/* Header band across both columns: date, event count, clocks, in three columns of equal
+   width (a homogeneous table), so the count is centred and nothing overlaps. Same side
+   padding as the columns below. */
 .calendar-bgi-header {
     padding: 12px;
+    spacing-columns: 16px;
 }
 
 .calendar-bgi-header-date {
     font-size: 125%;
     font-weight: 600;
+}
+
+/* The count: the date's size, one weight lighter. */
+.calendar-bgi-header-count {
+    font-size: 125%;
+    font-weight: normal;
 }
 
 .calendar-bgi-header-time {
@@ -294,26 +302,12 @@
     font-size: 100%;
 }
 
-/* The number of events under the calendar: plain text, no card. The column's spacing keeps
-   it off the calendar panel and the Today button. */
-.calendar-bgi-day-summary {
-    padding: 0;
-}
-
 /* Today button, full width of the column, the card's corners. */
 .calendar-bgi-today-button {
     border-width: 1px;
     border-radius: 10px;
     padding: 9px 14px;
     font-weight: bold;
-}
-
-/* The count: the event title's size (14px at 100%), centred. It is under none of the three
-   text sizes. */
-.calendar-bgi-day-summary-count {
-    font-size: 14px;
-    font-weight: 600;
-    text-align: center;
 }
 
 /* Bottom of the popup: the stock settings entry as a button of its label's width, with the

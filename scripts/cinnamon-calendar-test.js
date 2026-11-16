@@ -187,9 +187,9 @@ function testDayCell() {
 }
 
 function testDaySummary() {
-    checkEqual('summary card: count, one', DaySummary.formatEventCount(1), '1 event');
-    checkEqual('summary card: count, several', DaySummary.formatEventCount(16), '16 events');
-    checkEqual('summary card: count, zero (hidden)', DaySummary.formatEventCount(0), '0 events');
+    checkEqual('header count: one', DaySummary.formatEventCount(1), '1 event');
+    checkEqual('header count: several', DaySummary.formatEventCount(16), '16 events');
+    checkEqual('header count: zero (hidden)', DaySummary.formatEventCount(0), '0 events');
 }
 
 function testEventsHeight() {
@@ -235,14 +235,6 @@ function testAppearance() {
         const size = rule ? Number(rule[1]) * Constants.EVENTS_BASE_FONT_PX : NaN;
         check(`100% look: ${Constants.STYLE[name]} is ${size.toFixed(3)}px, design ${px}px`, Math.abs(size - px) < 0.01);
     }
-    const count = css.match(new RegExp(`\\.${Constants.STYLE.daySummaryCount}\\s*\\{[^}]*font-size:\\s*(\\d+)px`));
-    check(`count: the event title size (${count ? count[1] : '?'}px)`,
-        count !== null && Number(count[1]) === designPx.eventTitle);
-    const card = css.match(new RegExp(`\\.${Constants.STYLE.daySummary}\\s*\\{([^}]*)\\}`));
-    const cardLook = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(rule =>
-        rule[1].split(',').some(sel => sel.trim() === `.${Constants.STYLE.daySummary}`) &&
-        /background-color|border/.test(rule[2]));
-    check('count: plain text, no background or border', card !== null && cardLook.length === 0);
     const gap = css.match(/\.calendar-bgi-event-list\s*\{[^}]*spacing:\s*(\d+)px/);
     check('100% look: stylesheet gap is the default gap', gap !== null && Number(gap[1]) === Constants.EVENT_GAP.default);
 }

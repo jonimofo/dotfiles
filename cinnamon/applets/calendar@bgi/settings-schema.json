@@ -130,7 +130,7 @@
     "show-day-summary": {
         "type": "switch",
         "default": true,
-        "description": "Summary card"
+        "description": "Event count"
     },
     "show-today-button": {
         "type": "switch",

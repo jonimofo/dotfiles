@@ -46,9 +46,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.events_manager.connect("has-calendars-changed", this._has_calendars_changed.bind(this));
             this.events_manager.connect("events-updated", () => this._updateDaySummary());
 
-            // One table, two columns: the header band's date over the events, its clocks
-            // over the calendar. The table gives a column one width for both rows, so the
-            // clocks are centred over the calendar whatever the date's length.
+            // One table: the header band across both columns, then the events and calendar
+            // columns.
             let layout = new St.Table(
                 {
                     style_class: Constants.STYLE.layout,
@@ -57,11 +56,24 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             );
             this.menu.addActor(layout);
 
-            let header_date_cell = new St.BoxLayout({ style_class: Constants.STYLE.header });
-            let header_clocks_cell = new St.BoxLayout({ style_class: Constants.STYLE.header });
-            this._headerCells = [header_date_cell, header_clocks_cell];
-            layout.add(header_date_cell, { row: 0, col: 0 });
-            layout.add(header_clocks_cell, { row: 0, col: 1 });
+            // Header band: date, event count, clocks, in three columns of equal width, so
+            // the count is centred in the band and the three never overlap.
+            this._header = new St.Table(
+                {
+                    style_class: Constants.STYLE.header,
+                    homogeneous: true
+                }
+            );
+            layout.add(this._header, { row: 0, col: 0, col_span: 2 });
+
+            this._headerCount = new St.Label(
+                {
+                    style_class: Constants.STYLE.headerCount,
+                    visible: false
+                }
+            );
+            this._header.add(this._headerCount, { row: 0, col: 1, x_fill: false, x_align: St.Align.MIDDLE,
+                                                  y_fill: false, y_align: St.Align.MIDDLE });
 
             this.event_list = this.events_manager.get_event_list();
             this.event_list.connect("launched-calendar", Lang.bind(this.menu, this.menu.toggle));
@@ -81,9 +93,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this._headerDate = this.event_list.selected_date_label;
             this.event_list.actor.remove_actor(this._headerDate);
             this._headerDate.set_style_class_name(Constants.STYLE.headerDate);
-            this._headerDate.x_expand = true;
-            this._headerDate.y_align = Clutter.ActorAlign.CENTER;
-            header_date_cell.add_actor(this._headerDate);
+            this._header.add(this._headerDate, { row: 0, col: 0, x_fill: false, x_align: St.Align.START,
+                                                 y_fill: false, y_align: St.Align.MIDDLE });
 
             let calbox = new St.BoxLayout(
                 {
@@ -95,8 +106,6 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.go_home_button = new St.BoxLayout(
                 {
                     style_class: "calendar-today-home-button",
-                    x_expand: true,
-                    x_align: Clutter.ActorAlign.CENTER,
                     y_align: Clutter.ActorAlign.CENTER,
                     reactive: true,
                     vertical: false
@@ -126,7 +135,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 }
             }));
 
-            header_clocks_cell.add_actor(this.go_home_button);
+            this._header.add(this.go_home_button, { row: 0, col: 2, x_fill: false, x_align: St.Align.END,
+                                                    y_fill: false, y_align: St.Align.MIDDLE });
 
             // Local and second-zone clocks: time, then city or label
             this._headerTimes = new St.BoxLayout(
@@ -147,24 +157,6 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             );
             calendar_panel.add_actor(this._calendar.actor);
             calbox.add_actor(calendar_panel);
-
-            // Number of events of the selected day
-            this._daySummary = new St.BoxLayout(
-                {
-                    style_class: Constants.STYLE.daySummary,
-                    vertical: true,
-                    visible: false
-                }
-            );
-            this._daySummaryCount = new St.Label(
-                {
-                    style_class: Constants.STYLE.daySummaryCount,
-                    x_expand: true,
-                    x_align: Clutter.ActorAlign.CENTER
-                }
-            );
-            this._daySummary.add_actor(this._daySummaryCount);
-            calbox.add_actor(this._daySummary);
 
             // Back to today, as a click on the header clocks
             this._todayButton = new St.Button(
@@ -321,8 +313,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this.event_list.set_appearance(Appearance.eventListStyle(this.events_text_scale, this.event_gap),
                                        this.show_event_meta, this.show_event_countdown);
         this._calendar.actor.style = Appearance.percentFontStyle(this.days_text_scale, Constants.TEXT_SCALES.days);
-        let header_style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);
-        this._headerCells.forEach(cell => { cell.style = header_style; });
+        this._header.style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);
         this.go_home_button.visible = this.show_header_clocks;
     }
 
@@ -353,13 +344,13 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         });
     }
 
-    // The card under the calendar: the selected day's number of events, hidden without any.
+    // The header's event count for the selected day, hidden without any event.
     _updateDaySummary() {
         let selected = this._calendar.getSelectedDate();
         let count = this.events_manager.is_active() ? this.events_manager.get_events_for_date(selected).length : 0;
 
-        this._daySummary.visible = this.show_day_summary && count > 0;
-        this._daySummaryCount.set_text(DaySummary.formatEventCount(count));
+        this._headerCount.visible = this.show_day_summary && count > 0;
+        this._headerCount.set_text(DaySummary.formatEventCount(count));
     }
 
     _updateTodayButton() {

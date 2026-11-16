@@ -24,7 +24,7 @@ const ELEMENT_SWITCHES = {
     eventMeta: { key: 'show-event-meta', label: 'Metadata line', default: true },
     eventCountdown: { key: 'show-event-countdown', label: 'Countdown', default: true },
     dayMarker: { key: 'show-day-marker', label: 'Dot under days', default: true },
-    daySummary: { key: 'show-day-summary', label: 'Summary card', default: true },
+    daySummary: { key: 'show-day-summary', label: 'Event count', default: true },
     todayButton: { key: 'show-today-button', label: 'Today button', default: true },
     weekNumbers: { key: 'show-week-numbers', label: 'Week numbers', default: false },
     events: { key: 'show-events', label: 'Calendar events', default: true },
@@ -74,7 +74,7 @@ const SUMMARY_SEPARATOR = ' | ';
 // scrolls.
 const EVENTS_MAX_HEIGHT_RATIO = 0.7;
 
-// Under the calendar: the selected day's number of events, as plain text.
+// In the middle of the header band: the selected day's number of events.
 const SUMMARY_COUNT_ONE = 'event';
 const SUMMARY_COUNT_MANY = 'events';
 
@@ -90,6 +90,7 @@ const STYLE = {
     popup: 'calendar-bgi-popup',
     header: 'calendar-bgi-header',
     headerDate: 'calendar-bgi-header-date',
+    headerCount: 'calendar-bgi-header-count',
     headerTime: 'calendar-bgi-header-time',
     clock: 'calendar-bgi-clock',
     clockDivided: 'calendar-bgi-clock-divided',
@@ -98,8 +99,6 @@ const STYLE = {
     layout: 'calendar-bgi-layout',
     calendarColumn: 'calendar-bgi-calendar-column',
     calendarPanel: 'calendar-bgi-calendar-panel',
-    daySummary: 'calendar-bgi-day-summary',
-    daySummaryCount: 'calendar-bgi-day-summary-count',
     todayButton: 'calendar-bgi-today-button',
     footer: 'calendar-bgi-footer',
     settingsButton: 'calendar-bgi-settings-button',

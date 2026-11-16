@@ -63,9 +63,11 @@ own strip at its very top.
 - The mouse wheel switches workspace.
 - A middle click on a window does nothing (stock Scale closes the application).
 - A right click on a window opens it, like a left click (stock Scale shows the window menu).
-- The hot corners keep working over a fullscreen window (stock Cinnamon turns them off on
-  that screen while a window is fullscreen). Disabling the extension gives back the stock
-  behaviour.
+- The hot corners keep working over a fullscreen window, with Scale open or not, so the
+  corner also closes Scale (stock Cinnamon hides them on that screen while a window is
+  fullscreen). Disabling the extension gives back the stock behaviour.
+  The lock screen (cinnamon-screensaver) grabs the pointer: the corner does not fire
+  behind it (checked 2026-11-16).
 - The dock shows the apps pinned in the panel's window list, then, after a separator, the
   other running apps. A dot under an icon means the app has a window open.
 - A click on a dock icon goes to the app's most recent window, switching workspace if

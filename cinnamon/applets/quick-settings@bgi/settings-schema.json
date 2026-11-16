@@ -152,7 +152,8 @@
                 "options": {
                     "Sound": "output",
                     "Microphone": "input",
-                    "Brightness": "monitors"
+                    "Brightness": "monitors",
+                    "Warmth": "warmth"
                 }
             }
         ],
@@ -168,6 +169,10 @@
             {
                 "show": true,
                 "id": "monitors"
+            },
+            {
+                "show": true,
+                "id": "warmth"
             }
         ]
     },

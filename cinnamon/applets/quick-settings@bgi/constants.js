@@ -57,6 +57,8 @@ const SLIDERS = [
     { id: 'output', label: 'Sound', name: 'Sound', icon: 'audio-volume-high-symbolic', hasMenu: true },
     { id: 'input', label: 'Microphone', name: 'Microphone', icon: 'audio-input-microphone-symbolic', hasMenu: true },
     { id: 'monitors', label: 'Brightness', name: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
+    // The Night Light temperature, its value as text and a switch for Night Light on the right.
+    { id: 'warmth', label: 'Warmth', name: 'Warmth', icon: 'night-light-symbolic', hasMenu: false, hasSwitch: true },
 ];
 
 // Tiles, left to right then top to bottom, two per row: this array is the only place that
@@ -206,9 +208,16 @@ const POWER_PROFILE_FIRST_OTHER = 'power-saver';
 const POWER_PROFILE_ICON_PREFIX = 'power-profile-';
 const POWER_SETTINGS_COMMAND = ['cinnamon-settings', 'power'];
 
-// Night Light: the key of Cinnamon Settings > Night Light.
+// Night Light: the keys of Cinnamon Settings > Night Light.
 const NIGHT_LIGHT_SCHEMA = 'org.cinnamon.settings-daemon.plugins.color';
 const NIGHT_LIGHT_KEY = 'night-light-enabled';
+const NIGHT_LIGHT_TEMPERATURE_KEY = 'night-light-temperature';
+// The Warmth row: the range and step of Cinnamon's Night Light page. Warmer is fewer kelvin,
+// so the slider runs from WARMTH_MAX_KELVIN on the left to WARMTH_MIN_KELVIN on the right.
+const WARMTH_MIN_KELVIN = 1700;
+const WARMTH_MAX_KELVIN = 4700;
+const WARMTH_STEP_KELVIN = 100;
+const WARMTH_UNIT_SUFFIX = ' K';
 
 // Do Not Disturb: the key Cinnamon's message tray reads (Settings > Notifications >
 // Enable notifications). The tile is on when notifications are off.

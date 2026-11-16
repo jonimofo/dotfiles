@@ -25,6 +25,8 @@ const Nordvpn = require('./nordvpn');
 const ListSpecs = require('./listSpecs');
 const Battery = require('./battery');
 const BooleanSetting = require('./booleanSetting');
+const NightLight = require('./nightLight');
+const WarmthModel = require('./warmthModel');
 const KeepAwake = require('./keepAwake');
 const PowerProfiles = require('./powerProfiles');
 const PowerProfileModel = require('./powerProfileModel');
@@ -75,6 +77,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpNordvpn();
         this._setUpPowerProfile();
         this._setUpSettingTiles();
+        this._setUpNightLight();
         this._setUpKeepAwake();
         this._setUpMicMute();
         this._setUpHeader();
@@ -263,8 +266,6 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     _setUpSettingTiles() {
-        this._nightLight = this._wireSettingTile('night-light',
-            Constants.NIGHT_LIGHT_SCHEMA, Constants.NIGHT_LIGHT_KEY, false);
         this._doNotDisturb = this._wireSettingTile('do-not-disturb',
             Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, true);
     }
@@ -275,6 +276,29 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setOnToggle(() => setting.toggle());
         tile.setChecked(setting.enabled);
         return setting;
+    }
+
+    // The Night Light tile and the Warmth row's switch write the same key; the temperature
+    // follows the handle live, one write per step.
+    _setUpNightLight() {
+        const row = this._content.sliders.warmth;
+        this._nightLight = new NightLight.NightLight(() => this._syncNightLight());
+        this._content.tiles['night-light'].setOnToggle(() => this._nightLight.toggle());
+        row.setOnSwitch(() => this._nightLight.toggle());
+        row.onLiveChange(value => this._nightLight.setTemperature(WarmthModel.fractionToKelvin(value)));
+        this._syncNightLight();
+    }
+
+    // Night Light off: the Warmth slider is dimmed and inert, the switch stays usable.
+    _syncNightLight() {
+        const enabled = this._nightLight.enabled;
+        const kelvin = this._nightLight.temperature;
+        const row = this._content.sliders.warmth;
+        this._content.tiles['night-light'].setChecked(enabled);
+        row.setAvailable(enabled);
+        row.setSwitchState(enabled);
+        row.showValue(WarmthModel.kelvinToFraction(kelvin));
+        row.setValueText(WarmthModel.label(kelvin));
     }
 
     _setUpKeepAwake() {

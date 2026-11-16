@@ -621,6 +621,40 @@ async function testBooleanSettings() {
     dnd.destroy();
 }
 
+async function testNightLight() {
+    const Model = load('./warmthModel');
+    check('warmth: 4700 K is the left end, 1700 K the right end (warmer to the right)',
+        Model.kelvinToFraction(4700) === 0 && Model.kelvinToFraction(1700) === 1);
+    check(`warmth: 3400 K sits at ${Model.kelvinToFraction(3400).toFixed(3)}`, Math.abs(Model.kelvinToFraction(3400) - 13 / 30) < 1e-9);
+    check('warmth: out-of-range values are clamped', Model.kelvinToFraction(6500) === 0 && Model.kelvinToFraction(1000) === 1);
+    check(`warmth: positions round to the 100 K step (${Model.fractionToKelvin(0.43)})`,
+        Model.fractionToKelvin(0.43) === 3400 && Model.fractionToKelvin(0) === 4700 && Model.fractionToKelvin(1) === 1700);
+    check('warmth: every step survives a round trip',
+        [1700, 2500, 3400, 4700].every(k => Model.fractionToKelvin(Model.kelvinToFraction(k)) === k));
+    check('warmth: label', Model.label(3400) === '3400 K');
+
+    const NightLight = load('./nightLight');
+    const color = new Gio.Settings({ schema_id: 'org.cinnamon.settings-daemon.plugins.color' });
+    color.set_boolean('night-light-enabled', false);
+    color.set_uint('night-light-temperature', 3400);
+    let changes = 0;
+    const night = new NightLight.NightLight(() => changes++);
+    check('night light: off and 3400 K read', !night.enabled && night.temperature === 3400);
+    night.toggle();
+    check('night light: the switch and the tile write night-light-enabled', color.get_boolean('night-light-enabled') && night.enabled);
+    night.setTemperature(2500);
+    check('night light: the slider writes night-light-temperature', color.get_uint('night-light-temperature') === 2500);
+    await wait(0);
+    const seen = changes;
+    night.setTemperature(2500);
+    await wait(0);
+    check('night light: a move within the same step writes nothing', changes === seen);
+    color.set_boolean('night-light-enabled', false);
+    await wait(0);
+    check(`night light: follows a change made elsewhere (${changes} changes)`, !night.enabled && changes > seen);
+    night.destroy();
+}
+
 function testBatteryModel() {
     const Model = load('./batteryModel');
     const kinds = { battery: 2, unknownState: 0 };
@@ -677,7 +711,7 @@ function testSchemaMatchesDeclarations() {
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
         `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute'
-        && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness'
+        && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
         && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume');
 }
@@ -1212,6 +1246,7 @@ async function main() {
     await testNordvpnBusyGuard();
     testPowerProfileModel();
     await testBooleanSettings();
+    await testNightLight();
     testBatteryModel();
     testMicMute();
     testSchemaMatchesDeclarations();

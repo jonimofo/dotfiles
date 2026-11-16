@@ -1,6 +1,7 @@
 const Clutter = imports.gi.Clutter;
 const St = imports.gi.St;
 const Slider = imports.ui.slider;
+const PopupMenu = imports.ui.popupMenu;
 const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
 const ReleaseCommit = require('./releaseCommit');
@@ -8,8 +9,9 @@ const ExpandArrow = require('./expandArrow');
 
 // One slider line: icon, label, slider, and an arrow when the line opens a list. A row
 // without a list keeps an empty space of the arrow's size, so every slider has the same
-// length. Until setAvailable(true) the row is inert, its icon and slider dimmed; the label
-// stays readable.
+// length. A row with a switch (definition.hasSwitch) shows its value as text and the stock
+// on/off switch in that place instead. Until setAvailable(true) the row is inert, its icon
+// and slider dimmed; the label, the value and the switch stay as they are.
 class SliderRow {
     constructor(definition) {
         this._releaseCommit = null;
@@ -32,7 +34,12 @@ class SliderRow {
         this.actor.add_child(this.slider.actor);
 
         this._arrow = null;
-        if (definition.hasMenu) {
+        this._valueLabel = null;
+        this._switch = null;
+        this._switchButton = null;
+        if (definition.hasSwitch) {
+            this._addSwitch(definition.label);
+        } else if (definition.hasMenu) {
             this._arrow = new ExpandArrow.ExpandArrow('quick-settings-slider-arrow', 'quick-settings-slider-icon');
             this.actor.add_child(this._arrow.actor);
         } else {
@@ -49,6 +56,21 @@ class SliderRow {
         UiHelpers.setDimmed(this.slider.actor, !available);
         if (this._arrow)
             this._arrow.sync(available);
+    }
+
+    // The switch takes clicks once it has an action, whatever the row's availability.
+    setOnSwitch(onSwitch) {
+        UiHelpers.setButtonInactive(this._switchButton, false);
+        UiHelpers.setDimmed(this._switchButton, false);
+        this._switchButton.connect('clicked', () => onSwitch());
+    }
+
+    setSwitchState(on) {
+        this._switch.setToggleState(on);
+    }
+
+    setValueText(text) {
+        this._valueLabel.text = text;
     }
 
     // @iconName null puts back the row's own icon.
@@ -83,6 +105,23 @@ class SliderRow {
     // @onCommit(value) once per user change: for a setting that is slow to apply.
     onRelease(scrollDelayMs, onCommit) {
         this._releaseCommit = new ReleaseCommit.ReleaseCommit(this.slider, this._drag, scrollDelayMs, onCommit);
+    }
+
+    _addSwitch(accessibleName) {
+        this._valueLabel = new St.Label({
+            style_class: 'quick-settings-slider-value',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this.actor.add_child(this._valueLabel);
+        this._switch = new PopupMenu.Switch(false);
+        this._switchButton = new St.Button({
+            child: this._switch.actor,
+            accessible_name: accessibleName,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        UiHelpers.setButtonInactive(this._switchButton, true);
+        UiHelpers.setDimmed(this._switchButton, true);
+        this.actor.add_child(this._switchButton);
     }
 
     destroy() {

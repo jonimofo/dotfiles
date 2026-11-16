@@ -67,6 +67,11 @@
     min-width: 0;
 }
 
+.quick-settings-slider-value {
+    min-width: 52px;
+    text-align: right;
+}
+
 .quick-settings-slider-arrow {
     width: 28px;
     height: 28px;

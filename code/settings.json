@@ -22,7 +22,7 @@
     "editor.defaultFormatter": "vscode.typescript-language-features"
   },
   "[shellscript]": {
-    "editor.defaultFormatter": "foxundermoon.shell-format"
+    "editor.defaultFormatter": "mads-hartmann.bash-ide-vscode"
   },
   "[env]": {
     "editor.defaultFormatter": "foxundermoon.shell-format"

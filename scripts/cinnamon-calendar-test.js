@@ -247,6 +247,9 @@ function testAppearance() {
         const size = rule ? Number(rule[1]) * Constants.EVENTS_BASE_FONT_PX : NaN;
         check(`100% look: ${Constants.STYLE[name]} is ${size.toFixed(3)}px, design ${px}px`, Math.abs(size - px) < 0.01);
     }
+    const count = css.match(new RegExp(`\\.${Constants.STYLE.daySummaryCount}\\s*\\{[^}]*font-size:\\s*(\\d+)px`));
+    check(`count: about the event title size times 1.3 (${count ? count[1] : '?'}px)`,
+        count !== null && Math.abs(Number(count[1]) - designPx.eventTitle * 1.3) <= 1);
     const gap = css.match(/\.calendar-bgi-event-list\s*\{[^}]*spacing:\s*(\d+)px/);
     check('100% look: stylesheet gap is the default gap', gap !== null && Number(gap[1]) === Constants.EVENT_GAP.default);
 }

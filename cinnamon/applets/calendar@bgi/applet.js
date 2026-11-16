@@ -157,7 +157,13 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                     visible: false
                 }
             );
-            this._daySummaryCount = new St.Label();
+            this._daySummaryCount = new St.Label(
+                {
+                    style_class: Constants.STYLE.daySummaryCount,
+                    x_expand: true,
+                    x_align: Clutter.ActorAlign.CENTER
+                }
+            );
             this._daySummary.add_actor(this._daySummaryCount);
             calbox.add_actor(this._daySummary);
 
@@ -177,12 +183,24 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
             box.add_actor(calbox);
 
-            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-            let item = new PopupMenu.PopupMenuItem(_("Date and Time Settings"));
-            item.connect("activate", Lang.bind(this, this._onLaunchSettings));
-
-            this.menu.addMenuItem(item);
+            // The stock settings entry, as a button of its label's width
+            let footer = new St.BoxLayout({ style_class: Constants.STYLE.footer });
+            let settings_label = _("Date and Time Settings");
+            let settings_button = new St.Button(
+                {
+                    style_class: Constants.STYLE.settingsButton,
+                    label: settings_label,
+                    accessible_name: settings_label,
+                    x_expand: false,
+                    x_align: Clutter.ActorAlign.START,
+                    reactive: true,
+                    can_focus: true,
+                    track_hover: true
+                }
+            );
+            settings_button.connect("clicked", Lang.bind(this, this._onLaunchSettings));
+            footer.add_actor(settings_button);
+            this.menu.addActor(footer);
 
             this.settings.bind("show-events", "show_events", this._onSettingsChanged);
             this.settings.bind("use-custom-format", "use_custom_format", this._onSettingsChanged);

@@ -39,6 +39,8 @@ const Constants = load('./constants');
 const DateText = load('./dateText');
 const SecondZone = load('./secondZone');
 const DayMarker = load('./dayMarker');
+const DayCell = load('./dayCell');
+const DaySummary = load('./daySummary');
 const EventsHeight = load('./eventsHeight');
 
 const PARIS = GLib.TimeZone.new_identifier('Europe/Paris');
@@ -109,11 +111,11 @@ function testTimeFormats() {
 }
 
 function testHeaderTexts() {
-    checkEqual('header right: mockup B', DateText.formatHeaderTimes('15:52', 'Paris', { label: 'VN', time: '21:52' }),
-        '15:52 Paris  ·  21:52 VN');
-    checkEqual('header right: second zone hidden', DateText.formatHeaderTimes('15:52', 'Paris', null), '15:52 Paris');
-    checkEqual('header right: no city', DateText.formatHeaderTimes('15:52', '', { label: 'VN', time: '21:52' }),
-        '15:52  ·  21:52 VN');
+    const clocks = (...args) => JSON.stringify(DateText.headerClocks(...args));
+    checkEqual('header clocks: local then second zone', clocks('15:52', 'Paris', { label: 'VN', time: '21:52' }),
+        JSON.stringify([{ time: '15:52', suffix: 'Paris' }, { time: '21:52', suffix: 'VN' }]));
+    checkEqual('header clocks: second zone hidden', clocks('15:52', 'Paris', null),
+        JSON.stringify([{ time: '15:52', suffix: 'Paris' }]));
     checkEqual('header left: mockup B',
         DateText.formatLongDate(DateText.datePartsOf(frenchDate(16), Constants.LONG_DATE_FORMATS)),
         'Lundi 16 novembre 2026');
@@ -169,6 +171,52 @@ function testDayMarker() {
     checkEqual('marker: events switched off', DayMarker.dayMarkerCount(false, ['#ff0000']), 0);
 }
 
+function testDayCell() {
+    const S = Constants.STYLE;
+    const style = state => DayCell.dayStyleClass(Object.assign({ today: false, selected: false, outside: false,
+        weekend: false }, state));
+    checkEqual('day: plain', style({}), S.day);
+    checkEqual('day: selected', style({ selected: true }), `${S.day} ${S.daySelected}`);
+    checkEqual('day: today', style({ today: true }), `${S.day} ${S.dayToday}`);
+    checkEqual('day: selected today has fill and outline', style({ today: true, selected: true }),
+        `${S.day} ${S.dayToday} ${S.daySelected}`);
+    checkEqual('day: other month', style({ outside: true }), `${S.day} ${S.dayOutside}`);
+    checkEqual('day: weekend', style({ weekend: true }), `${S.day} ${S.dayWeekend}`);
+}
+
+// Fabricated events of one day, in minutes from midnight.
+function testDaySummary() {
+    const timed = (start, end) => ({ allDay: false, start, end });
+    const allDay = { allDay: true, start: 0, end: 1439 };
+    const summary = events => JSON.stringify(DaySummary.summariseDay(events));
+    checkEqual('summary card: no events', summary([]), JSON.stringify({ count: 0, range: null }));
+    checkEqual('summary card: one event', summary([timed(600, 660)]),
+        JSON.stringify({ count: 1, range: { start: 600, end: 660 } }));
+    checkEqual('summary card: overlapping events, first start to last end',
+        summary([timed(120, 240), timed(120, 180), timed(150, 240), timed(540, 660)]),
+        JSON.stringify({ count: 4, range: { start: 120, end: 660 } }));
+    checkEqual('summary card: all-day events counted, not in the range', summary([allDay, timed(600, 660)]),
+        JSON.stringify({ count: 2, range: { start: 600, end: 660 } }));
+    checkEqual('summary card: only all-day events, no range', summary([allDay]),
+        JSON.stringify({ count: 1, range: null }));
+    checkEqual('summary card: events crossing midnight cut to the day', summary([timed(-120, 60), timed(1380, 1500)]),
+        JSON.stringify({ count: 2, range: { start: 0, end: 1440 } }));
+    checkEqual('summary card: count, one', DaySummary.formatEventCount(1), '1 activité');
+    checkEqual('summary card: count, several', DaySummary.formatEventCount(16), '16 activités');
+    checkEqual('summary card: range', DaySummary.formatRange('02:00', '11:00'), '02:00 – 11:00');
+    checkEqual('summary card: heading today', DaySummary.summaryHeading(true, 'Mardi 17 novembre 2026'), "Aujourd'hui");
+    checkEqual('summary card: heading another day', DaySummary.summaryHeading(false, 'Mardi 17 novembre 2026'),
+        'Mardi 17 novembre 2026');
+    const dayStart = GLib.DateTime.new(PARIS, 2026, 11, 16, 0, 0, 0);
+    checkEqual('summary card: minutes from midnight', DaySummary.minutesFrom(dayStart, dayStart.add_hours(9)), 540);
+    checkEqual('summary card: minutes on a DST day', DaySummary.minutesFrom(
+        GLib.DateTime.new(PARIS, 2026, 3, 29, 0, 0, 0), GLib.DateTime.new(PARIS, 2026, 3, 29, 4, 0, 0)), 180);
+    // No duration in any text the card shows: no "h" unit, no minutes count.
+    const texts = [DaySummary.formatEventCount(4), DaySummary.formatRange('02:00', '11:00')];
+    check(`summary card: no duration in its texts (${texts.join(' / ')})`,
+        texts.every(text => !/\d\s*h\b|\bmin\b|\(/.test(text)));
+}
+
 function testEventsHeight() {
     const ratio = Constants.EVENTS_MAX_HEIGHT_RATIO;
     checkEqual('events cap: ratio', ratio, 0.7);
@@ -196,12 +244,45 @@ function testSchema() {
 }
 
 // Sizes in em or %, no colour, every class of constants.js styled.
+// The palette of the validated design, by role: each colour written once in the stylesheet.
+const PALETTE = ['#151B2B', '#1C2436', '#202B40', '#29364D', '#2F405B', '#394761', '#F1F4FB', '#B5BED0',
+    '#818CA4', '#9274DD', '#BAA3F0', '#DDE3F0', '#FFFFFF'];
+// Day cells grow with the theme's font: their sizes are in em or %, not px.
+const DAY_RULES = ['day', 'dayHeading', 'dayMarkerBox', 'dayMarker', 'weekNumber', 'monthRow', 'monthLabel'];
+
+function listJs() {
+    const names = [];
+    const dir = GLib.Dir.open(appletDir, 0);
+    for (let name = dir.read_name(); name !== null; name = dir.read_name()) {
+        if (name.endsWith('.js'))
+            names.push(name);
+    }
+    return names;
+}
+
 function testStylesheet() {
     const css = readText(`${appletDir}/stylesheet.css`).replace(/\/\*[\s\S]*?\*\//g, '');
-    const colour = css.match(/#[0-9a-fA-F]{3,8}\b|\b(rgba?|hsla?)\(|\bcolor\s*:|\bopacity\s*:/);
-    check(`stylesheet: no colour literal or opacity${colour ? ` (found ${colour[0]})` : ''}`, colour === null);
-    const absolute = css.match(/\d(px|pt)\b/);
-    check(`stylesheet: relative units only${absolute ? ` (found ${absolute[0]})` : ''}`, absolute === null);
+    const hexes = (css.match(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g) || []).map(hex => hex.toUpperCase());
+    const repeated = [...new Set(hexes.filter((hex, i) => hexes.indexOf(hex) !== i))];
+    check(`stylesheet: each colour written once${repeated.length ? ` (repeated ${repeated.join(', ')})` : ''}`,
+        repeated.length === 0);
+    const foreign = [...new Set(hexes)].filter(hex => !PALETTE.includes(hex));
+    check(`stylesheet: only palette colours${foreign.length ? ` (found ${foreign.join(', ')})` : ''}`,
+        foreign.length === 0 && !/\b(rgba?|hsla?)\(|\bopacity\s*:/.test(css));
+    const dayPx = DAY_RULES.filter(key => {
+        const rules = [...css.matchAll(new RegExp(`\\.${Constants.STYLE[key]}(?![\\w-])[^{]*\\{([^}]*)\\}`, 'g'))];
+        return rules.some(rule => /(^|[;{\s])(width|height|font-size|margin|padding)[\w-]*\s*:[^;]*\d(px|pt)/.test(rule[1]));
+    });
+    check(`stylesheet: day cell sizes in em or %${dayPx.length ? ` (px in ${dayPx.join(', ')})` : ''}`,
+        dayPx.length === 0);
+    const jsColours = [];
+    for (const file of listJs()) {
+        const source = readText(`${appletDir}/${file}`);
+        if (/['"`]#[0-9a-fA-F]{3,8}['"`;]|\b(rgba?|hsla?)\(/.test(source))
+            jsColours.push(file);
+    }
+    check(`code: no colour in JavaScript${jsColours.length ? ` (${jsColours.join(', ')})` : ''}`,
+        jsColours.length === 0);
     const unstyled = Object.values(Constants.STYLE).filter(name => !css.includes(`.${name}`));
     const eventsRule = css.match(new RegExp(`\\.${Constants.STYLE.events}\\s*\\{([^}]*)\\}`));
     check('stylesheet: events column has no fixed height',
@@ -218,6 +299,8 @@ testHeaderTexts();
 testSecondZone();
 testDayMarker();
 testEventsHeight();
+testDayCell();
+testDaySummary();
 testSchema();
 testStylesheet();
 

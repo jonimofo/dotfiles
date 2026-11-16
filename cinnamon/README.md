@@ -445,8 +445,32 @@ the stock functions changed since are listed in the plan, for a re-sync with ups
 
 ## Calendar: settings
 
-Right-click the clock > Configure... The stock settings stay: events on or off, week numbers,
-custom date format, the `<Super>c` shortcut. A "Second time zone" section adds:
+Right-click the clock > Configure... Three tabs; every change applies at once, without a
+reload.
+
+**Apparence**, text sizes (70% to 160%, step 5) and the gap:
+
+| Setting | Default | |
+|---|---|---|
+| Événements | 100 % | time, title, metadata and countdown of the event rows |
+| Jours | 100 % | day digits and headings; the day cells grow with them (the month row too) |
+| En-tête | 100 % | the date and the clocks of the header band |
+| Espace entre événements | 8 px | 0 to 24 px between two event rows |
+
+**Apparence**, elements shown; an element switched off leaves no empty space:
+
+| Setting | Default | |
+|---|---|---|
+| Show calendar events | on | stock switch: the event list, the dots and the day card |
+| Horloges dans l'en-tête | on | both clocks; the second one also needs "Show a second time zone" |
+| Ligne de métadonnées | on | the second line of each event |
+| Compte à rebours | on | "Starting in 5 minutes", "In progress" |
+| Point sous les jours | on | the dot under a day with events; off, the digits are centred |
+| Carte de résumé | on | the card under the month |
+| Show week numbers in calendar | off | stock switch |
+
+**Barre**: the stock custom date format (switch, panel format, tooltip format, syntax
+help), then the second time zone:
 
 | Setting | Default | |
 |---|---|---|
@@ -456,6 +480,12 @@ custom date format, the `<Super>c` shortcut. A "Second time zone" section adds:
 
 With the custom date format on, it replaces the date part of the panel text only: the times
 and the second zone follow it.
+
+**Raccourci**: the stock "Show calendar" shortcut, `<Super>c`.
+
+The tabs, keys, defaults, ranges and labels are in `applets/calendar@bgi/constants.js`;
+`settings-schema.json` is written by hand and the test checks that the two agree. The labels
+of the stock settings stay in English next to the French ones.
 
 ## Calendar: install
 

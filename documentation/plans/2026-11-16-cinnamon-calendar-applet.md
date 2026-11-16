@@ -142,10 +142,11 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `applet.js` | `_updateClockAndDate` | panel text, clocks, header date and day card from the pure formatters |
 | `applet.js` | `_has_calendars_changed` | updates the day card |
 | `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height |
-| `applet.js` | new `_inVerticalPanel`, `_timeFormat`, `_panelText`, `_secondTime`, `_updateSecondZone`, `_buildClock`, `_updateClocks`, `_updateDaySummary` | |
+| `applet.js` | new `_inVerticalPanel`, `_timeFormat`, `_panelText`, `_secondTime`, `_updateSecondZone`, `_buildClock`, `_updateClocks`, `_updateDaySummary`, `_applyAppearance` | |
 | `calendar.js` | `_getCalendarDayAbbreviation` | trailing dot removed, capitalised |
 | `calendar.js` | `_buildHeader` | one month row instead of the month and year rows, day heading class |
 | `calendar.js` | `_onPrevYearButtonClicked`, `_onNextYearButtonClicked` | removed with the year row |
+| `calendar.js` | `constructor` | binds the day dot switch |
 | `calendar.js` | `_update` | month row text, own day state classes, week number class, one marker instead of one dot per event |
 | `eventView.js` | `ARROW_SEPARATOR` | ` – ` |
 | `eventView.js` | `EventsManager.eds_service_found`, `log_dbus_error` | log prefix |
@@ -154,12 +155,13 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `eventView.js` | `EventList.set_events` | no separator between two events (the list's spacing) |
 | `eventView.js` | new `EventsManager.get_events_for_date` | the selected day's events for the day card |
 | `eventView.js` | new `EventList.set_monitor_height` | `max-height` of the column |
+| `eventView.js` | new `EventList.set_appearance` | text size and gap of the list, metadata and countdown switches |
 | `eventView.js` | `EventList.set_date` | long date formatter |
 | `eventView.js` | `EventRow.constructor` | accent bar, time block, title over metadata (summary cut at the first ` \| `), ellipsis, tooltip |
 | `eventView.js` | `EventRow.update_variations` | one time class |
 
 New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
-`dayCell.js`, `daySummary.js`,
+`dayCell.js`, `daySummary.js`, `appearance.js`,
 `stylesheet.css`.
 
 ## Steps
@@ -314,6 +316,65 @@ Spec checklist (section 7) and other spec items:
 | Thin scroll bar, stronger on hover | yes, 5px, hover colour | |
 | Category accent colours as fallback | no | the event colour always comes from the data |
 
+## Appearance settings (fourth review round)
+
+Owner's words: "je veux aussi pouvoir régler la font size, et les differents éléments dans la
+config de cet applet". Chosen option: "Tailles par zone et interrupteurs". Before this round,
+the main session widened the gap between event rows from 4px to 8px at the owner's request:
+"ajoute un peu de gap entre les cards des events".
+
+Validated mockup:
+
+```
+Configure  >  onglet Apparence
+
+  Taille du texte
+    Événements        [----O-----]  100 %
+    Jours             [-----O----]  100 %
+    En-tête           [----O-----]  100 %
+    Espace entre événements   [ 8 ] px
+
+  Éléments affichés
+    Horloges dans l'en-tête        [ON ]
+    Ligne de métadonnées           [ON ]
+    Compte à rebours               [ON ]
+    Point sous les jours           [ON ]
+    Carte de résumé                [ON ]
+    Numéros de semaine             [OFF]
+
+Onglet Barre : date, second fuseau, libellé
+Onglet Raccourci : Super+C
+```
+
+Decisions:
+
+1. The dialog uses the schema's `layout` with three pages: Apparence (Taille du texte,
+   Éléments affichés), Barre (Date, Second fuseau), Raccourci (Raccourci clavier). The stock
+   "Show calendar events" switch comes first in Éléments affichés; week numbers is the stock
+   key moved there. New labels are in French; stock labels and the round-one second zone
+   labels stay in English, so Éléments affichés mixes both.
+2. Three text sizes in percent, 100 by default, 70 to 160, step 5: Événements (event row
+   texts), Jours (day digits and headings, the cells grow with them), En-tête (header date
+   and clocks).
+3. Applied from code as an inline `font-size` on three containers: the event list
+   (`12px` times the scale, so the event texts in em give 13, 14, 12 and 11 px at 100%, the
+   round-three sizes; the test multiplies each em value of the stylesheet by 12), the
+   calendar grid and the header band (`100%` at the default, so their em and % contents are
+   unchanged). `appearance.js` turns a setting into a style and clamps it: not a number gives
+   the default, out of range gives the nearest end, then rounded to the step.
+4. Gap between events: a spin setting, 8 px by default, 0 to 24, applied as the list's
+   `spacing`; the stylesheet keeps 8px as the default.
+5. Element switches, on by default except week numbers. Hiding the clocks hides the button
+   that holds them; hiding the dots also drops the room kept under the digit; hiding the
+   metadata line or the countdown rebuilds the rows without them.
+6. Every key, default, range, step and label in `constants.js`; the schema stays written by
+   hand and the test checks it against them, plus every key the code reads.
+
+How it applies live: each new key is bound with `settings.bind(key, property,
+this._onSettingsChanged)`, which calls `_applyAppearance()` and then `select_date(..., true)`
+so the rows are rebuilt; the day dot switch is bound in the calendar grid with
+`bindWithObject(..., this._onSettingsChange)`, as the stock week numbers switch is.
+
 ## To confirm on the live panel
 
 - Sizes and the place of the dot under the number, under Dracula.
@@ -323,6 +384,8 @@ Spec checklist (section 7) and other spec items:
   the header band, rows of 48 to 56 px, the time block width with 12-hour times, the
   ellipsis and tooltip, the larger day cells with the dot under the digit, a six-week month,
   the day card for today and for another day.
+- Fourth round: the three tabs in Configure, each slider and the gap applying at once, 100%
+  looking as before, the switches leaving no gap, the sizes at 70% and 160%.
 - Second round: that `max-height` on the column makes it scroll past 70 % of the screen (a
   day with many events), the thin gap and the title indent under Dracula, and the empty
   day ("No Events") layout.

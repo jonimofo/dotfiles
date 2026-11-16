@@ -7,7 +7,6 @@ const Lang = imports.lang;
 const St = imports.gi.St;
 const Signals = imports.signals;
 const Pango = imports.gi.Pango;
-const Gettext_gtk30 = imports.gettext.domain('gtk30');
 const Cinnamon = imports.gi.Cinnamon;
 const Settings = imports.ui.settings;
 const Mainloop = imports.mainloop;
@@ -102,22 +101,9 @@ function _getDigitWidth(actor){
     return width;
 }
 
+// English abbreviation of a day, Sunday being 0, whatever the locale: "Mon".
 function _getCalendarDayAbbreviation(dayNumber) {
-
-    // This returns an array of abbreviated day names, starting with Sunday.
-    // We use 2014/03/02 (months are zero-based in JS) because it was a Sunday
-
-    let abbreviations = [
-        new Date(2014, 2, 2).toLocaleFormat('%a'),
-        new Date(2014, 2, 3).toLocaleFormat('%a'),
-        new Date(2014, 2, 4).toLocaleFormat('%a'),
-        new Date(2014, 2, 5).toLocaleFormat('%a'),
-        new Date(2014, 2, 6).toLocaleFormat('%a'),
-        new Date(2014, 2, 7).toLocaleFormat('%a'),
-        new Date(2014, 2, 8).toLocaleFormat('%a')
-    ];
-
-    return DateText.tidyAbbreviation(abbreviations[dayNumber]);
+    return Constants.WEEKDAY_ABBREVIATIONS[dayNumber];
 }
 
 // Abstraction for an appointment/event in a calendar
@@ -169,22 +155,6 @@ class Calendar {
         this.events_manager.connect("events-updated", this._events_updated.bind(this));
         this.events_manager.connect("events-manager-ready", this._update_events_enabled.bind(this));
         this.events_manager.connect("has-calendars-changed", this._update_events_enabled.bind(this));
-
-        // Find the ordering for month/year in the calendar heading
-
-        let var_name = 'calendar:MY';
-        switch (Gettext_gtk30.gettext(var_name)) {
-        case 'calendar:MY':
-            this._headerMonthFirst = true;
-            break;
-        case 'calendar:YM':
-            this._headerMonthFirst = false;
-            break;
-        default:
-            log('Translation of "calendar:MY" in GTK+ is not correct');
-            this._headerMonthFirst = true;
-            break;
-        }
 
         // Start off with the current date
         this._selectedDate = new Date();
@@ -381,9 +351,8 @@ class Calendar {
     _update(forceReload) {
         let now = new Date();
 
-        this._monthLabel.text = DateText.formatMonthHeading(this._selectedDate.toLocaleFormat('%OB'),
-                                                            this._selectedDate.toLocaleFormat('%Y'),
-                                                            this._headerMonthFirst);
+        this._monthLabel.text = DateText.formatMonthHeading(this._selectedDate.getMonth() + 1,
+                                                            this._selectedDate.getFullYear());
 
         // Remove everything but the topBox and the weekday labels
         let children = this.actor.get_children();

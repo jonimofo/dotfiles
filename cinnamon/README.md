@@ -13,12 +13,37 @@ My Cinnamon extensions and applets, versioned. Each one is symlinked into
   Tested on Cinnamon 6.4 (X11). See [Quick Settings](#quick-settings-what-it-does) below.
 - `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
   Enable adds it at the right end of panel1's right zone.
+- `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
+- `cinnamon_keybindings.dconf`: my keyboard shortcuts, custom and changed built-in ones (see below).
 
-## Custom shortcut: dropdown Nemo
+## Custom shortcuts
 
-Super+E toggles a dropdown Nemo window through a Cinnamon custom shortcut named
-"Dropdown Nemo", command `/home/bgi/Repos/dotfiles/scripts/nemo_dropdown_toggle.sh`.
-Its header lists the dependencies and why tdrop is not used.
+Restored from the GNOME backup (`gnome/gnome_custom_shortcuts.dconf`) on 2026-11-11.
+
+| Key | Runs |
+|---|---|
+| Ctrl+Alt+P | Flameshot capture |
+| Super+F | FSearch |
+| Ctrl+Space | `rofi/rofi_url_search.sh` |
+| Ctrl+Shift+Alt+P | Display settings |
+| Shift+Alt+D | Night Light settings |
+| Shift+Alt+C | Bluetooth (blueman) |
+| Super+E | `scripts/nemo_dropdown_toggle.sh`, dropdown Nemo (its header lists the dependencies and why tdrop is not used) |
+
+Super+E was Cinnamon's "open Home folder"; that action keeps only the Explorer media key.
+Print (screenshot) and Ctrl+Alt+Escape (restart Cinnamon) are left to Cinnamon on purpose.
+
+Backup after a change, restore on a new machine:
+
+```bash
+dconf dump /org/cinnamon/desktop/keybindings/ > ~/Repos/dotfiles/cinnamon/cinnamon_keybindings.dconf
+
+dconf load /org/cinnamon/desktop/keybindings/ < ~/Repos/dotfiles/cinnamon/cinnamon_keybindings.dconf
+```
+
+The dump covers the whole keybindings path, not only `custom-keybindings/`: it also holds
+`custom-list`, without which Cinnamon ignores a custom shortcut, and the changed built-in
+bindings (`media-keys`, `wm`).
 
 ## What scale-wheel-switch does
 

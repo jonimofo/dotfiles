@@ -1,0 +1,827 @@
+diff --git a/nemo-preview/debian/changelog b/nemo-preview/debian/changelog
+index 15f72bc..bd156a8 100644
+--- a/nemo-preview/debian/changelog
++++ b/nemo-preview/debian/changelog
+@@ -1,3 +1,54 @@
++nemo-preview (6.4.0+local7) trixie; urgency=medium
++
++  * Let images and videos grow to 85% of the monitor work area instead of
++    800x600; small images keep their native size, text and HTML keep 800x600.
++
++ -- Local build <root@localhost>  Mon, 16 Nov 2026 11:01:47 +0100
++
++nemo-preview (6.4.0+local6) trixie; urgency=medium
++
++  * Ignore the LibreOffice exit when the preview was closed during the
++    conversion, and keep the loader alive until the conversion exits.
++
++ -- Local build <root@localhost>  Mon, 16 Nov 2026 10:58:44 +0100
++
++nemo-preview (6.4.0+local5) trixie; urgency=medium
++
++  * Add an UpdateFile D-Bus method so an open preview follows the Nemo
++    selection, and stop taking the keyboard focus when a preview opens.
++
++ -- Local build <root@localhost>  Mon, 16 Nov 2026 10:49:36 +0100
++
++nemo-preview (6.4.0+local4) trixie; urgency=medium
++
++  * Stop the toolbar fade-out when the preview window closes, now that the
++    process outlives its windows.
++
++ -- Local build <root@localhost>  Mon, 16 Nov 2026 10:31:23 +0100
++
++nemo-preview (6.4.0+local3) trixie; urgency=medium
++
++  * Fix a double free of the converted PDF path when an office document
++    preview is closed and the loader is later disposed.
++  * Disconnect the video player signals when the video preview is closed.
++
++ -- Local build <root@localhost>  Mon, 16 Nov 2026 10:27:40 +0100
++
++nemo-preview (6.4.0+local2) trixie; urgency=medium
++
++  * Stay alive 10 minutes after the last preview closes, so the next
++    preview skips the process startup.
++
++ -- Local build <root@localhost>  Mon, 16 Nov 2026 10:23:39 +0100
++
++nemo-preview (6.4.0+local1) trixie; urgency=medium
++
++  * Open PDF and office documents in a plain GTK window: the Clutter-embedded
++    xreader view froze on scroll (linuxmint/nemo-extensions#593).
++  * Keep the preview window centered when it resizes to fit its content.
++
++ -- Local build <root@localhost>  Mon, 16 Nov 2026 10:12:42 +0100
++
+ nemo-preview (6.4.0) xia; urgency=medium
+ 
+   * 6.4.0
+diff --git a/nemo-preview/src/js/ui/application.js b/nemo-preview/src/js/ui/application.js
+index ed1c1a4..5cae819 100644
+--- a/nemo-preview/src/js/ui/application.js
++++ b/nemo-preview/src/js/ui/application.js
+@@ -38,7 +38,10 @@ const GLib = imports.gi.GLib;
+ const Gdk = imports.gi.Gdk;
+ const Gio = imports.gi.Gio;
+ 
++const Constants = imports.util.constants;
++const DocumentWindow = imports.ui.documentWindow;
+ const MainWindow = imports.ui.mainWindow;
++const MimeHandler = imports.ui.mimeHandler;
+ 
+ const NEMO_PREVIEW_DBUS_PATH = '/org/nemo/Preview';
+ const NEMO_PREVIEW_DBUS_NAME = 'org.nemo.Preview';
+@@ -52,6 +55,10 @@ const NemoPreviewIface = '<node> \
+ </method> \
+ <method name="Close"> \
+ </method> \
++<method name="UpdateFile"> \
++    <arg type="s" direction="in" name="uri" /> \
++    <arg type="i" direction="in" name="xid" /> \
++</method> \
+ </interface> \
+ </node>';
+ 
+@@ -60,7 +67,8 @@ var Application = new Lang.Class({
+     Extends: Gtk.Application,
+ 
+     _init : function(args) {
+-        this.parent({ application_id: NEMO_PREVIEW_DBUS_NAME });
++        this.parent({ application_id: NEMO_PREVIEW_DBUS_NAME,
++                      inactivity_timeout: Constants.IDLE_EXIT_TIMEOUT_MS });
+ 
+         this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(NemoPreviewIface, this);
+         this._dbusImpl.export(Gio.DBus.session, NEMO_PREVIEW_DBUS_PATH);
+@@ -70,15 +78,78 @@ var Application = new Lang.Class({
+         this.parent();
+ 
+         this._defineStyleAndThemes();
+-        this._createMainWindow();
++
++        this._mimeHandler = new MimeHandler.MimeHandler();
++        this._currentWindow = null;
++        this._windowKind = null;
++        this._currentXid = 0;
++        this._pendingFile = null;
++
++        /* windows are created on ShowFile calls: a hold/release pair arms
++         * the inactivity timeout, which also keeps the process around
++         * between previews */
++        this.hold();
++        this.release();
++
++        this.connect('window-removed', Lang.bind(this, this._onWindowRemoved));
+     },
+ 
+     vfunc_activate : function() {
+     },
+ 
+-    _createMainWindow : function() {
+-        this._mainWindow =
+-            new MainWindow.MainWindow({ application: this });
++    _onWindowRemoved : function(application, gtkWindow) {
++        if (this._currentWindow &&
++            this._currentWindow.getGtkWindow() === gtkWindow) {
++            this._currentWindow = null;
++            this._windowKind = null;
++        }
++    },
++
++    _showDocument : function(file, xid, title) {
++        this.Close();
++
++        this._currentWindow =
++            new DocumentWindow.DocumentWindow({ application: this,
++                                                file: file,
++                                                xid: xid,
++                                                title: title });
++        this._windowKind = 'document';
++    },
++
++    _showPreview : function(file, xid) {
++        if (this._windowKind != 'preview') {
++            this.Close();
++
++            this._currentWindow =
++                new MainWindow.MainWindow({ application: this });
++            this._windowKind = 'preview';
++        }
++
++        this._currentWindow.setParent(xid);
++        this._currentWindow.setFile(file);
++    },
++
++    _onFileInfo : function(file, xid, obj, res) {
++        /* a newer ShowFile or UpdateFile superseded this one */
++        if (file !== this._pendingFile)
++            return;
++
++        let info = null;
++
++        try {
++            info = obj.query_info_finish(res);
++        } catch(e) {
++            logError(e, 'Error querying file type of ' + file.get_uri());
++        }
++
++        /* the preview window reports unreadable files itself */
++        let renderer = info ?
++            this._mimeHandler.getObject(info.get_content_type()) : null;
++
++        if (renderer && renderer.opensOwnWindow)
++            this._showDocument(file, xid, info.get_display_name());
++        else
++            this._showPreview(file, xid);
+     },
+ 
+     _defineStyleAndThemes : function() {
+@@ -93,18 +164,43 @@ var Application = new Lang.Class({
+     },
+ 
+     Close: function() {
+-        this._mainWindow.close();
++        if (this._currentWindow)
++            this._currentWindow.close();
+     },
+ 
+     ShowFile : function(uri, xid, closeIfAlreadyShown) {
+-	let file = Gio.file_new_for_uri(uri);
+-	if (closeIfAlreadyShown &&
+-	    this._mainWindow.file &&
+-	    this._mainWindow.file.equal(file)) {
+-	    this._mainWindow.close();
+-	    return;
+-	}
+-        this._mainWindow.setParent(xid);
+-        this._mainWindow.setFile(file);
++        let file = Gio.file_new_for_uri(uri);
++        if (closeIfAlreadyShown &&
++            this._currentWindow &&
++            this._currentWindow.file &&
++            this._currentWindow.file.equal(file)) {
++            this.Close();
++            return;
++        }
++
++        this._openFile(file, xid);
++    },
++
++    /* Nemo calls this on every selection change, without auto-starting us:
++     * only an open preview, opened from that same Nemo window, follows. */
++    UpdateFile : function(uri, xid) {
++        let file = Gio.file_new_for_uri(uri);
++        if (!this._currentWindow ||
++            xid != this._currentXid ||
++            (this._currentWindow.file && this._currentWindow.file.equal(file)))
++            return;
++
++        this._openFile(file, xid);
++    },
++
++    _openFile : function(file, xid) {
++        this._currentXid = xid;
++        this._pendingFile = file;
++
++        file.query_info_async(Gio.FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME + ',' +
++                              Gio.FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
++                              Gio.FileQueryInfoFlags.NONE,
++                              GLib.PRIORITY_DEFAULT, null,
++                              (obj, res) => this._onFileInfo(file, xid, obj, res));
+     }
+ });
+diff --git a/nemo-preview/src/js/ui/documentWindow.js b/nemo-preview/src/js/ui/documentWindow.js
+new file mode 100644
+index 0000000..2b2517d
+--- /dev/null
++++ b/nemo-preview/src/js/ui/documentWindow.js
+@@ -0,0 +1,206 @@
++/*
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of the
++ * License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
++ * 02110-1301 USA.
++ *
++ */
++
++/*
++ * Documents (PDF, and office files converted to PDF) are shown in a plain
++ * GTK window instead of the Clutter stage: an XreaderView embedded through
++ * GtkClutter.Actor relayouts the whole stage on every pointer event and
++ * freezes as soon as the user scrolls.
++ */
++
++imports.gi.versions.Gtk = '3.0';
++const Gdk = imports.gi.Gdk;
++const Gtk = imports.gi.Gtk;
++const EvView = imports.gi.XreaderView;
++const NemoPreview = imports.gi.NemoPreview;
++
++const Gettext = imports.gettext.domain('nemo-extensions');
++const _ = Gettext.gettext;
++const Lang = imports.lang;
++
++const Constants = imports.util.constants;
++const Utils = imports.ui.utils;
++
++var DocumentWindow = new Lang.Class({
++    Name: 'DocumentWindow',
++
++    _init : function(args) {
++        this.file = args.file;
++        this._parent = NemoPreview.create_foreign_window(args.xid);
++        this._document = null;
++        this._model = null;
++        this._view = null;
++
++        this._createWindow(args.application, args.title);
++        this._createToolbar();
++        this._createContent();
++        this._showWindow();
++        this._loadDocument();
++    },
++
++    _createWindow : function(application, title) {
++        this._gtkWindow = new Gtk.Window({ type: Gtk.WindowType.TOPLEVEL,
++                                           title: title,
++                                           skipPagerHint: true,
++                                           skipTaskbarHint: true,
++                                           focusOnMap: false,
++                                           windowPosition: Gtk.WindowPosition.CENTER_ALWAYS,
++                                           application: application });
++
++        let workarea = Utils.getWorkarea(this._parent);
++        this._gtkWindow.set_default_size(
++            Math.min(Constants.DOCUMENT_WINDOW_WIDTH, workarea.width),
++            Math.round(workarea.height * Constants.SCREEN_FILL_RATIO));
++
++        this._gtkWindow.connect('key-press-event',
++                                Lang.bind(this, this._onKeyPressEvent));
++        this._gtkWindow.connect('destroy',
++                                Lang.bind(this, this._onDestroy));
++
++        this._box = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL });
++        this._gtkWindow.add(this._box);
++    },
++
++    _createToolbar : function() {
++        this._toolbar = new Gtk.Toolbar({ icon_size: Gtk.IconSize.MENU });
++        this._toolbar.set_show_arrow(false);
++
++        this._backButton = new Gtk.ToolButton({ icon_name: 'go-previous-symbolic',
++                                                sensitive: false });
++        this._backButton.connect('clicked', Lang.bind(this, function() {
++            this._view.previous_page();
++        }));
++        this._toolbar.insert(this._backButton, -1);
++
++        this._forwardButton = new Gtk.ToolButton({ icon_name: 'go-next-symbolic',
++                                                   sensitive: false });
++        this._forwardButton.connect('clicked', Lang.bind(this, function() {
++            this._view.next_page();
++        }));
++        this._toolbar.insert(this._forwardButton, -1);
++
++        this._pageLabel = new Gtk.Label({ margin_left: 10,
++                                          margin_right: 10,
++                                          xalign: 0 });
++        let labelItem = new Gtk.ToolItem();
++        labelItem.set_expand(true);
++        labelItem.add(this._pageLabel);
++        this._toolbar.insert(labelItem, -1);
++
++        this._box.pack_start(this._toolbar, false, false, 0);
++    },
++
++    _createContent : function() {
++        this._scrolledWin = new Gtk.ScrolledWindow({ hexpand: true,
++                                                     vexpand: true });
++        this._spinner = new Gtk.Spinner({ active: true,
++                                          halign: Gtk.Align.CENTER,
++                                          valign: Gtk.Align.CENTER });
++        this._scrolledWin.add(this._spinner);
++
++        this._box.pack_start(this._scrolledWin, true, true, 0);
++    },
++
++    _showWindow : function() {
++        this._gtkWindow.realize();
++        this._gtkWindow.get_window().move_to_current_desktop();
++
++        if (this._parent)
++            this._gtkWindow.get_window().set_transient_for(this._parent);
++
++        this._gtkWindow.show_all();
++    },
++
++    _loadDocument : function() {
++        this._pdfLoader = new NemoPreview.PdfLoader();
++        this._pdfLoader.connect('notify::document',
++                                Lang.bind(this, this._onDocumentLoaded));
++        this._pdfLoader.uri = this.file.get_uri();
++    },
++
++    _onDocumentLoaded : function() {
++        if (!this._gtkWindow)
++            return;
++
++        this._document = this._pdfLoader.document;
++        if (!this._document) {
++            logError(new Error('No document loaded for ' + this.file.get_uri()),
++                     'Error loading document');
++            return;
++        }
++
++        this._model = EvView.DocumentModel.new_with_document(this._document);
++        this._model.set_sizing_mode(EvView.SizingMode.FIT_WIDTH);
++        this._model.set_continuous(true);
++        this._model.connect('page-changed',
++                            Lang.bind(this, this._updatePageLabel));
++
++        this._view = EvView.View.new();
++        this._view.set_model(this._model);
++
++        this._scrolledWin.remove(this._scrolledWin.get_child());
++        this._scrolledWin.add(this._view);
++        this._view.show();
++        this._view.grab_focus();
++
++        this._updatePageLabel();
++    },
++
++    _updatePageLabel : function() {
++        let curPage = this._model.get_page();
++        let totPages = this._document.get_n_pages();
++
++        this._backButton.set_sensitive(curPage > 0);
++        this._forwardButton.set_sensitive(curPage < totPages - 1);
++        this._pageLabel.set_text(_("%d of %d").format(curPage + 1, totPages));
++    },
++
++    _onKeyPressEvent : function(widget, event) {
++        let key = event.get_keyval()[1];
++
++        if (key == Gdk.KEY_Escape ||
++            key == Gdk.KEY_space ||
++            key == Gdk.KEY_q) {
++            this.close();
++            return true;
++        }
++
++        return false;
++    },
++
++    _onDestroy : function() {
++        this._gtkWindow = null;
++
++        if (this._pdfLoader) {
++            this._pdfLoader.cleanup_document();
++            this._pdfLoader = null;
++        }
++    },
++
++    /**************************************************************************
++     ************************ public methods **********************************
++     **************************************************************************/
++    getGtkWindow : function() {
++        return this._gtkWindow;
++    },
++
++    close : function() {
++        if (this._gtkWindow)
++            this._gtkWindow.destroy();
++    }
++});
+diff --git a/nemo-preview/src/js/ui/mainWindow.js b/nemo-preview/src/js/ui/mainWindow.js
+index 797ea6f..c8b0888 100644
+--- a/nemo-preview/src/js/ui/mainWindow.js
++++ b/nemo-preview/src/js/ui/mainWindow.js
+@@ -92,12 +92,14 @@ MainWindow.prototype = {
+         this._clientDecorated = false;
+ 
+         this._gtkWindow = new Gtk.Window({ type: Gtk.WindowType.TOPLEVEL,
+-                                           focusOnMap: true,
++                                           /* keep the keyboard in Nemo so its
++                                            * arrow keys move the selection */
++                                           focusOnMap: false,
+                                            decorated: !this._clientDecorated,
+                                            hasResizeGrip: false,
+                                            skipPagerHint: true,
+                                            skipTaskbarHint: true,
+-                                           windowPosition: Gtk.WindowPosition.CENTER,
++                                           windowPosition: Gtk.WindowPosition.CENTER_ALWAYS,
+                                            application: this._application });
+ 
+         let screen = Gdk.Screen.get_default();
+@@ -240,13 +242,23 @@ MainWindow.prototype = {
+     /**************************************************************************
+      *********************** texture allocation *******************************
+      **************************************************************************/
++    _getMaxViewSize : function() {
++        if (!this._renderer.growsWithScreen)
++            return [ Constants.VIEW_MAX_W, Constants.VIEW_MAX_H ];
++
++        let workarea = Utils.getWorkarea(this._parent);
++        return [ Math.round(workarea.width * Constants.SCREEN_FILL_RATIO),
++                 Math.round(workarea.height * Constants.SCREEN_FILL_RATIO) ];
++    },
++
+     _getTextureSize : function() {
+         let screenSize = [ this._gtkWindow.get_window().get_width(),
+                            this._gtkWindow.get_window().get_height() ];
+         let yPadding = this._clientDecorated ? Constants.VIEW_PADDING_Y : 0;
+ 
+-        let availableWidth = this._isFullScreen ? screenSize[0] : Constants.VIEW_MAX_W - 2 * Constants.VIEW_PADDING_X;
+-        let availableHeight = this._isFullScreen ? screenSize[1] : Constants.VIEW_MAX_H - yPadding;
++        let maxSize = this._getMaxViewSize();
++        let availableWidth = this._isFullScreen ? screenSize[0] : maxSize[0] - 2 * Constants.VIEW_PADDING_X;
++        let availableHeight = this._isFullScreen ? screenSize[1] : maxSize[1] - yPadding;
+ 
+         let textureSize = this._renderer.getSizeForAllocation([availableWidth, availableHeight], this._isFullScreen);
+ 
+@@ -632,12 +644,21 @@ MainWindow.prototype = {
+         if (this._renderer.clear)
+             this._renderer.clear();
+ 
++        /* the process outlives the window: stop the toolbar fade */
++        this._removeToolbarTimeout();
++        if (this._toolbarActor)
++            Tweener.removeTweens(this._toolbarActor);
++
+         this._gtkWindow.destroy();
+     },
+ 
+     /**************************************************************************
+      ************************ public methods **********************************
+      **************************************************************************/
++    getGtkWindow : function() {
++        return this._gtkWindow;
++    },
++
+     setParent : function(xid) {
+         this._parent = NemoPreview.create_foreign_window(xid);
+         this._gtkWindow.realize();
+diff --git a/nemo-preview/src/js/ui/utils.js b/nemo-preview/src/js/ui/utils.js
+index 2a4e2d0..a12ed08 100644
+--- a/nemo-preview/src/js/ui/utils.js
++++ b/nemo-preview/src/js/ui/utils.js
+@@ -153,3 +153,17 @@ function alphaGtkWidget(widget) {
+                                                        blue: 0,
+                                                        alpha: 0 }));
+ }
++
++/* Work area of the monitor showing the parent (Nemo) window, falling back
++ * to the primary monitor. */
++function getWorkarea(parent) {
++    let display = Gdk.Display.get_default();
++    let monitor = null;
++
++    if (parent)
++        monitor = display.get_monitor_at_window(parent);
++    if (!monitor)
++        monitor = display.get_primary_monitor() || display.get_monitor(0);
++
++    return monitor.get_workarea();
++}
+diff --git a/nemo-preview/src/js/util/constants.js b/nemo-preview/src/js/util/constants.js
+index 7f0fd13..937a5e5 100644
+--- a/nemo-preview/src/js/util/constants.js
++++ b/nemo-preview/src/js/util/constants.js
+@@ -32,3 +32,7 @@ var VIEW_PADDING_X = 2;
+ var VIEW_MAX_W = 800;
+ var VIEW_MAX_H = 600;
+ var TOOLBAR_SPACING = 32;
++var DOCUMENT_WINDOW_WIDTH = 900;
++/* share of the monitor work area used by documents, images and videos */
++var SCREEN_FILL_RATIO = 0.85;
++var IDLE_EXIT_TIMEOUT_MS = 10 * 60 * 1000;
+diff --git a/nemo-preview/src/js/viewers/gst.js b/nemo-preview/src/js/viewers/gst.js
+index f403fa6..808e3d3 100644
+--- a/nemo-preview/src/js/viewers/gst.js
++++ b/nemo-preview/src/js/viewers/gst.js
+@@ -50,6 +50,7 @@ GstRenderer.prototype = {
+     _init : function(args) {
+         this.moveOnClick = true;
+         this.canFullScreen = true;
++        this.growsWithScreen = true;
+     },
+ 
+     prepare : function(file, mainWindow, callback) {
+@@ -66,7 +67,18 @@ GstRenderer.prototype = {
+     },
+ 
+     clear : function() {
++        if (!this._player)
++            return;
++
++        this._playerNotifies.forEach(Lang.bind(this,
++            function(id) {
++                this._player.disconnect(id);
++            }));
++
+         this._player.playing = false;
++        this._playerNotifies = [];
++        this._player = null;
++        this._mainToolbar = null;
+     },
+ 
+     _createVideo : function(file) {
+@@ -80,19 +92,20 @@ GstRenderer.prototype = {
+         this._player.set_uri(file.get_uri());
+         this._player.playing = true;
+ 
+-        this._videoSizeChangeId =
++        this._playerNotifies = [
+             this._player.connect('size-change',
+                                  Lang.bind(this,
+-                                           this._onVideoSizeChange));
+-        this._player.connect('notify::playing',
+-                             Lang.bind(this,
+-                                       this._onVideoPlayingChange));
+-        this._player.connect('notify::progress',
+-                             Lang.bind(this,
+-                                       this._onVideoProgressChange));
+-        this._player.connect('notify::duration',
+-                             Lang.bind(this,
+-                                       this._onVideoDurationChange));
++                                           this._onVideoSizeChange)),
++            this._player.connect('notify::playing',
++                                 Lang.bind(this,
++                                           this._onVideoPlayingChange)),
++            this._player.connect('notify::progress',
++                                 Lang.bind(this,
++                                           this._onVideoProgressChange)),
++            this._player.connect('notify::duration',
++                                 Lang.bind(this,
++                                           this._onVideoDurationChange))
++        ];
+     },
+ 
+     _updateProgressBar : function() {
+diff --git a/nemo-preview/src/js/viewers/image.js b/nemo-preview/src/js/viewers/image.js
+index 4dc4596..ab99b26 100644
+--- a/nemo-preview/src/js/viewers/image.js
++++ b/nemo-preview/src/js/viewers/image.js
+@@ -48,6 +48,7 @@ ImageRenderer.prototype = {
+         this._timeoutId = 0;
+         this.moveOnClick = true;
+         this.canFullScreen = true;
++        this.growsWithScreen = true;
+     },
+ 
+     prepare : function(file, mainWindow, callback) {
+diff --git a/nemo-preview/src/js/viewers/xreader.js b/nemo-preview/src/js/viewers/xreader.js
+index 27b3b62..d68464e 100644
+--- a/nemo-preview/src/js/viewers/xreader.js
++++ b/nemo-preview/src/js/viewers/xreader.js
+@@ -25,157 +25,17 @@
+  *
+  */
+ 
+-imports.gi.versions.Gtk = '3.0';
+-const Gtk = imports.gi.Gtk;
+ const EvDoc = imports.gi.XreaderDocument;
+-const EvView = imports.gi.XreaderView;
+-const GtkClutter = imports.gi.GtkClutter;
+ const NemoPreview = imports.gi.NemoPreview;
+ 
+-const Gettext = imports.gettext.domain('nemo-extensions');
+-const _ = Gettext.gettext;
+-const Lang = imports.lang;
+-
+-const Constants = imports.util.constants;
+ const MimeHandler = imports.ui.mimeHandler;
+-const Utils = imports.ui.utils;
+-
+-function XreaderRenderer(args) {
+-    this._init(args);
+-}
+-
+-XreaderRenderer.prototype = {
+-    _init : function(args) {
+-        EvDoc.init();
+-
+-        this._pdfLoader = null;
+-        this._document = null;
+-
+-        this.moveOnClick = false;
+-        this.canFullScreen = true;
+-    },
+-
+-    prepare : function(file, mainWindow, callback) {
+-        this._mainWindow = mainWindow;
+-        this._file = file;
+-        this._callback = callback;
+-
+-        this._pdfLoader = new NemoPreview.PdfLoader();
+-        this._pdfLoader.connect('notify::document',
+-                                Lang.bind(this, this._onDocumentLoaded));
+-        this._pdfLoader.uri = file.get_uri();
+-    },
+-
+-    render : function() {
+-        return this._actor;
+-    },
+-
+-    _updatePageLabel : function() {
+-        let curPage, totPages;
+-
+-        curPage = this._model.get_page();
+-        totPages = this._document.get_n_pages();
+-
+-        this._toolbarBack.set_sensitive(curPage > 0);
+-        this._toolbarForward.set_sensitive(curPage < totPages - 1);
+-
+-        this._pageLabel.set_text(_("%d of %d").format(curPage + 1, totPages));
+-    },
+-
+-    _onDocumentLoaded : function() {
+-        this._document = this._pdfLoader.document;
+-        this._model = EvView.DocumentModel.new_with_document(this._document);
+-
+-        this._model.set_sizing_mode(EvView.SizingMode.FIT_WIDTH);
+-	this._model.set_continuous(true);
+-
+-        this._model.connect('page-changed',
+-                            Lang.bind(this, function() {
+-                                this._updatePageLabel();
+-                            }));
+-
+-        this._view = EvView.View.new();
+-        this._view.show();
+-
+-        this._scrolledWin = Gtk.ScrolledWindow.new(null, null);
+-        this._scrolledWin.set_min_content_width(Constants.VIEW_MIN);
+-        this._scrolledWin.set_min_content_height(Constants.VIEW_MIN);
+-        this._scrolledWin.show();
+-
+-        this._view.set_model(this._model);
+-        this._scrolledWin.add(this._view);
+ 
+-        this._actor = new GtkClutter.Actor({ contents: this._scrolledWin });
+-        this._actor.set_reactive(true);
+-
+-        this._callback();
+-    },
+-
+-    getSizeForAllocation : function(allocation) {
+-        /* always give the view the maximum possible allocation */
+-        return allocation;
+-    },
+-
+-    _createLabelItem : function() {
+-        this._pageLabel = new Gtk.Label({ margin_left: 10,
+-                                          margin_right: 10 });
+-
+-        let item = new Gtk.ToolItem();
+-        item.set_expand(true);
+-        item.add(this._pageLabel);
+-        item.show_all();
+-
+-        return item;
+-    },
+-
+-    createToolbar : function() {
+-        this._mainToolbar = new Gtk.Toolbar({ icon_size: Gtk.IconSize.MENU });
+-        this._mainToolbar.get_style_context().add_class('osd');
+-        this._mainToolbar.set_show_arrow(false);
+-        this._mainToolbar.show();
+-
+-        this._toolbarActor = new GtkClutter.Actor({ contents: this._mainToolbar });
+-
+-        this._toolbarBack = new Gtk.ToolButton({ expand: false,
+-                                                 icon_name: 'go-previous-symbolic' });
+-        this._toolbarBack.show();
+-        this._mainToolbar.insert(this._toolbarBack, -1);
+-
+-        this._toolbarBack.connect('clicked',
+-                                  Lang.bind(this, function () {
+-                                      this._view.previous_page();
+-                                  }));
+-
+-        let labelItem = this._createLabelItem();
+-        this._mainToolbar.insert(labelItem, -1);
+-
+-        this._toolbarForward = new Gtk.ToolButton({ expand: false,
+-                                                    icon_name: 'go-next-symbolic' });
+-        this._toolbarForward.show();
+-        this._mainToolbar.insert(this._toolbarForward, -1);
+-
+-        this._toolbarForward.connect('clicked',
+-                                     Lang.bind(this, function () {
+-                                         this._view.next_page();
+-                                     }));
+-
+-        let separator = new Gtk.SeparatorToolItem();
+-        separator.show();
+-        this._mainToolbar.insert(separator, -1);
+-
+-        this._toolbarZoom = Utils.createFullScreenButton(this._mainWindow);
+-        this._mainToolbar.insert(this._toolbarZoom, -1);
+-
+-        this._updatePageLabel();
+-
+-        return this._toolbarActor;
+-    },
+-
+-    clear : function() {
+-        this._pdfLoader.cleanup_document();
+-        this._document = null;
+-        this._pdfLoader = null;
+-    }
++/* Documents are not rendered on the Clutter stage: the application opens
++ * them in a ui/documentWindow.js window, see Application.ShowFile().
++ */
++function XreaderRenderer() {
++    EvDoc.init();
++    this.opensOwnWindow = true;
+ }
+ 
+ let handler = new MimeHandler.MimeHandler();
+diff --git a/nemo-preview/src/libnemo-preview/nemo-preview-pdf-loader.c b/nemo-preview/src/libnemo-preview/nemo-preview-pdf-loader.c
+index 9b4c5f6..521ccac 100644
+--- a/nemo-preview/src/libnemo-preview/nemo-preview-pdf-loader.c
++++ b/nemo-preview/src/libnemo-preview/nemo-preview-pdf-loader.c
+@@ -147,6 +147,10 @@ libreoffice_child_watch_cb (GPid pid,
+   g_spawn_close_pid (pid);
+   self->priv->libreoffice_pid = -1;
+ 
++  /* cleanup_document() killed the conversion: the preview was closed */
++  if (self->priv->pdf_path == NULL)
++    return;
++
+   file = g_file_new_for_path (self->priv->pdf_path);
+   uri = g_file_get_uri (file);
+   load_pdf (self, uri);
+@@ -220,7 +224,10 @@ load_libreoffice (NemoPreviewPdfLoader *self)
+     return;
+   }
+ 
+-  g_child_watch_add (pid, libreoffice_child_watch_cb, self);
++  /* the conversion can outlive the preview window: keep the loader alive */
++  g_child_watch_add_full (G_PRIORITY_DEFAULT, pid,
++                          libreoffice_child_watch_cb,
++                          g_object_ref (self), g_object_unref);
+   self->priv->libreoffice_pid = pid;
+ }
+ 
+@@ -308,7 +315,8 @@ nemo_preview_pdf_loader_cleanup_document (NemoPreviewPdfLoader *self)
+ {
+   if (self->priv->pdf_path) {
+     g_unlink (self->priv->pdf_path);
+-    g_free (self->priv->pdf_path);
++    /* also called again from dispose */
++    g_clear_pointer (&self->priv->pdf_path, g_free);
+   }
+ 
+   if (self->priv->libreoffice_pid != -1) {

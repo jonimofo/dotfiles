@@ -1,0 +1,161 @@
+Description: Let an open previewer follow the selection
+ When the selection changes and exactly one file is selected, call
+ UpdateFile on org.nemo.Preview without auto-starting it, after a short
+ debounce. An already open preview then shows the newly selected file.
+Author: Local build
+Forwarded: no
+
+--- nemo-6.4.5.orig/src/nemo-previewer.c
++++ nemo-6.4.5/src/nemo-previewer.c
+@@ -141,6 +141,27 @@ previewer_close_ready_cb (GObject *sourc
+   g_object_unref (self);
+ }
+ 
++static void
++previewer_update_file_ready_cb (GObject *source,
++                                GAsyncResult *res,
++                                gpointer user_data)
++{
++  NemoPreviewer *self = user_data;
++  GError *error = NULL;
++
++  g_dbus_connection_call_finish (self->priv->connection,
++                                 res, &error);
++
++  /* the previewer not running is the normal case */
++  if (error != NULL) {
++    DEBUG ("Unable to call UpdateFile on NemoPreviewer: %s",
++           error->message);
++    g_error_free (error);
++  }
++
++  g_object_unref (self);
++}
++
+ NemoPreviewer *
+ nemo_previewer_get_singleton (void)
+ {
+@@ -195,3 +216,28 @@ nemo_previewer_call_close (NemoPreviewer
+                           previewer_close_ready_cb,
+                           g_object_ref (self));
+ }
++
++void
++nemo_previewer_call_update_file (NemoPreviewer *self,
++                                 const gchar *uri,
++                                 guint xid)
++{
++  if (self->priv->connection == NULL) {
++    g_printerr ("No DBus connection available");
++    return;
++  }
++
++  /* only an already open previewer follows the selection */
++  g_dbus_connection_call (self->priv->connection,
++                          PREVIEWER_DBUS_NAME,
++                          PREVIEWER_DBUS_PATH,
++                          PREVIEWER_DBUS_IFACE,
++                          "UpdateFile",
++                          g_variant_new ("(si)", uri, xid),
++                          NULL,
++                          G_DBUS_CALL_FLAGS_NO_AUTO_START,
++                          -1,
++                          NULL,
++                          previewer_update_file_ready_cb,
++                          g_object_ref (self));
++}
+--- nemo-6.4.5.orig/src/nemo-previewer.h
++++ nemo-6.4.5/src/nemo-previewer.h
+@@ -61,6 +61,9 @@ void nemo_previewer_call_show_file (Nemo
+                                         guint xid,
+ 					gboolean close_if_already_visible);
+ void nemo_previewer_call_close (NemoPreviewer *previewer);
++void nemo_previewer_call_update_file (NemoPreviewer *previewer,
++                                      const gchar *uri,
++                                      guint xid);
+ 
+ G_END_DECLS
+ 
+--- nemo-6.4.5.orig/src/nemo-view.c
++++ nemo-6.4.5/src/nemo-view.c
+@@ -106,6 +106,10 @@
+ /* Milliseconds that have to pass without a change to reset the update interval */
+ #define UPDATE_INTERVAL_RESET 1000
+ 
++/* Delay before an open previewer follows the selection, so that holding an
++ * arrow key does not load every file on the way. */
++#define PREVIEW_FOLLOW_SELECTION_DELAY_MS 150
++
+ #define SILENT_WINDOW_OPEN_LIMIT 5
+ 
+ #define DUPLICATE_HORIZONTAL_ICON_OFFSET 70
+@@ -217,6 +221,7 @@ struct NemoViewDetails
+ 	guint extensions_menu_merge_id;
+ 
+ 	guint display_selection_idle_id;
++	guint preview_follow_selection_id;
+ 	guint update_menus_timeout_id;
+ 	guint update_status_idle_id;
+ 	guint reveal_selection_idle_id;
+@@ -2963,6 +2968,11 @@ nemo_view_destroy (GtkWidget *object)
+ 		view->details->display_selection_idle_id = 0;
+ 	}
+ 
++	if (view->details->preview_follow_selection_id != 0) {
++		g_source_remove (view->details->preview_follow_selection_id);
++		view->details->preview_follow_selection_id = 0;
++	}
++
+ 	if (view->details->reveal_selection_idle_id != 0) {
+ 		g_source_remove (view->details->reveal_selection_idle_id);
+ 		view->details->reveal_selection_idle_id = 0;
+@@ -10322,6 +10332,33 @@ schedule_update_status (NemoView *view)
+ 	}
+ }
+ 
++static gboolean
++preview_follow_selection_callback (gpointer data)
++{
++	NemoView *view = NEMO_VIEW (data);
++	GtkWidget *toplevel;
++	GList *selection;
++	gchar *uri;
++
++	view->details->preview_follow_selection_id = 0;
++
++	toplevel = gtk_widget_get_toplevel (GTK_WIDGET (view));
++	if (!GTK_IS_WINDOW (toplevel) || !gtk_widget_get_realized (toplevel)) {
++		return G_SOURCE_REMOVE;
++	}
++
++	selection = nemo_view_get_selection (view);
++	if (selection != NULL && selection->next == NULL) {
++		uri = nemo_file_get_uri (selection->data);
++		nemo_previewer_call_update_file (nemo_previewer_get_singleton (), uri,
++						 eel_gtk_get_window_xid (GTK_WINDOW (toplevel)));
++		g_free (uri);
++	}
++	nemo_file_list_free (selection);
++
++	return G_SOURCE_REMOVE;
++}
++
+ /**
+  * nemo_view_notify_selection_changed:
+  *
+@@ -10359,6 +10396,15 @@ nemo_view_notify_selection_changed (Nemo
+                                                               display_selection_info_idle_callback,
+                                                               view);
+ 
++	/* Let an open previewer show the new selection. */
++	if (view->details->preview_follow_selection_id != 0) {
++		g_source_remove (view->details->preview_follow_selection_id);
++	}
++	view->details->preview_follow_selection_id =
++		g_timeout_add (PREVIEW_FOLLOW_SELECTION_DELAY_MS,
++			       preview_follow_selection_callback,
++			       view);
++
+ 	if (view->details->batching_selection_level != 0) {
+ 		view->details->selection_changed_while_batched = TRUE;
+ 	} else {

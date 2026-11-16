@@ -9,6 +9,7 @@ const WindowClick = require('./windowClick');
 const SuperKey = require('./superKey');
 const AppSearch = require('./appSearch');
 const AppDock = require('./appDock');
+const HotCornerFullscreen = require('./hotCornerFullscreen');
 const UiHelpers = require('./uiHelpers');
 
 // One switch per slide animation, so a touchpad flick does not skip workspaces.
@@ -151,6 +152,7 @@ function enableAll() {
     WindowClick.enable();
     SuperKey.enable();
     AppSearch.enable();
+    HotCornerFullscreen.enable();
     if (Main.overview.visible && !Main.overview._hideInProgress) {
         showHeader();
         for (const strip of strips)
@@ -172,5 +174,6 @@ function disable() {
     WindowDrag.disable();
     WindowClick.disable();
     SuperKey.disable();
+    HotCornerFullscreen.disable();
     smoothAccumulator = 0;
 }

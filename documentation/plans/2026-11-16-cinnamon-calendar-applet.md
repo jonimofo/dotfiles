@@ -144,6 +144,7 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `applet.js` | `_updateClockAndDate` | panel text, clocks, header date and day card from the pure formatters |
 | `applet.js` | `_has_calendars_changed` | updates the day card |
 | `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height |
+| `applet.js` | new `_updateTodayButton` | the Today button's visibility and inactive state |
 | `applet.js` | new `_inVerticalPanel`, `_timeFormat`, `_panelText`, `_secondTime`, `_updateSecondZone`, `_buildClock`, `_updateClocks`, `_updateDaySummary`, `_applyAppearance` | |
 | `calendar.js` | `_getCalendarDayAbbreviation` | trailing dot removed, capitalised |
 | `calendar.js` | `_buildHeader` | one month row instead of the month and year rows, day heading class |
@@ -163,7 +164,7 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `eventView.js` | `EventRow.update_variations` | one time class |
 
 New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
-`dayCell.js`, `daySummary.js`, `appearance.js`,
+`dayCell.js`, `daySummary.js`, `appearance.js`, `todayButton.js`,
 `stylesheet.css`.
 
 ## Steps
@@ -407,6 +408,50 @@ of the third round (`Aujourd'hui`, `activités`): tabs `Appearance` and `Panel`;
 custom-format labels are unchanged. The day card reads `Today`, `1 event`, `16 events`. The
 panel date, the header date, month and day names still follow `LC_TIME` (French here).
 
+## Count card and Today button (fifth review round)
+
+Owner's words, after loading round four live: "the number of events on the day should be the
+only thing in the block under calendar, no need to add again the date, etc; instead under
+it, create a new button to go directly to today s date".
+
+Look to build:
+
+```
++----------------------------------+
+|  <       Novembre 2026        >  |
+|  Lun  Mar  Mer  Jeu  Ven  Sam Dim |
+|   ...                            |
++----------------------------------+
+
++----------------------------------+
+|  6 events                        |
++----------------------------------+
+
++----------------------------------+
+|              Today               |
++----------------------------------+
+```
+
+Decisions:
+
+1. The card holds the count only (`1 event`, `N events`): its heading, divider and time
+   range are gone with their code (`summariseDay`, `minutesFrom`, `formatRange`,
+   `summaryHeading`, `SUMMARY_TODAY_HEADING`, `MINUTES_IN_DAY`, the heading class) and
+   tests. A day without events still has no card. This supersedes decision 8 of the third
+   round.
+2. A `Today` St.Button under the card, full width, with the card's colours, border and
+   corners and the shared hover colour (no new colour), an accessible name, `track_hover`.
+   Its click calls `_resetCalendar()`, the handler of the header clocks' click: today is
+   selected, and the grid shows the selected day's month. Like the stock buttons of the
+   popup (days, month arrows), it takes no keyboard focus.
+3. Always shown with its switch, with or without the card. While today is selected and
+   shown it is not reactive and dimmed with `opacity` 160 of 255, the mechanism of
+   `quick-settings@bgi` (`INACTIVE_OPACITY`). The pure decision `todayButtonActive(selected,
+   shownMonth, today)` is tested; the grid always shows the selected day's month, so the
+   applet passes the selected date for both.
+4. `Today button` switch in Shown elements (`show-today-button`, on), live like the others.
+5. Hiding the header clocks no longer removes the only way back to today (README updated).
+
 ## To confirm on the live panel
 
 - Sizes and the place of the dot under the number, under Dracula.
@@ -416,6 +461,7 @@ panel date, the header date, month and day names still follow `LC_TIME` (French 
   the header band, rows of 48 to 56 px, the time block width with 12-hour times, the
   ellipsis and tooltip, the larger day cells with the dot under the digit, a six-week month,
   the day card for today and for another day.
+- Fifth round: the count card alone, the Today button's look, hover, click from another month, and its dimmed state on today.
 - Fourth round: the two tabs in Configure, `<Super>c` free again, each slider and the gap applying at once, 100%
   looking as before, the switches leaving no gap, the sizes at 70% and 160%.
 - Second round: that `max-height` on the column makes it scroll past 70 % of the screen (a

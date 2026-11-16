@@ -428,10 +428,10 @@ Cinnamon 6.4) with a second time zone and its own look:
   move one month), larger day cells, one dot under a day with events. The selected day is
   filled violet, today has a thin light outline, a selected today has both; days of the
   other months are greyed.
-- Under the month, a card for the selected day: `Today` (or that day's date), the
-  number of events (`1 event`, `16 events`) and the range from the first start to the
-  last end. All-day events count but stay out of the range. The range is not a duration:
-  events can overlap. A day without events has no card.
+- Under the month, a card with the selected day's number of events (`1 event`,
+  `16 events`) and nothing else; a day without events has no card. Under it, a `Today`
+  button goes back to today's date and month, like a click on the clocks; it is dimmed
+  while today is already shown.
 
 The look lives in `applets/calendar@bgi/stylesheet.css`, under the applet's own classes:
 other menus and the stock calendar are not touched. Its colours are the owner's validated
@@ -462,11 +462,12 @@ reload.
 | Setting | Default | |
 |---|---|---|
 | Calendar events | on | stock switch: the event list, the dots and the day card |
-| Clocks in the header | on | both clocks; the second one also needs "Show a second time zone" |
+| Clocks in the header | on | both clocks; the second one also needs "Show a second time zone". Hidden, their click back to today goes too; the Today button stays |
 | Metadata line | on | the second line of each event |
 | Countdown | on | "Starting in 5 minutes", "In progress" |
 | Dot under days | on | the dot under a day with events; off, the digits are centred |
-| Summary card | on | the card under the month |
+| Summary card | on | the number of events under the month |
+| Today button | on | the button under the card |
 | Week numbers | off | stock switch |
 
 **Panel**: the stock custom date format (switch, panel format, tooltip format, syntax

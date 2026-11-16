@@ -1,7 +1,7 @@
 const Gio = imports.gi.Gio;
 const Constants = require('./constants');
 
-// A tile backed by one boolean GSettings key: Night Light, Do Not Disturb. With @inverted,
+// A tile backed by one boolean GSettings key: Do Not Disturb. With @inverted,
 // the tile is on while the key is false (Do Not Disturb is on while notifications are off).
 // @onChange runs on every change of the key, made here or anywhere else.
 class BooleanSetting {

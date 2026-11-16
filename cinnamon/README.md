@@ -216,16 +216,20 @@ Assumptions about behaviour:
 ## Quick Settings: what it does
 
 One button on the panel. Its icons, left to right: Wi-Fi, Bluetooth (only while the adapter
-is on), VPN (only while a NetworkManager VPN or NordVPN is up), volume. A click opens the menu:
+is on), VPN (only while a NetworkManager VPN or NordVPN is up), volume, then the battery
+level as text, like `87%` (only with a battery). A click opens the menu:
 
 - Header: battery level and charging state on the left (hidden without a battery), then
   four round buttons. Screenshot starts `flameshot gui`, Settings opens System Settings,
   Lock locks the screen, Power opens Cinnamon's end-session dialog (suspend, restart, shut
   down). Each closes the menu first.
-- Sliders: Sound (default output), Microphone (default input), Brightness. Sound and
+- Sliders: Sound (default output), Microphone (default input), Brightness, Warmth. Sound and
   Microphone follow the handle live, like the stock sound applet. Brightness sets every
   external monitor that answers DDC/CI to the same value when the handle is released, or
-  the laptop panel when no such monitor is connected.
+  the laptop panel when no such monitor is connected. Warmth is the Night Light
+  temperature, 4700 K on the left to 1700 K on the right in steps of 100 K (the range of
+  Cinnamon's Night Light page), shown as `3400 K`; the switch at its right end turns Night
+  Light on and off, and while it is off the slider is dimmed.
 - Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
   - Wi-Fi: wireless on or off. Shows the network in use.
   - Bluetooth: adapter on or off. Shows the device when exactly one is connected.
@@ -234,8 +238,19 @@ is on), VPN (only while a NetworkManager VPN or NordVPN is up), volume. A click 
   - NordVPN: connect (quick connect) or disconnect. Shows the country while connected.
   - Power profile: shows the active profile. A click goes back to Balanced, or from
     Balanced to the last other profile used (Power Saver the first time).
-  - Night Light, Dark style, Do Not Disturb (notifications off), Keep awake (no screen
-    blanking or dimming), Mic mute.
+  - Night Light (the same key as the Warmth switch), Dark style, Do Not Disturb
+    (notifications off), Keep awake (no screen blanking or dimming), Mic mute.
+  - Keyboard light: a click goes to the next backlight level, back to off after the
+    brightest, through UPower. Shows the level: Off, Low, High for a two-level light (On
+    for a one-level light, Medium above half on a light with more levels). Follows the
+    keyboard's own hotkey. Dimmed without a keyboard backlight.
+  - Airplane mode: a click turns Wi-Fi and Bluetooth off; a second click turns back on the
+    ones that were on. Turning one back on by hand ends airplane mode.
+  - Touchpad: on or off (Settings > Mouse and Touchpad). "Disabled when an external mouse is
+    plugged in" counts as on; a click from there turns the touchpad off.
+- CPU line, under the tiles: the process using the most CPU and its share, like
+  `CPU  php 212%` (per core, as `top` counts: 212% is a bit over two cores). Read each time
+  the menu opens, with `top` over half a second, never in the background.
 - '>' on a tile or a slider opens its list under that row, in the menu: networks, paired
   devices, VPN profiles, NordVPN countries, power profiles, output and input devices. The
   active entry has a check mark; a click switches to that entry. The last entry opens the
@@ -251,9 +266,12 @@ does what you need: right-click each > Remove from panel.
 
 Right-click the button > Configure... Four tabs, Tiles, Sliders, Header and Panel, each a
 list with a Show checkbox per row. Move up and Move down change the order. Changes apply at
-once, without a reload.
+once, without a reload. Elements added in a later version appear at the end of a saved
+list, shown.
 
 - The battery stays on the left of the header; the order applies to the buttons.
+- The Tiles tab ends with the CPU line: its checkbox shows or hides it, its place in the
+  list does not move it from under the tiles.
 - With every panel icon hidden or absent, one settings icon keeps the button on the panel.
   A checkbox can hide an icon, never show one its state hides.
 - Add, Remove and Edit come with the stock list and cannot be hidden. Edit only picks a
@@ -309,6 +327,8 @@ or does nothing, and the reason goes to the journal once:
 | `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed and shown off, no VPN panel icon from NordVPN |
 | `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
 | `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
+| `top` (procps) | CPU line | the line shows `CPU` alone, the failure goes to the journal |
+| UPower with a keyboard backlight | Keyboard light tile | tile dimmed |
 
 NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon and the session
 manager come with the desktop.
@@ -328,6 +348,8 @@ manager come with the desktop.
   no click.
 - An unavailable tile or row keeps its label readable; only its icon and background dim.
 - The hover and list tints are white overlays that suit dark themes: issue #35.
+- Airplane mode is not kept across a reload of the applet: after one, the tile starts
+  unchecked and a click turns the radios off again.
 - A size changed in `stylesheet.css` shows after the next login.
 - NordVPN's own NetworkManager connection (interface `nordlynx`) is left out of the VPN
   tile; it was only checked while NordVPN was disconnected.

@@ -3,7 +3,9 @@
 // (no test touches the real NetworkManager); brightness runs against fake ddcutil
 // and laptop backends fed with captured ddcutil output; NordVPN runs against a fake client
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
-// models run on plain data; Night Light and Do Not Disturb run on the memory GSettings backend.
+// models run on plain data; Night Light, Warmth, Do Not Disturb and Touchpad run on the memory
+// GSettings backend; the keyboard light runs on a fake UPower bus; Airplane mode on fake radios
+// and on the Wi-Fi and Bluetooth fakes; the CPU line parser on captured top output.
 // No real setting is changed.
 // Usage: GSETTINGS_BACKEND=memory gjs cinnamon-quick-settings-test.js <applet folder> <fixtures folder>
 const GLib = imports.gi.GLib;

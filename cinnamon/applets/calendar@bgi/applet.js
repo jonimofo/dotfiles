@@ -313,7 +313,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     // Text sizes, gap and element switches of the Appearance tab. The event list rebuilds its
     // rows on the next select_date(), which _onSettingsChanged() forces.
     _applyAppearance() {
-        this.event_list.set_appearance(Appearance.eventListStyle(this.events_text_scale, this.event_gap),
+        this.event_list.set_appearance(this.events_text_scale, this.event_gap,
                                        this.show_event_meta, this.show_event_countdown);
         this._calendar.actor.style = Appearance.percentFontStyle(this.days_text_scale, Constants.TEXT_SCALES.days);
         this._header.style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);

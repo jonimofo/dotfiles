@@ -292,6 +292,15 @@ function testAppearance() {
     checkEqual('scale: Infinity falls back to the default', Appearance.clampSetting(Infinity, days), 100);
     checkEqual('days and header style at 100%', Appearance.percentFontStyle(100, days), 'font-size: 100%;');
     checkEqual('days style clamped', Appearance.percentFontStyle(400, days), 'font-size: 160%;');
+    // Audit H2: the events column carries the Events size, so its em width grows with it.
+    checkEqual('events column style at 100%', Appearance.eventColumnStyle(100, null), 'font-size: 100%;');
+    checkEqual('events column style at 160% with a height cap', Appearance.eventColumnStyle(160, 756),
+        'font-size: 160%; max-height: 756px;');
+    checkEqual('events column style, bad value', Appearance.eventColumnStyle('x', null), 'font-size: 100%;');
+    const columnWidth = readText(`${appletDir}/stylesheet.css`)
+        .match(new RegExp(`\\.${Constants.STYLE.events}\\s*\\{[^}]*\\bwidth:\\s*([0-9.]+)(\\w+)`));
+    check(`events column width in em, so it follows the column's size (${columnWidth ? columnWidth[1] + columnWidth[2] : '?'})`,
+        columnWidth !== null && columnWidth[2] === 'em');
     checkEqual('event list style at the defaults', Appearance.eventListStyle(100, 8), 'font-size: 12px; spacing: 8px;');
     checkEqual('event list style, 150% and gap clamped', Appearance.eventListStyle(150, 40),
         'font-size: 18px; spacing: 24px;');

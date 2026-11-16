@@ -18,7 +18,15 @@ function percentFontStyle(value, spec) {
     return `font-size: ${clampSetting(value, spec)}%;`;
 }
 
-// Event list: a px base the event texts are in em of, and the gap between two rows.
+// Events column: the Events size as a percentage of the theme's font, so its em width grows
+// with it ("font-size: 100%;" at the default), and its height cap in px, if any.
+function eventColumnStyle(scaleValue, maxHeight) {
+    const font = percentFontStyle(scaleValue, Constants.TEXT_SCALES.events);
+    return maxHeight === null ? font : `${font} max-height: ${maxHeight}px;`;
+}
+
+// Event list: a px base the event texts are in em of, and the gap between two rows. In px, so
+// the column's percentage does not apply twice.
 function eventListStyle(scaleValue, gapValue) {
     const scale = clampSetting(scaleValue, Constants.TEXT_SCALES.events);
     const fontPx = Constants.EVENTS_BASE_FONT_PX * scale / 100;

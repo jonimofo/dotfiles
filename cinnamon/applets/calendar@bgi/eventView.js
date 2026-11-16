@@ -20,6 +20,7 @@ const Interfaces = imports.misc.interfaces;
 const Constants = require('./constants');
 const DateText = require('./dateText');
 const Countdown = require('./countdown');
+const Appearance = require('./appearance');
 const EventsHeight = require('./eventsHeight');
 
 const STATUS_UNKNOWN = 0;
@@ -612,6 +613,8 @@ class EventList {
         this._current_event_data_list_timestamp = 0;
         this._show_meta = true;
         this._show_countdown = true;
+        this._scale = Constants.TEXT_SCALES.events.default;
+        this._max_height = null;
 
         this.actor = new St.BoxLayout(
             {
@@ -726,11 +729,13 @@ class EventList {
         this.emit("launched-calendar");
     }
 
-    // Caps the column at a share of @monitorHeight (physical pixels); no cap without a height.
-    // Inline style of the event list (text size, gap) and the parts of each row. A change of
-    // parts rebuilds the rows on the next set_events().
-    set_appearance(style, show_meta, show_countdown) {
-        this.events_box.style = style;
+    // Events text size and gap, and the parts of each row. The column and the list both carry
+    // the size (see appearance.js). A change of parts rebuilds the rows on the next
+    // set_events().
+    set_appearance(scale, gap, show_meta, show_countdown) {
+        this._scale = scale;
+        this._apply_column_style();
+        this.events_box.style = Appearance.eventListStyle(scale, gap);
         if (show_meta !== this._show_meta || show_countdown !== this._show_countdown) {
             this._show_meta = show_meta;
             this._show_countdown = show_countdown;
@@ -738,9 +743,14 @@ class EventList {
         }
     }
 
+    // Caps the column at a share of @monitorHeight (physical pixels); no cap without a height.
     set_monitor_height(monitorHeight) {
-        let max_height = EventsHeight.eventsMaxHeight(monitorHeight, Constants.EVENTS_MAX_HEIGHT_RATIO, global.ui_scale);
-        this.actor.style = max_height === null ? null : `max-height: ${max_height}px;`;
+        this._max_height = EventsHeight.eventsMaxHeight(monitorHeight, Constants.EVENTS_MAX_HEIGHT_RATIO, global.ui_scale);
+        this._apply_column_style();
+    }
+
+    _apply_column_style() {
+        this.actor.style = Appearance.eventColumnStyle(this._scale, this._max_height);
     }
 
     set_date(gdate) {

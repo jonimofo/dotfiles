@@ -411,13 +411,16 @@ Design records:
 `applets/calendar@bgi/` is the stock Cinnamon calendar applet (`calendar@cinnamon.org`,
 Cinnamon 6.4) with a second time zone and its own look:
 
-- The panel reads `Lun 16 Nov · 15:52 · VN 21:52`: short date, local time, then a second
-  time zone with its label. Weekday and month come from the locale (`LC_TIME`), without
-  their trailing dot. The time follows the desktop's 24h or 12h and seconds settings.
-- The popup opens on a header band: the selected day's full date over the events column
-  (`Lundi 16 novembre 2026`), the clocks centred over the calendar column (`15:52 Paris`,
-  `21:52 VN`, a thin line between them). A click on the clocks goes back to today, as the
-  stock date did.
+- The panel reads `Mon 16 Nov · 15:52 · VN 21:52`: short date, local time, then a second
+  time zone with its label. Dates are in English whatever the locale (`LC_TIME`), from the
+  name tables of `constants.js`. The time follows the desktop's 24h or 12h and seconds
+  settings.
+- The popup opens on a header band: the selected day's date on the left
+  (`Mon 16 Nov. 2026`: the month gets a dot when shortened, so `May` has none), its number
+  of events in the middle (`1 event`, `16 events`; nothing for a day without events), the
+  clocks on the right (`15:52 Paris`, `21:52 VN`, a thin line between them). The three sit
+  in equal thirds of the band, so they never overlap. A click on the clocks goes back to
+  today, as the stock date did.
 - Left column, the selected day's events, one row each: the calendar's colour bar, the
   time block `10:00 – 11:00`, then the title over its metadata. A summary such as
   `Team meeting | Alex | [R1]` is cut at its first ` | `: title `Team meeting`, metadata
@@ -425,13 +428,12 @@ Cinnamon 6.4) with a second time zone and its own look:
   the tooltip shows the whole summary. The column is as tall as its events, up to 70% of
   the screen's height (`EVENTS_MAX_HEIGHT_RATIO` in `constants.js`); beyond it only the
   list scrolls.
-- Right column, the month: one row `<  Novembre 2026  >` (the arrows and the mouse wheel
+- Right column, the month: one row `<  November 2026  >`, headings `Mon Tue ...` (the arrows and the mouse wheel
   move one month), larger day cells, one dot under a day with events. The selected day is
   filled violet, today has a thin light outline, a selected today has both; days of the
   other months are greyed.
-- Under the month, the selected day's number of events as plain centred text (`1 event`,
-  `16 events`); nothing for a day without events. Under it, a `Today` button goes back to
-  today's date and month, like a click on the clocks; it is always active.
+- Under the month, a `Today` button goes back to today's date and month, like a click on
+  the clocks; it is always active.
 - At the bottom left, the stock "Date and Time Settings" entry is a button as wide as its
   label, with the Today button's look.
 
@@ -468,7 +470,7 @@ reload.
 | Metadata line | on | the second line of each event |
 | Countdown | on | "Starting in 5 minutes", "In progress" |
 | Dot under days | on | the dot under a day with events; off, the digits are centred |
-| Summary card | on | the number of events under the month (plain text) |
+| Event count | on | the number of events in the middle of the header band |
 | Today button | on | the button under the card |
 | Week numbers | off | stock switch |
 
@@ -482,14 +484,15 @@ help), then the second time zone:
 | Label | `VN` | shown before the time on the panel, after it in the popup |
 
 With the custom date format on, it replaces the date part of the panel text only: the times
-and the second zone follow it.
+and the second zone follow it. The custom formats keep the stock behaviour: they follow the
+locale (`LC_TIME`), unlike the rest of the applet.
 
 The stock "Show calendar" keyboard shortcut (`<Super>c`) is removed: the applet registers no
 global shortcut.
 
 The tabs, keys, defaults, ranges and labels are in `applets/calendar@bgi/constants.js`;
 `settings-schema.json` is written by hand and the test checks that the two agree. The
-applet's own wording is in English; dates, months and weekdays follow the locale (`LC_TIME`).
+applet's own wording is in English, dates included, whatever the locale.
 
 ## Calendar: install
 
@@ -525,7 +528,7 @@ rm ~/.local/share/cinnamon/applets/calendar@bgi
 ## Calendar: known limitations
 
 - On a vertical panel the stock text is shown, without the second time zone.
-- Month abbreviations keep the locale's length: `févr.` reads `Févr`, `juil.` reads `Juil`.
+- The 12-hour clock's AM/PM marker still comes from the locale (GLib's `%p`).
 - Event times have one colour whether the event is past, in progress or to come; the
   countdown ("Starting in 5 minutes", "In progress") is kept, after the title.
 - The colours are fixed: a light desktop theme keeps the dark popup.

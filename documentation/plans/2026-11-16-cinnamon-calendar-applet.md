@@ -147,7 +147,8 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height |
 | `applet.js` | new `_updateTodayButton` | the Today button's visibility |
 | `applet.js` | new `_inVerticalPanel`, `_timeFormat`, `_panelText`, `_secondTime`, `_updateSecondZone`, `_buildClock`, `_updateClocks`, `_updateDaySummary`, `_applyAppearance` | |
-| `calendar.js` | `_getCalendarDayAbbreviation` | trailing dot removed, capitalised |
+| `calendar.js` | `_getCalendarDayAbbreviation` | English abbreviation from `constants.js` (eighth round; was the locale's, trailing dot removed) |
+| `calendar.js` | `constructor` | GTK month/year order detection (`Gettext_gtk30`, `_headerMonthFirst`) removed |
 | `calendar.js` | `_buildHeader` | one month row instead of the month and year rows, day heading class |
 | `calendar.js` | `_onPrevYearButtonClicked`, `_onNextYearButtonClicked` | removed with the year row |
 | `calendar.js` | `constructor` | binds the day dot switch |
@@ -160,7 +161,9 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `eventView.js` | new `EventsManager.get_events_for_date` | the selected day's events for the day card |
 | `eventView.js` | new `EventList.set_monitor_height` | `max-height` of the column |
 | `eventView.js` | new `EventList.set_appearance` | text size and gap of the list, metadata and countdown switches |
-| `eventView.js` | `EventList.set_date` | long date formatter |
+| `eventView.js` | `EventList.set_date` | English header date |
+| `eventView.js` | `DAY_FORMAT`, `DATE_FORMAT_FULL`, `locale_cap`, `EventRow.update_variations` | English weekday and date from `dateText.js` instead of the locale's `%A` and `%x` |
+| `applet.js` | `DATE_FORMAT_FULL`, `_updateClockAndDate` | English tooltip and header date; count in the header |
 | `eventView.js` | `EventRow.constructor` | accent bar, time block, title over metadata (summary cut at the first ` \| `), ellipsis, tooltip |
 | `eventView.js` | `EventRow.update_variations` | one time class |
 
@@ -541,6 +544,64 @@ Decisions:
    the first.
 4. Nothing else changes.
 
+## Count in the header, English dates (eighth review round)
+
+Owner's words, after loading round seven live: "remove button events count, instead, add it
+in the middle of the header (date left, time right, nb events mid), also use abbreviated
+english for the date (set date in english BUT always use DD MM YYYY, meaning today is \"Mon
+10 Nov. 2026\"". The example's day was 10; the format is what matters.
+
+Look to build:
+
+```
++--------------------------------------------------------------+
+| Mon 16 Nov. 2026           7 events     19:41 Paris | 01:41 VN|
++-------------------------------+------------------------------+
+| | 10:00 – 11:00  Event        |   <   November 2026    >     |
+| | 11:00 – 12:00  Event        |  Mon Tue Wed Thu Fri Sat Sun |
+|                               |   ...                        |
+|                               +------------------------------+
+|                               |            Today             |
+|                               +------------------------------+
+ [ Date and Time Settings ]
+```
+
+This supersedes the French panel text `Lun 16 Nov` of round one, the locale-based header
+date and month title, and the clocks centred over the calendar column of round seven.
+
+Decisions:
+
+1. The count line under the calendar is gone (actor, classes, CSS, its size test). The
+   count (`1 event`, `N events`) sits in the middle of the header band, plain text, the
+   date's size one weight lighter, primary colour; nothing on a day without events. The
+   `show-day-summary` key stays, labelled `Event count`, on by default.
+2. The header band is one cell of the layout table spanning both columns, holding a
+   homogeneous `St.Table` of three equal columns: date (left-aligned), count (centred),
+   clocks (right-aligned), 16px apart. Equal columns put the count at the band's centre and
+   keep the three apart at any width: the band grows instead of overlapping. The clocks
+   centred over the calendar column (round seven) could not be kept: at the 160% header
+   size the clocks are about as wide as the calendar column and would cover a centred count,
+   so they are right-aligned. With the events switched off, the band spans the calendar
+   column alone (or more, if its three thirds need more), with the same three parts.
+3. Dates in English from the tables of `constants.js` (`WEEKDAY_NAMES`,
+   `WEEKDAY_ABBREVIATIONS`, `MONTH_NAMES`, `MONTH_ABBREVIATIONS`), never from GLib or the
+   locale:
+   - header date `Mon 16 Nov. 2026` (dot only after a shortened month: `May`, no dot);
+   - panel `Mon 16 Nov · 19:41 · VN 01:41`;
+   - month title `November 2026`, day headings `Mon Tue Wed Thu Fri Sat Sun` (first day of
+     the week unchanged);
+   - other dates the applet writes: the panel tooltip (now the header date; the stock full
+     locale date is gone), multi-day event spans in the time block (`Wednesday` instead of
+     the locale's `%A`, `7 Sep. 2026` instead of `%x`). The month/year order taken from GTK's
+     translation (`calendar:MY`) is gone with the locale names.
+   - Left as they were: the custom panel and tooltip formats (stock option, locale-based),
+     the vertical panel text (digits only), week numbers (`%V`, digits), the
+     `gnome-calendar --date` argument (not shown), the 12-hour AM/PM marker (`%p`).
+4. The Today button stays under the calendar panel. Nothing else changes.
+
+The test script runs a second time under `LC_ALL=fr_FR.utf8` when that locale is installed,
+to show the dates do not depend on it.
+
 ## To confirm on the live panel
 
 - Sizes and the place of the dot under the number, under Dracula.
@@ -550,6 +611,7 @@ Decisions:
   the header band, rows of 48 to 56 px, the time block width with 12-hour times, the
   ellipsis and tooltip, the larger day cells with the dot under the digit, a six-week month,
   the day card for today and for another day.
+- Eighth round: the header thirds (date, count, clocks), no overlap at 160%, the English dates on the panel, header, month and headings.
 - Seventh round: the clocks centred over the month title, with a long date, with the events off and with one clock; the header strip without a seam; the count as text; the Today button on today.
 - Sixth round: the count size and centring, the settings button's width, look, hover, keyboard focus and click, the bottom spacing.
 - Fifth round: the count card alone, the Today button's look, hover, click from another month, and its dimmed state on today.

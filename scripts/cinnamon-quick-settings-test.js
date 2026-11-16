@@ -499,6 +499,22 @@ async function testNordvpn() {
     await missing.refresh();
     check('nordvpn: missing client means unavailable, logged once', !missing.available && errors.length === 1);
     errors = [];
+
+    // A-M1: the daemon stops while connected. The status read fails: the tile must not stay
+    // checked with the country, nor the VPN panel icon on (both read status.connected).
+    let daemonRunning = true;
+    const stopped = new Nordvpn.Nordvpn(() => (daemonRunning
+        ? Promise.resolve(readText(`${nordvpnFixtures}/status-connected-constructed.txt`))
+        : Promise.reject(new Error('nordvpn: daemon not running'))), () => {});
+    await stopped.refresh();
+    const wasConnected = stopped.available && stopped.connectedCountry === 'United States';
+    daemonRunning = false;
+    await stopped.refresh();
+    check('nordvpn: a failed status read after a connected one shows unavailable, off, no country',
+        wasConnected && !stopped.available && !stopped.status.connected
+        && stopped.status.country === null && stopped.connectedCountry === null);
+    check('nordvpn: the failed status read is logged once', errors.length === 1);
+    errors = [];
 }
 
 function testPowerProfileModel() {

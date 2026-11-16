@@ -304,7 +304,7 @@ or does nothing, and the reason goes to the journal once:
 |---|---|---|
 | `ddcutil` | external monitor brightness | the laptop panel is used, through cinnamon-settings-daemon; with no laptop panel either, the Brightness row is dimmed |
 | `power-profiles-daemon` | Power profile tile and list | tile dimmed until the daemon starts |
-| `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed |
+| `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed and shown off, no VPN panel icon from NordVPN |
 | `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
 | `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
 

@@ -1,6 +1,11 @@
 const Constants = require('./constants');
 const NordvpnParser = require('./nordvpnParser');
 
+// The status shown while none can be read: off, no country.
+function notConnectedStatus() {
+    return NordvpnParser.parseStatus('', Constants.NORDVPN_CONNECTED);
+}
+
 // NordVPN through its command line client, run asynchronously. The status is read when the
 // menu opens and after each action, never in the background. @onChange runs after each read.
 // @runCommand(argv) returns a promise of the output (subprocess.js, or a fake in the tests).
@@ -9,7 +14,7 @@ class Nordvpn {
         this._run = runCommand;
         this._onChange = onChange;
         this.available = false;
-        this.status = NordvpnParser.parseStatus('', Constants.NORDVPN_CONNECTED);
+        this.status = notConnectedStatus();
         this.countries = [];
         this.busy = false;
         this._unavailableLogged = false;
@@ -28,7 +33,9 @@ class Nordvpn {
             this.available = true;
             this._unavailableLogged = false;
         } catch (e) {
+            // Without a status, the tile and the VPN panel icon must not keep the last one read.
             this.available = false;
+            this.status = notConnectedStatus();
             if (!this._unavailableLogged)
                 global.logError(`${Constants.LOG_PREFIX}: NordVPN unavailable, tile dimmed: ${e.message}`);
             this._unavailableLogged = true;

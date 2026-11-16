@@ -18,6 +18,7 @@ const DateText = require('./dateText');
 const SecondZone = require('./secondZone');
 const DaySummary = require('./daySummary');
 const Appearance = require('./appearance');
+const TodayButton = require('./todayButton');
 
 const DATE_FORMAT_FULL = CinnamonDesktop.WallClock.lctime_format("cinnamon", _("%A, %B %-e, %Y"));
 
@@ -148,7 +149,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             calendar_panel.add_actor(this._calendar.actor);
             calbox.add_actor(calendar_panel);
 
-            // Summary of the selected day: heading, number of events, first start to last end
+            // Number of events of the selected day
             this._daySummary = new St.BoxLayout(
                 {
                     style_class: Constants.STYLE.daySummary,
@@ -156,13 +157,23 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                     visible: false
                 }
             );
-            this._daySummaryHeading = new St.Label({ style_class: Constants.STYLE.daySummaryHeading });
             this._daySummaryCount = new St.Label();
-            this._daySummaryRange = new St.Label();
-            this._daySummary.add_actor(this._daySummaryHeading);
             this._daySummary.add_actor(this._daySummaryCount);
-            this._daySummary.add_actor(this._daySummaryRange);
             calbox.add_actor(this._daySummary);
+
+            // Back to today, as a click on the header clocks
+            this._todayButton = new St.Button(
+                {
+                    style_class: Constants.STYLE.todayButton,
+                    label: Constants.TODAY_BUTTON_LABEL,
+                    accessible_name: Constants.TODAY_BUTTON_LABEL,
+                    x_expand: true,
+                    reactive: true,
+                    track_hover: true
+                }
+            );
+            this._todayButton.connect("clicked", () => this._resetCalendar());
+            calbox.add_actor(this._todayButton);
 
             box.add_actor(calbox);
 
@@ -192,6 +203,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.settings.bind(Constants.ELEMENT_SWITCHES.eventMeta.key, "show_event_meta", this._onSettingsChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.eventCountdown.key, "show_event_countdown", this._onSettingsChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.daySummary.key, "show_day_summary", this._onSettingsChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.todayButton.key, "show_today_button", this._onSettingsChanged);
 
             /* FIXME: Add gobject properties to the WallClock class to allow easier access from
              * its clients, and possibly a separate signal to notify of updates to these properties
@@ -321,31 +333,24 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         });
     }
 
-    // The card under the calendar, for the selected day; hidden when it has no event.
+    // The card under the calendar: the selected day's number of events, hidden without any.
     _updateDaySummary() {
         let selected = this._calendar.getSelectedDate();
-        let day_start = EventView.date_only(EventView.js_date_to_gdatetime(selected));
-        let events = this.events_manager.is_active() ? this.events_manager.get_events_for_date(selected) : [];
-        let summary = DaySummary.summariseDay(events.map(event => ({
-            allDay: event.all_day,
-            start: DaySummary.minutesFrom(day_start, event.start),
-            end: DaySummary.minutesFrom(day_start, event.end)
-        })));
+        let count = this.events_manager.is_active() ? this.events_manager.get_events_for_date(selected).length : 0;
 
-        this._daySummary.visible = this.show_day_summary && summary.count > 0;
-        if (!this._daySummary.visible) {
-            return;
-        }
+        this._daySummary.visible = this.show_day_summary && count > 0;
+        this._daySummaryCount.set_text(DaySummary.formatEventCount(count));
+    }
 
-        let long_date = DateText.formatLongDate(DateText.datePartsOf(day_start, Constants.LONG_DATE_FORMATS));
-        this._daySummaryHeading.set_text(DaySummary.summaryHeading(this._calendar.todaySelected(), long_date));
-        this._daySummaryCount.set_text(DaySummary.formatEventCount(summary.count));
-        this._daySummaryRange.visible = summary.range !== null;
-        if (summary.range !== null) {
-            let format = this._timeFormat();
-            this._daySummaryRange.set_text(DaySummary.formatRange(
-                day_start.add_minutes(summary.range.start).format(format),
-                day_start.add_minutes(summary.range.end).format(format)));
+    // Shown with its switch; inactive and dimmed while today is selected and shown.
+    _updateTodayButton() {
+        let selected = this._calendar.getSelectedDate();
+        let active = TodayButton.todayButtonActive(selected, selected, new Date());
+        this._todayButton.visible = this.show_today_button;
+        this._todayButton.reactive = active;
+        this._todayButton.opacity = active ? Constants.FULL_OPACITY : Constants.INACTIVE_OPACITY;
+        if (!active) {
+            this._todayButton.remove_style_pseudo_class("hover");
         }
     }
 
@@ -418,6 +423,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
         this.events_manager.select_date(this._calendar.getSelectedDate());
         this._updateDaySummary();
+        this._updateTodayButton();
     }
 
     on_applet_added_to_panel() {

@@ -23,9 +23,10 @@
     background-color: #1C2436;
 }
 
-/* Event card: event rows, day summary card */
+/* Event card: event rows, day summary card, Today button */
 .calendar-bgi-event-row,
-.calendar-bgi-day-summary {
+.calendar-bgi-day-summary,
+.calendar-bgi-today-button {
     background-color: #202B40;
 }
 
@@ -35,9 +36,10 @@
     background-color: #29364D;
 }
 
-/* Hover: event row, day, scroll bar handle */
+/* Hover: event row, day, Today button, scroll bar handle */
 .calendar-bgi-event-row:hover,
 .calendar-bgi-day:hover,
+.calendar-bgi-today-button:hover,
 .calendar-bgi-events StScrollBar StButton#vhandle:hover {
     background-color: #2F405B;
 }
@@ -58,7 +60,8 @@
 .calendar-bgi-day,
 .calendar-bgi-event-time,
 .calendar-bgi-event-title,
-.calendar-bgi-day-summary {
+.calendar-bgi-day-summary,
+.calendar-bgi-today-button {
     color: #F1F4FB;
 }
 
@@ -88,11 +91,11 @@
     border-color: transparent;
 }
 
-/* Thin borders: popup, event rows, summary card, header dividers */
+/* Thin borders: popup, event rows, summary card, Today button, header dividers */
 .menu.calendar-bgi-popup,
 .calendar-bgi-event-row,
 .calendar-bgi-day-summary,
-.calendar-bgi-day-summary-heading,
+.calendar-bgi-today-button,
 .calendar-bgi-clock {
     border-color: #394761;
 }
@@ -215,7 +218,7 @@
     padding-left: 6px;
 }
 
-/* Right column: the calendar panel, then the day summary card. */
+/* Right column: the calendar panel, the day summary card, the Today button. */
 .calendar-bgi-calendar-column {
     spacing: 12px;
 }
@@ -282,17 +285,17 @@
     font-size: 100%;
 }
 
-/* Day summary card under the calendar. */
+/* Day summary card under the calendar: one line, the number of events. */
 .calendar-bgi-day-summary {
     border-width: 1px;
     border-radius: 10px;
     padding: 12px 14px;
-    spacing: 6px;
 }
 
-.calendar-bgi-day-summary-heading {
-    font-size: 120%;
+/* Today button, full width of the column, the card's corners. */
+.calendar-bgi-today-button {
+    border-width: 1px;
+    border-radius: 10px;
+    padding: 9px 14px;
     font-weight: bold;
-    border-bottom-width: 1px;
-    padding-bottom: 6px;
 }

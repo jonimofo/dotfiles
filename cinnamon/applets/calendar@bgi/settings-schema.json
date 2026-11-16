@@ -33,6 +33,7 @@
                 "show-event-countdown",
                 "show-day-marker",
                 "show-day-summary",
+                "show-today-button",
                 "show-week-numbers"
             ]
         },
@@ -130,6 +131,11 @@
         "type": "switch",
         "default": true,
         "description": "Summary card"
+    },
+    "show-today-button": {
+        "type": "switch",
+        "default": true,
+        "description": "Today button"
     },
     "show-events": {
         "type": "switch",

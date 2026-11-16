@@ -25,6 +25,7 @@ const ELEMENT_SWITCHES = {
     eventCountdown: { key: 'show-event-countdown', label: 'Countdown', default: true },
     dayMarker: { key: 'show-day-marker', label: 'Dot under days', default: true },
     daySummary: { key: 'show-day-summary', label: 'Summary card', default: true },
+    todayButton: { key: 'show-today-button', label: 'Today button', default: true },
     weekNumbers: { key: 'show-week-numbers', label: 'Week numbers', default: false },
     events: { key: 'show-events', label: 'Calendar events', default: true },
 };
@@ -73,12 +74,14 @@ const SUMMARY_SEPARATOR = ' | ';
 // scrolls.
 const EVENTS_MAX_HEIGHT_RATIO = 0.7;
 
-// Day summary card under the calendar: heading for today (another day shows its date), the
-// number of events, and the range from the first start to the last end, never a duration.
-const SUMMARY_TODAY_HEADING = 'Today';
+// Day summary card under the calendar: the selected day's number of events, nothing else.
 const SUMMARY_COUNT_ONE = 'event';
 const SUMMARY_COUNT_MANY = 'events';
-const MINUTES_IN_DAY = 24 * 60;
+
+// Under the card: back to today's date and month. Dimmed, out of 255, while today is shown.
+const TODAY_BUTTON_LABEL = 'Today';
+const INACTIVE_OPACITY = 160;
+const FULL_OPACITY = 255;
 
 // One marker under a day that has events, drawn in the text colour of the theme.
 const DAY_MARKER_TEXT = '•';
@@ -97,7 +100,7 @@ const STYLE = {
     calendarColumn: 'calendar-bgi-calendar-column',
     calendarPanel: 'calendar-bgi-calendar-panel',
     daySummary: 'calendar-bgi-day-summary',
-    daySummaryHeading: 'calendar-bgi-day-summary-heading',
+    todayButton: 'calendar-bgi-today-button',
     monthRow: 'calendar-bgi-month-row',
     monthLabel: 'calendar-bgi-month-label',
     dayHeading: 'calendar-bgi-day-heading',

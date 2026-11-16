@@ -41,6 +41,7 @@ const SecondZone = load('./secondZone');
 const DayMarker = load('./dayMarker');
 const DayCell = load('./dayCell');
 const DaySummary = load('./daySummary');
+const TodayButton = load('./todayButton');
 const Appearance = load('./appearance');
 const EventsHeight = load('./eventsHeight');
 
@@ -186,37 +187,21 @@ function testDayCell() {
     checkEqual('day: markers shown, room under the digit', style({ marked: true }), `${S.day} ${S.dayMarked}`);
 }
 
-// Fabricated events of one day, in minutes from midnight.
 function testDaySummary() {
-    const timed = (start, end) => ({ allDay: false, start, end });
-    const allDay = { allDay: true, start: 0, end: 1439 };
-    const summary = events => JSON.stringify(DaySummary.summariseDay(events));
-    checkEqual('summary card: no events', summary([]), JSON.stringify({ count: 0, range: null }));
-    checkEqual('summary card: one event', summary([timed(600, 660)]),
-        JSON.stringify({ count: 1, range: { start: 600, end: 660 } }));
-    checkEqual('summary card: overlapping events, first start to last end',
-        summary([timed(120, 240), timed(120, 180), timed(150, 240), timed(540, 660)]),
-        JSON.stringify({ count: 4, range: { start: 120, end: 660 } }));
-    checkEqual('summary card: all-day events counted, not in the range', summary([allDay, timed(600, 660)]),
-        JSON.stringify({ count: 2, range: { start: 600, end: 660 } }));
-    checkEqual('summary card: only all-day events, no range', summary([allDay]),
-        JSON.stringify({ count: 1, range: null }));
-    checkEqual('summary card: events crossing midnight cut to the day', summary([timed(-120, 60), timed(1380, 1500)]),
-        JSON.stringify({ count: 2, range: { start: 0, end: 1440 } }));
     checkEqual('summary card: count, one', DaySummary.formatEventCount(1), '1 event');
     checkEqual('summary card: count, several', DaySummary.formatEventCount(16), '16 events');
-    checkEqual('summary card: range', DaySummary.formatRange('02:00', '11:00'), '02:00 – 11:00');
-    checkEqual('summary card: heading today', DaySummary.summaryHeading(true, 'Mardi 17 novembre 2026'), 'Today');
-    checkEqual('summary card: heading another day', DaySummary.summaryHeading(false, 'Mardi 17 novembre 2026'),
-        'Mardi 17 novembre 2026');
-    const dayStart = GLib.DateTime.new(PARIS, 2026, 11, 16, 0, 0, 0);
-    checkEqual('summary card: minutes from midnight', DaySummary.minutesFrom(dayStart, dayStart.add_hours(9)), 540);
-    checkEqual('summary card: minutes on a DST day', DaySummary.minutesFrom(
-        GLib.DateTime.new(PARIS, 2026, 3, 29, 0, 0, 0), GLib.DateTime.new(PARIS, 2026, 3, 29, 4, 0, 0)), 180);
-    // No duration in any text the card shows: no "h" unit, no minutes count.
-    const texts = [DaySummary.formatEventCount(4), DaySummary.formatRange('02:00', '11:00')];
-    check(`summary card: no duration in its texts (${texts.join(' / ')})`,
-        texts.every(text => !/\d\s*h\b|\bmin\b|\(/.test(text)));
+    checkEqual('summary card: count, zero (card hidden)', DaySummary.formatEventCount(0), '0 events');
+}
+
+function testTodayButton() {
+    const today = new Date(2026, 10, 16, 15, 52);
+    const active = (selected, shown) => TodayButton.todayButtonActive(selected, shown, today);
+    checkEqual('today button: today selected and shown, inactive', active(new Date(2026, 10, 16), new Date(2026, 10, 16)), false);
+    checkEqual('today button: another day of the month, active', active(new Date(2026, 10, 17), new Date(2026, 10, 17)), true);
+    checkEqual('today button: today selected, another month shown, active',
+        active(new Date(2026, 10, 16), new Date(2026, 11, 1)), true);
+    checkEqual('today button: same day a year later, active', active(new Date(2027, 10, 16), new Date(2027, 10, 16)), true);
+    checkEqual('today button: label', Constants.TODAY_BUTTON_LABEL, 'Today');
 }
 
 function testEventsHeight() {
@@ -369,6 +354,7 @@ testEventsHeight();
 testDayCell();
 testAppearance();
 testDaySummary();
+testTodayButton();
 testSchema();
 testStylesheet();
 

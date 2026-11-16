@@ -445,7 +445,7 @@ the stock functions changed since are listed in the plan, for a re-sync with ups
 
 ## Calendar: settings
 
-Right-click the clock > Configure... Three tabs; every change applies at once, without a
+Right-click the clock > Configure... Two tabs; every change applies at once, without a
 reload.
 
 **Apparence**, text sizes (70% to 160%, step 5) and the gap:
@@ -481,7 +481,8 @@ help), then the second time zone:
 With the custom date format on, it replaces the date part of the panel text only: the times
 and the second zone follow it.
 
-**Raccourci**: the stock "Show calendar" shortcut, `<Super>c`.
+The stock "Show calendar" keyboard shortcut (`<Super>c`) is removed: the applet registers no
+global shortcut.
 
 The tabs, keys, defaults, ranges and labels are in `applets/calendar@bgi/constants.js`;
 `settings-schema.json` is written by hand and the test checks that the two agree. The labels
@@ -501,7 +502,7 @@ ln -s ~/Repos/dotfiles/cinnamon/applets/calendar@bgi \
 
 `applet.sh enable` adds it at the right end of panel1's right zone; drag it in panel edit
 mode to move it. Its settings start from the defaults: the stock applet's settings are not
-copied (shortcut, events, week numbers).
+copied (events, week numbers).
 
 Reload after an edit:
 

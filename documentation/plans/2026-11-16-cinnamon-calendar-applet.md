@@ -110,7 +110,7 @@ C. Day markers, chosen "Un seul point": one dot under each day that has at least
    classes the stock applet uses.
 6. Day marker: one dot, a `•` glyph in the theme's foreground colour, under a day with one or
    more events; none otherwise.
-7. Kept from the stock applet: the `<Super>c` keybinding setting, week numbers, events on or
+7. Kept from the stock applet: the `<Super>c` keybinding setting (removed in the fourth round), week numbers, events on or
    off, "Date and Time Settings", the custom format option. With the custom format on, it
    replaces the date part only of the horizontal panel text; the tooltip keeps its own custom
    format. On a vertical panel the stock text is kept, without the second zone.
@@ -138,6 +138,8 @@ For a future re-sync with upstream. Everything else is the stock code.
 | `metadata.json` | | uuid, name, description, version fields |
 | `settings-schema.json` | | "Second time zone" section with three keys |
 | `applet.js` | `constructor` | settings uuid, second zone settings, popup class, header band (date label moved from the event list, clocks), calendar panel, day summary card |
+| `applet.js` | `constructor`, `_setKeybinding` (removed), `on_applet_removed_from_panel` | `keyOpen` binding and the `<Super>c` hotkey removed |
+| `settings-schema.json` | `keyOpen` | removed |
 | `applet.js` | `_onSettingsChanged` | resolves the second zone |
 | `applet.js` | `_updateClockAndDate` | panel text, clocks, header date and day card from the pure formatters |
 | `applet.js` | `_has_calendars_changed` | updates the day card |
@@ -348,8 +350,9 @@ Onglet Raccourci : Super+C
 
 Decisions:
 
-1. The dialog uses the schema's `layout` with three pages: Apparence (Taille du texte,
-   Éléments affichés), Barre (Date, Second fuseau), Raccourci (Raccourci clavier). The stock
+1. The dialog uses the schema's `layout` with two pages: Apparence (Taille du texte,
+   Éléments affichés) and Barre (Date, Second fuseau). The Raccourci tab of the mockup was
+   dropped with the keybinding (decision 7). The stock
    "Show calendar events" switch comes first in Éléments affichés; week numbers is the stock
    key moved there. New labels are in French; stock labels and the round-one second zone
    labels stay in English, so Éléments affichés mixes both.
@@ -369,6 +372,10 @@ Decisions:
    metadata line or the countdown rebuilds the rows without them.
 6. Every key, default, range, step and label in `constants.js`; the schema stays written by
    hand and the test checks it against them, plus every key the code reads.
+7. No keyboard shortcut. Owner's words: "je ne veux pas de raccourci = show calendar". The
+   stock `keyOpen` setting, its section and tab, and the code that registered and removed the
+   `<Super>c` hotkey are gone; the applet registers no global hotkey. A test checks that the
+   schema has no keybinding setting.
 
 How it applies live: each new key is bound with `settings.bind(key, property,
 this._onSettingsChanged)`, which calls `_applyAppearance()` and then `select_date(..., true)`
@@ -384,7 +391,7 @@ so the rows are rebuilt; the day dot switch is bound in the calendar grid with
   the header band, rows of 48 to 56 px, the time block width with 12-hour times, the
   ellipsis and tooltip, the larger day cells with the dot under the digit, a six-week month,
   the day card for today and for another day.
-- Fourth round: the three tabs in Configure, each slider and the gap applying at once, 100%
+- Fourth round: the two tabs in Configure, `<Super>c` free again, each slider and the gap applying at once, 100%
   looking as before, the switches leaving no gap, the sizes at 70% and 160%.
 - Second round: that `max-height` on the column makes it scroll past 70 % of the screen (a
   day with many events), the thin gap and the title indent under Dracula, and the empty

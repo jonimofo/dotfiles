@@ -3,8 +3,7 @@
         "type": "layout",
         "pages": [
             "appearance-page",
-            "panel-page",
-            "shortcut-page"
+            "panel-page"
         ],
         "appearance-page": {
             "type": "page",
@@ -62,20 +61,6 @@
                 "show-second-zone",
                 "second-zone-id",
                 "second-zone-label"
-            ]
-        },
-        "shortcut-page": {
-            "type": "page",
-            "title": "Raccourci",
-            "sections": [
-                "shortcut-section"
-            ]
-        },
-        "shortcut-section": {
-            "type": "section",
-            "title": "Raccourci clavier",
-            "keys": [
-                "keyOpen"
             ]
         }
     },
@@ -201,11 +186,5 @@
         "default": "VN",
         "description": "Label",
         "dependency": "show-second-zone"
-    },
-    "keyOpen": {
-        "type": "keybinding",
-        "description": "Show calendar",
-        "default": "<Super>c",
-        "tooltip": "Set keybinding(s) to show the calendar."
     }
 }

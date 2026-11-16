@@ -192,8 +192,6 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.settings.bind(Constants.ELEMENT_SWITCHES.eventMeta.key, "show_event_meta", this._onSettingsChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.eventCountdown.key, "show_event_countdown", this._onSettingsChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.daySummary.key, "show_day_summary", this._onSettingsChanged);
-            this.settings.bind("keyOpen", "keyOpen", this._setKeybinding);
-            this._setKeybinding();
 
             /* FIXME: Add gobject properties to the WallClock class to allow easier access from
              * its clients, and possibly a separate signal to notify of updates to these properties
@@ -216,10 +214,6 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         catch (e) {
             global.logError(e);
         }
-    }
-
-    _setKeybinding() {
-        Main.keybindingManager.addHotKey("calendar-open-" + this.instance_id, this.keyOpen, Lang.bind(this, this._openMenu));
     }
 
     _clockNotify(obj, pspec, data) {
@@ -439,7 +433,6 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     }
 
     on_applet_removed_from_panel() {
-        Main.keybindingManager.removeHotKey("calendar-open-" + this.instance_id);
         if (this.clock_notify_id > 0) {
             this.clock.disconnect(this.clock_notify_id);
             this.clock_notify_id = 0;

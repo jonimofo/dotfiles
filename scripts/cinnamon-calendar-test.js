@@ -271,7 +271,7 @@ function testSchema() {
     checkEqual('schema: show second zone default', schema[Constants.SHOW_SECOND_ZONE_KEY].default, true);
     checkEqual('schema: zone id default', schema[Constants.SECOND_ZONE_ID_KEY].default, 'Asia/Ho_Chi_Minh');
     checkEqual('schema: label default', schema[Constants.SECOND_ZONE_LABEL_KEY].default, 'VN');
-    checkEqual('schema: stock keybinding kept', schema.keyOpen.default, '<Super>c');
+    check('schema: no keybinding setting', Object.values(schema).every(entry => entry.type !== 'keybinding'));
     check('schema: stock switches kept', ['show-events', 'show-week-numbers', 'use-custom-format']
         .every(key => schema[key] && schema[key].type === 'switch'));
     const specs = [...Object.values(Constants.TEXT_SCALES), Constants.EVENT_GAP,

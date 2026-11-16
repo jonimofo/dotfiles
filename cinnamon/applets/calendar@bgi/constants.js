@@ -32,7 +32,6 @@ const ELEMENT_SWITCHES = {
 const SETTINGS_PAGES = [
     { title: 'Apparence', sections: ['Taille du texte', 'Éléments affichés'] },
     { title: 'Barre', sections: ['Date', 'Second fuseau'] },
-    { title: 'Raccourci', sections: ['Raccourci clavier'] },
 ];
 // Font size of the event list at 100%: the event texts are in em of it, so 100% gives the
 // px sizes of the validated design (time 13px, title 14px, metadata 12px, countdown 11px).

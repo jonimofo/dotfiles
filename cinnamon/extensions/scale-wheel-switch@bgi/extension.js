@@ -77,7 +77,8 @@ function onCapturedEvent(actor, event) {
 }
 
 // Primary monitor, top to bottom: search field, workspace strip, Scale's windows, dock.
-// Every other monitor: its workspace strip, then Scale's windows.
+// Every other monitor: its workspace strip, then Scale's windows, which take no click while
+// the search has text.
 // Built from the monitor list and the pinned apps at each opening: both may change while
 // Scale is closed.
 function showHeader() {
@@ -95,6 +96,9 @@ function showHeader() {
             strips.push(new WorkspaceStrip.WorkspaceStrip(index, topOffset, bottomInset));
         });
         search.setResultsArea(strips[primaryIndex].getBigViewArea());
+        search.setBlockedAreas(strips
+            .filter((strip, index) => index !== primaryIndex)
+            .map(strip => strip.getBigViewArea()));
     } catch (e) {
         hideHeader();
         throw e;

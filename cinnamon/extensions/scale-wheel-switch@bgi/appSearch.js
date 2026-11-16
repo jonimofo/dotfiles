@@ -101,6 +101,16 @@ function findApps(index, text) {
         .map(match => match.entry.app);
 }
 
+// Same idea as Scale's cover pane: transparent and reactive, it takes the clicks, and so the
+// drag starts, meant for what lies under @area. Added to the group of Scale's windows after
+// Scale's view: above its windows.
+function createClickBlocker({ x, y, width, height }) {
+    const blocker = new Clutter.Actor({ reactive: true, opacity: UiHelpers.TRANSPARENT, x, y, width, height });
+    UiHelpers.swallowClicks(blocker);
+    global.overlay_group.add_actor(blocker);
+    return blocker;
+}
+
 // Search field above the workspace strip, and the application grid that takes the place
 // of Scale's windows while the field has text. Scale keeps the keyboard focus: keys arrive
 // through handleKeyPress (see enable()), so typing needs no click.
@@ -113,6 +123,8 @@ var AppSearch = class AppSearch {
         this._columns = MAX_RESULT_COLUMNS;
         this._selected = 0;
         this._hidingId = 0;
+        this._blockedAreas = [];
+        this._blockers = [];
 
         // Not reactive: a click must not move the keyboard focus away from Scale.
         this._entry = new St.Entry({
@@ -154,6 +166,13 @@ var AppSearch = class AppSearch {
         this._results.set_size(width, height);
     }
 
+    // The big view areas of the other screens. The windows are hidden there too while the
+    // field has text, but the grid does not cover them: a click would open an invisible
+    // window and close Scale.
+    setBlockedAreas(areas) {
+        this._blockedAreas = areas;
+    }
+
     _getText() {
         return this._entry.get_text();
     }
@@ -168,6 +187,7 @@ var AppSearch = class AppSearch {
         this._results.visible = isSearching;
         if (isSearching)
             this._results.raise_top();
+        this._syncBlockers(isSearching);
 
         if (isSearching && !this._index)
             this._index = buildIndex();
@@ -182,6 +202,19 @@ var AppSearch = class AppSearch {
         const view = Main.overview.workspacesView;
         if (view)
             view.actor.opacity = isVisible ? UiHelpers.OPAQUE : UiHelpers.TRANSPARENT;
+    }
+
+    _syncBlockers(isSearching) {
+        if (!isSearching)
+            this._removeBlockers();
+        else if (this._blockers.length === 0)
+            this._blockers = this._blockedAreas.map(createClickBlocker);
+    }
+
+    _removeBlockers() {
+        for (const blocker of this._blockers)
+            blocker.destroy();
+        this._blockers = [];
     }
 
     _buildTiles() {
@@ -320,6 +353,7 @@ var AppSearch = class AppSearch {
         if (this._hidingId)
             Main.overview.disconnect(this._hidingId);
         this._setWindowsVisible(true);
+        this._removeBlockers();
         this._results.destroy();
         this.actor.destroy();
     }

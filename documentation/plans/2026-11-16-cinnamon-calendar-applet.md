@@ -382,6 +382,31 @@ this._onSettingsChanged)`, which calls `_applyAppearance()` and then `select_dat
 so the rows are rebuilt; the day dot switch is bound in the calendar grid with
 `bindWithObject(..., this._onSettingsChange)`, as the stock week numbers switch is.
 
+Wording, after the keybinding removal: the owner chose one language for the applet's own
+wording, option "Tout en anglais". Validated wording:
+
+```
+Appearance
+  Shown elements
+    Calendar events               [ON ]
+    Clocks in the header          [ON ]
+    Week numbers                  [OFF]
+
+Panel
+  Second time zone
+    Show a second time zone       [ON ]
+    Time zone          Asia/Ho_Chi_Minh
+    Label              VN
+```
+
+This supersedes the French wording of the fourth-round mockup above and of decisions 1 and 8
+of the third round (`Aujourd'hui`, `activités`): tabs `Appearance` and `Panel`; sections
+`Text size` (`Events`, `Days`, `Header`, `Gap between events`) and `Shown elements`
+(`Calendar events`, `Clocks in the header`, `Metadata line`, `Countdown`, `Dot under days`,
+`Summary card`, `Week numbers`); Panel sections `Date` and `Second time zone`. The stock
+custom-format labels are unchanged. The day card reads `Today`, `1 event`, `16 events`. The
+panel date, the header date, month and day names still follow `LC_TIME` (French here).
+
 ## To confirm on the live panel
 
 - Sizes and the place of the dot under the number, under Dracula.

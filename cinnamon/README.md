@@ -428,8 +428,8 @@ Cinnamon 6.4) with a second time zone and its own look:
   move one month), larger day cells, one dot under a day with events. The selected day is
   filled violet, today has a thin light outline, a selected today has both; days of the
   other months are greyed.
-- Under the month, a card for the selected day: `Aujourd'hui` (or that day's date), the
-  number of events (`1 activité`, `16 activités`) and the range from the first start to the
+- Under the month, a card for the selected day: `Today` (or that day's date), the
+  number of events (`1 event`, `16 events`) and the range from the first start to the
   last end. All-day events count but stay out of the range. The range is not a duration:
   events can overlap. A day without events has no card.
 
@@ -448,28 +448,28 @@ the stock functions changed since are listed in the plan, for a re-sync with ups
 Right-click the clock > Configure... Two tabs; every change applies at once, without a
 reload.
 
-**Apparence**, text sizes (70% to 160%, step 5) and the gap:
+**Appearance**, text sizes (70% to 160%, step 5) and the gap:
 
 | Setting | Default | |
 |---|---|---|
-| Événements | 100 % | time, title, metadata and countdown of the event rows |
-| Jours | 100 % | day digits and headings; the day cells grow with them (the month row too) |
-| En-tête | 100 % | the date and the clocks of the header band |
-| Espace entre événements | 8 px | 0 to 24 px between two event rows |
+| Events | 100 % | time, title, metadata and countdown of the event rows |
+| Days | 100 % | day digits and headings; the day cells grow with them (the month row too) |
+| Header | 100 % | the date and the clocks of the header band |
+| Gap between events | 8 px | 0 to 24 px between two event rows |
 
-**Apparence**, elements shown; an element switched off leaves no empty space:
+**Appearance**, shown elements; an element switched off leaves no empty space:
 
 | Setting | Default | |
 |---|---|---|
-| Show calendar events | on | stock switch: the event list, the dots and the day card |
-| Horloges dans l'en-tête | on | both clocks; the second one also needs "Show a second time zone" |
-| Ligne de métadonnées | on | the second line of each event |
-| Compte à rebours | on | "Starting in 5 minutes", "In progress" |
-| Point sous les jours | on | the dot under a day with events; off, the digits are centred |
-| Carte de résumé | on | the card under the month |
-| Show week numbers in calendar | off | stock switch |
+| Calendar events | on | stock switch: the event list, the dots and the day card |
+| Clocks in the header | on | both clocks; the second one also needs "Show a second time zone" |
+| Metadata line | on | the second line of each event |
+| Countdown | on | "Starting in 5 minutes", "In progress" |
+| Dot under days | on | the dot under a day with events; off, the digits are centred |
+| Summary card | on | the card under the month |
+| Week numbers | off | stock switch |
 
-**Barre**: the stock custom date format (switch, panel format, tooltip format, syntax
+**Panel**: the stock custom date format (switch, panel format, tooltip format, syntax
 help), then the second time zone:
 
 | Setting | Default | |
@@ -485,8 +485,8 @@ The stock "Show calendar" keyboard shortcut (`<Super>c`) is removed: the applet 
 global shortcut.
 
 The tabs, keys, defaults, ranges and labels are in `applets/calendar@bgi/constants.js`;
-`settings-schema.json` is written by hand and the test checks that the two agree. The labels
-of the stock settings stay in English next to the French ones.
+`settings-schema.json` is written by hand and the test checks that the two agree. The
+applet's own wording is in English; dates, months and weekdays follow the locale (`LC_TIME`).
 
 ## Calendar: install
 

@@ -182,7 +182,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.settings.bind(Constants.SHOW_SECOND_ZONE_KEY, "show_second_zone", this._onSettingsChanged);
             this.settings.bind(Constants.SECOND_ZONE_ID_KEY, "second_zone_id", this._onSettingsChanged);
             this.settings.bind(Constants.SECOND_ZONE_LABEL_KEY, "second_zone_label", this._onSettingsChanged);
-            // Apparence tab: applied live by _applyAppearance(); the day marker switch is
+            // Appearance tab: applied live by _applyAppearance(); the day marker switch is
             // read by the calendar grid itself.
             this.settings.bind(Constants.TEXT_SCALES.events.key, "events_text_scale", this._onSettingsChanged);
             this.settings.bind(Constants.TEXT_SCALES.days.key, "days_text_scale", this._onSettingsChanged);
@@ -286,7 +286,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this._updateDaySummary();
     }
 
-    // Text sizes, gap and element switches of the Apparence tab. The event list rebuilds its
+    // Text sizes, gap and element switches of the Appearance tab. The event list rebuilds its
     // rows on the next select_date(), which _onSettingsChanged() forces.
     _applyAppearance() {
         this.event_list.set_appearance(Appearance.eventListStyle(this.events_text_scale, this.event_gap),

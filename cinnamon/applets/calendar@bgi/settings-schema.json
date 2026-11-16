@@ -7,7 +7,7 @@
         ],
         "appearance-page": {
             "type": "page",
-            "title": "Apparence",
+            "title": "Appearance",
             "sections": [
                 "text-size-section",
                 "elements-section"
@@ -15,7 +15,7 @@
         },
         "text-size-section": {
             "type": "section",
-            "title": "Taille du texte",
+            "title": "Text size",
             "keys": [
                 "events-text-scale",
                 "days-text-scale",
@@ -25,7 +25,7 @@
         },
         "elements-section": {
             "type": "section",
-            "title": "Éléments affichés",
+            "title": "Shown elements",
             "keys": [
                 "show-events",
                 "show-header-clocks",
@@ -38,7 +38,7 @@
         },
         "panel-page": {
             "type": "page",
-            "title": "Barre",
+            "title": "Panel",
             "sections": [
                 "date-section",
                 "second-zone-section"
@@ -56,7 +56,7 @@
         },
         "second-zone-section": {
             "type": "section",
-            "title": "Second fuseau",
+            "title": "Second time zone",
             "keys": [
                 "show-second-zone",
                 "second-zone-id",
@@ -73,7 +73,7 @@
         "units": "%",
         "digits": 0,
         "show-value": true,
-        "description": "Événements"
+        "description": "Events"
     },
     "days-text-scale": {
         "type": "scale",
@@ -84,7 +84,7 @@
         "units": "%",
         "digits": 0,
         "show-value": true,
-        "description": "Jours"
+        "description": "Days"
     },
     "header-text-scale": {
         "type": "scale",
@@ -95,7 +95,7 @@
         "units": "%",
         "digits": 0,
         "show-value": true,
-        "description": "En-tête"
+        "description": "Header"
     },
     "event-gap": {
         "type": "spinbutton",
@@ -104,43 +104,43 @@
         "max": 24,
         "step": 1,
         "units": "px",
-        "description": "Espace entre événements"
+        "description": "Gap between events"
     },
     "show-header-clocks": {
         "type": "switch",
         "default": true,
-        "description": "Horloges dans l'en-tête"
+        "description": "Clocks in the header"
     },
     "show-event-meta": {
         "type": "switch",
         "default": true,
-        "description": "Ligne de métadonnées"
+        "description": "Metadata line"
     },
     "show-event-countdown": {
         "type": "switch",
         "default": true,
-        "description": "Compte à rebours"
+        "description": "Countdown"
     },
     "show-day-marker": {
         "type": "switch",
         "default": true,
-        "description": "Point sous les jours"
+        "description": "Dot under days"
     },
     "show-day-summary": {
         "type": "switch",
         "default": true,
-        "description": "Carte de résumé"
+        "description": "Summary card"
     },
     "show-events": {
         "type": "switch",
         "default": true,
-        "description": "Show calendar events",
+        "description": "Calendar events",
         "tooltip": "Check this to display events in the calendar."
     },
     "show-week-numbers": {
         "type": "switch",
         "default": false,
-        "description": "Show week numbers in calendar",
+        "description": "Week numbers",
         "tooltip": "Check this to show week numbers in the calendar."
     },
     "use-custom-format": {

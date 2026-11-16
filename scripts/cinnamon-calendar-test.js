@@ -203,10 +203,10 @@ function testDaySummary() {
         JSON.stringify({ count: 1, range: null }));
     checkEqual('summary card: events crossing midnight cut to the day', summary([timed(-120, 60), timed(1380, 1500)]),
         JSON.stringify({ count: 2, range: { start: 0, end: 1440 } }));
-    checkEqual('summary card: count, one', DaySummary.formatEventCount(1), '1 activité');
-    checkEqual('summary card: count, several', DaySummary.formatEventCount(16), '16 activités');
+    checkEqual('summary card: count, one', DaySummary.formatEventCount(1), '1 event');
+    checkEqual('summary card: count, several', DaySummary.formatEventCount(16), '16 events');
     checkEqual('summary card: range', DaySummary.formatRange('02:00', '11:00'), '02:00 – 11:00');
-    checkEqual('summary card: heading today', DaySummary.summaryHeading(true, 'Mardi 17 novembre 2026'), "Aujourd'hui");
+    checkEqual('summary card: heading today', DaySummary.summaryHeading(true, 'Mardi 17 novembre 2026'), 'Today');
     checkEqual('summary card: heading another day', DaySummary.summaryHeading(false, 'Mardi 17 novembre 2026'),
         'Mardi 17 novembre 2026');
     const dayStart = GLib.DateTime.new(PARIS, 2026, 11, 16, 0, 0, 0);

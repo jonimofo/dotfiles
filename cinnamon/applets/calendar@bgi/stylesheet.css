@@ -6,7 +6,7 @@
    takes the colour of the event's calendar, set by the code from the event data.
 
    Sizes: further down, without any colour. Texts are in em or % of three containers whose
-   font size the applet sets from the Apparence settings (appearance.js): the event list
+   font size the applet sets from the Appearance settings (appearance.js): the event list
    (12px at 100%), the calendar grid and the header band (100% of the theme's font). Paddings
    and borders stay in px, as the design spec gives them. */
 

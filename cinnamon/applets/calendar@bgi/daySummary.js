@@ -19,7 +19,7 @@ function summariseDay(events) {
     return { count: events.length, range: { start, end } };
 }
 
-// "1 activité", "16 activités".
+// "1 event", "16 events".
 function formatEventCount(count) {
     const word = count === 1 ? Constants.SUMMARY_COUNT_ONE : Constants.SUMMARY_COUNT_MANY;
     return `${count}${Constants.WORD_SEPARATOR}${word}`;

@@ -2,7 +2,7 @@ const Gio = imports.gi.Gio;
 const Constants = require('./constants');
 
 // Night Light on or off and its temperature: the keys of Cinnamon Settings > Night Light.
-// One object for the Night Light tile and the Warmth row, so both follow the same keys.
+// Drives the Warmth row: its switch and its slider.
 // @onChange runs on every change of either key, made here or anywhere else.
 class NightLight {
     constructor(onChange) {

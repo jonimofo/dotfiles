@@ -295,12 +295,11 @@ class QuickSettingsApplet extends Applet.Applet {
         return setting;
     }
 
-    // The Night Light tile and the Warmth row's switch write the same key; the temperature
-    // follows the handle live, one write per step.
+    // The Warmth row's switch turns Night Light on and off; the temperature follows the
+    // handle live, one write per step.
     _setUpNightLight() {
         const row = this._content.sliders.warmth;
         this._nightLight = new NightLight.NightLight(() => this._syncNightLight());
-        this._content.tiles['night-light'].setOnToggle(() => this._nightLight.toggle());
         row.setOnSwitch(() => this._nightLight.toggle());
         row.onLiveChange(value => this._nightLight.setTemperature(WarmthModel.fractionToKelvin(value)));
         this._syncNightLight();
@@ -311,7 +310,6 @@ class QuickSettingsApplet extends Applet.Applet {
         const enabled = this._nightLight.enabled;
         const kelvin = this._nightLight.temperature;
         const row = this._content.sliders.warmth;
-        this._content.tiles['night-light'].setChecked(enabled);
         row.setAvailable(enabled);
         row.setSwitchState(enabled);
         row.showValue(WarmthModel.kelvinToFraction(kelvin));

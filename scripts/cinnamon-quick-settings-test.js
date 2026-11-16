@@ -3,7 +3,7 @@
 // (no test touches the real NetworkManager); brightness runs against fake ddcutil
 // and laptop backends fed with captured ddcutil output; NordVPN runs against a fake client
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
-// models run on plain data; Night Light, Warmth, Do Not Disturb and Touchpad run on the memory
+// models run on plain data; Night Light (the Warmth row), Do Not Disturb and Touchpad run on the memory
 // GSettings backend; the keyboard light runs on a fake UPower bus; Airplane mode on fake radios
 // and on the Wi-Fi and Bluetooth fakes; the CPU line parser on captured top output.
 // No real setting is changed.
@@ -609,11 +609,12 @@ async function testBooleanSettings() {
     color.set_boolean('night-light-enabled', true);
     notifications.set_boolean('display-notifications', true);
     let changes = 0;
+    // A key read as is (not inverted): no tile uses one now, any boolean key serves.
     const night = new BooleanSetting.BooleanSetting('org.cinnamon.settings-daemon.plugins.color', 'night-light-enabled', false, () => changes++);
     const dnd = new BooleanSetting.BooleanSetting('org.cinnamon.desktop.notifications', 'display-notifications', true, () => changes++);
-    check('night light: on while the key is true', night.enabled);
+    check('boolean setting: on while the key is true', night.enabled);
     night.toggle();
-    check('night light: toggle writes false', !color.get_boolean('night-light-enabled') && !night.enabled);
+    check('boolean setting: toggle writes false', !color.get_boolean('night-light-enabled') && !night.enabled);
     check('do not disturb: off while notifications are shown', !dnd.enabled);
     dnd.toggle();
     check('do not disturb: toggle turns notifications off', !notifications.get_boolean('display-notifications') && dnd.enabled);
@@ -645,7 +646,7 @@ async function testNightLight() {
     const night = new NightLight.NightLight(() => changes++);
     check('night light: off and 3400 K read', !night.enabled && night.temperature === 3400);
     night.toggle();
-    check('night light: the switch and the tile write night-light-enabled', color.get_boolean('night-light-enabled') && night.enabled);
+    check('night light: the Warmth switch writes night-light-enabled', color.get_boolean('night-light-enabled') && night.enabled);
     night.setTemperature(2500);
     check('night light: the slider writes night-light-temperature', color.get_uint('night-light-temperature') === 2500);
     await wait(0);
@@ -954,7 +955,7 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute,Keyboard light,Airplane mode,Touchpad,CPU line'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Dark style,Do Not Disturb,Keep awake,Mic mute,Keyboard light,Airplane mode,Touchpad,CPU line'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
         && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume,Battery');
@@ -974,11 +975,22 @@ function testLayoutModel() {
     // A configuration saved before the extras, reordered and with a tile hidden: it keeps its
     // own order and the new elements come at the end, shown.
     const Constants = load('./constants');
-    const before = ['wifi', 'bluetooth', 'nordvpn', 'vpn', 'power-profile', 'night-light', 'dark-style', 'do-not-disturb', 'keep-awake', 'mic-mute'];
-    const saved = before.map(id => ({ show: id !== 'dark-style', id }));
-    check(`layout: a saved Tiles list gets the new tiles and the CPU line appended (${Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS)})`,
-        `${Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS)}`
-        === 'wifi,bluetooth,nordvpn,vpn,power-profile,night-light,do-not-disturb,keep-awake,mic-mute,keyboard-light,airplane-mode,touchpad,cpu-line');
+    // The owner's saved Tiles list: it still holds night-light, a tile that no longer exists.
+    const saved = [
+        ...['wifi', 'bluetooth', 'night-light', 'nordvpn', 'vpn', 'power-profile'].map(id => ({ show: true, id })),
+        ...['dark-style', 'do-not-disturb', 'keep-awake', 'mic-mute'].map(id => ({ show: false, id })),
+    ];
+    const ownerTiles = Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS);
+    check(`layout: a saved Tiles list drops the removed night-light and gets the new tiles and the CPU line appended (${ownerTiles})`,
+        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,keyboard-light,airplane-mode,touchpad,cpu-line');
+    const ownerRows = Model.rows(ownerTiles.filter(id => id !== Constants.CPU_LINE_ID), Constants.TILES_PER_ROW);
+    check(`layout: with that saved list, NordVPN and VPN share the second row (${JSON.stringify(ownerRows[1])})`,
+        JSON.stringify(ownerRows[1]) === '["nordvpn","vpn"]');
+    const defaultRows = Model.rows(Constants.TILES.map(item => item.id), Constants.TILES_PER_ROW);
+    check(`layout: in the default order VPN and NordVPN share one row (${JSON.stringify(defaultRows[1])})`,
+        defaultRows.some(row => row.includes('vpn') && row.includes('nordvpn'))
+        && JSON.stringify(defaultRows[1]) === '["vpn","nordvpn"]');
+    check('layout: no night-light tile is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'night-light'));
     check('layout: a saved Sliders list gets Warmth, a saved Panel list gets Battery',
         `${Model.visibleIds(Model.defaults(Constants.SLIDERS.slice(0, 3)), Constants.SLIDERS)}` === 'output,input,monitors,warmth'
         && `${Model.visibleIds(Model.defaults(Constants.PANEL_ICON_ITEMS.slice(0, 4)), Constants.PANEL_ICON_ITEMS)}` === 'wifi,bluetooth,vpn,volume,battery');

@@ -71,7 +71,6 @@ const TILES = [
     { id: 'vpn', label: 'VPN', name: 'VPN', icon: 'network-vpn-symbolic', hasMenu: true },
     { id: 'nordvpn', label: 'NordVPN', name: 'NordVPN', icon: 'globe-symbolic', hasMenu: true },
     { id: 'power-profile', label: 'Balanced', name: 'Power profile', icon: 'power-profile-balanced-symbolic', hasMenu: true },
-    { id: 'night-light', label: 'Night Light', name: 'Night Light', icon: 'night-light-symbolic', hasMenu: false },
     { id: 'dark-style', label: 'Dark style', name: 'Dark style', icon: 'dark-mode-symbolic', hasMenu: false },
     { id: 'do-not-disturb', label: 'Do Not Disturb', name: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
     { id: 'keep-awake', label: 'Keep awake', name: 'Keep awake', icon: 'my-caffeine-on-symbolic', hasMenu: false },

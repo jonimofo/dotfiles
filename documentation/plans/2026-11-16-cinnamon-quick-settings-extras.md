@@ -56,8 +56,8 @@ Owner's answers:
   and `night-light-enabled`. Same range as Cinnamon's Night Light page: 1700 K to 4700 K,
   step 100, inverted (handle to the right = warmer = fewer kelvin). The value shows as
   `3400 K`. The switch at the right end writes `night-light-enabled`; while off the slider is
-  dimmed and takes no input. One object serves the row and the Night Light tile, so both
-  follow the key live. Listed in the Sliders tab as Warmth.
+  dimmed and takes no input. It follows the keys live. Listed in the Sliders tab as Warmth.
+  The Night Light tile was removed afterwards (see below).
 - Battery on the panel: a `Battery` entry at the end of the Panel tab, shown by default, text
   like `87%` after the icons, hidden without a battery. It reuses the header's battery read.
 - Keyboard: UPower `KbdBacklight` on the system bus. A click goes to the next level, back to
@@ -79,6 +79,21 @@ Owner's answers:
 - New tiles are appended to `TILES`; a saved configuration without the new ids gets them
   appended, shown (`layoutModel.normalize`).
 - Dark style and Touchpad share one string-setting toggle (`stringSetting.js`).
+
+## Night Light tile removed (review round)
+
+Request: "make sure to remove tile Nigh light (because redundant with slicer warmth)+ make vpn
+... and NOrd vpn same row". The Warmth switch already turns Night Light on and off, so the
+Night Light tile is gone. A saved Tiles list that still names it simply drops it
+(`layoutModel.normalize` ignores ids no longer declared), which also brings NordVPN and VPN
+onto one row in a saved order that had Night Light before them. In the default order VPN and
+NordVPN are tiles 3 and 4, one row. Tests cover both.
+
+```
+| [ Wi-Fi           > ] [ Bluetooth       > ] |
+| [ NordVPN         > ] [ VPN             > ] |
+| [ Balanced        > ] [ Airplane mode     ] |
+```
 
 ## Out of scope
 

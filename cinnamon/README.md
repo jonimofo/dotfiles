@@ -238,8 +238,8 @@ level as text, like `87%` (only with a battery). A click opens the menu:
   - NordVPN: connect (quick connect) or disconnect. Shows the country while connected.
   - Power profile: shows the active profile. A click goes back to Balanced, or from
     Balanced to the last other profile used (Power Saver the first time).
-  - Night Light (the same key as the Warmth switch), Dark style, Do Not Disturb
-    (notifications off), Keep awake (no screen blanking or dimming), Mic mute.
+  - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
+    dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
   - Keyboard light: a click goes to the next backlight level, back to off after the
     brightest, through UPower. Shows the level: Off, Low, High for a two-level light (On
     for a one-level light, Medium above half on a light with more levels). Follows the

@@ -84,7 +84,6 @@
                     "VPN": "vpn",
                     "NordVPN": "nordvpn",
                     "Power profile": "power-profile",
-                    "Night Light": "night-light",
                     "Dark style": "dark-style",
                     "Do Not Disturb": "do-not-disturb",
                     "Keep awake": "keep-awake",
@@ -116,10 +115,6 @@
             {
                 "show": true,
                 "id": "power-profile"
-            },
-            {
-                "show": true,
-                "id": "night-light"
             },
             {
                 "show": true,

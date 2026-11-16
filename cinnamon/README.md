@@ -54,7 +54,8 @@ own strip at its very top.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
-  Escape clears the field, then closes Scale.
+  Escape clears the field, then closes Scale. While the field has text, a click on another
+  screen's window area does nothing.
 - Each thumbnail shows the windows that workspace has on that strip's screen.
 - A click on a thumbnail switches workspace. Scale stays open.
 - Dropping a window on a thumbnail moves it to that workspace and that screen.
@@ -143,7 +144,6 @@ Then give Super back to the Menu (see above).
 - Tested on two monitors side by side. Three or more are untested.
 - Thumbnails follow windows opening, closing, changing workspace and changing screen, not a
   window being moved within its screen or resized while Scale is open. Workspace renames show at the next opening.
-- Cinnamon hides hot corners over a fullscreen window. Super still works there.
 - With the extension disabled, Super does nothing until the Menu shortcut is set back.
 - The dock is drawn on the primary monitor only.
 - Windows with no `.desktop` application are left out of the dock.
@@ -198,6 +198,8 @@ Assumptions about behaviour:
 - `WorkspacesView.updateWindowPositions()` is broken in 6.4, so it is not used.
 - Scale's view actor is added to `global.overlay_group` each time Scale opens, so the screen
   drop highlight raises itself in that group to stay above the windows.
+- A reactive actor at opacity 0 still takes the pointer, as the overview's own cover pane
+  does: the search's click blockers on the other screens rely on it.
 - dnd looks for a drop target among the parents of the actor under the pointer, never its
   siblings: over a window clone, the screen's `WorkspaceMonitor` is out of reach. Its
   `_dropRect` has no size and no drop handlers. The highlight is therefore its own actor,
@@ -340,6 +342,7 @@ scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
+scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 ```
 

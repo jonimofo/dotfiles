@@ -43,12 +43,12 @@
     background-color: #2F405B;
 }
 
-/* Violet: selected day (hover included so it stays violet), scroll bar handle (4.71:1 on
-   the popup background) */
+/* Violet: selected day (hover included so it stays violet; white digit 4.83:1, today's
+   outline 3.76:1 on it), scroll bar handle (3.55:1 on the popup background) */
 .calendar-bgi-day-selected,
 .calendar-bgi-day-selected:hover,
 .calendar-bgi-events StScrollBar StButton#vhandle {
-    background-color: #9274DD;
+    background-color: #7B5CD6;
 }
 
 /* ---- Text ---- */

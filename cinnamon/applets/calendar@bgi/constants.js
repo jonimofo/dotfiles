@@ -115,7 +115,7 @@ const NUMBER_PLACEHOLDER = '%d';
 // "This evening" when it starts after 18:00, else "Starting later today".
 const COUNTDOWN = { imminentMinutes: 10, soonMinutes: 60, laterHours: 6, eveningHour: 18 };
 
-// One marker under a day that has events, drawn in the text colour of the theme.
+// One marker under a day that has events, in the day's palette text colour.
 const DAY_MARKER_TEXT = '•';
 const DAY_MARKER_MAX = 1;
 

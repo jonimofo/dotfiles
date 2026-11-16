@@ -1,7 +1,11 @@
-/* calendar@bgi. Every class is the applet's own, so no other menu or calendar changes.
+/* calendar@bgi. The rules below use the applet's own classes (calendar-bgi-), so no other
+   menu or calendar changes. Stock classes the theme still styles: the month arrows'
+   images (calendar-change-month-back, -forward), the clocks button
+   (calendar-today-home-button, -enabled), the grid (calendar), the empty-day box and the
+   scroll view (calendar-events-no-events-*, calendar-events-scrollbox).
 
-   Colours: the palette of the owner's validated design, each colour written once, in the
-   role blocks just below (St has no CSS variables). Within one property, later blocks win
+   Colours: the palette of the owner's validated design, each colour written once per
+   property, in the role blocks just below (St has no CSS variables). Within one property, later blocks win
    over earlier ones for selectors of the same weight: keep the order. The event accent bar
    takes the colour of the event's calendar, set by the code from the event data.
 
@@ -67,7 +71,9 @@
     color: #F1F4FB;
 }
 
-/* Secondary text: metadata, clock suffixes, day headings, countdown */
+/* Secondary text: metadata, clock suffixes, day headings, countdown, and days of the other
+   months on hover (5.61:1 on the hover background, where the discreet colour is 3.10:1) */
+.calendar-bgi-day-outside:hover,
 .calendar-bgi-clock-suffix,
 .calendar-bgi-day-heading,
 .calendar-bgi-event-meta,
@@ -95,13 +101,17 @@
     border-color: transparent;
 }
 
-/* Thin borders: popup, event rows, buttons, the line between the two clocks */
+/* Thin borders: popup, event rows, the line between the two clocks */
 .menu.calendar-bgi-popup,
 .calendar-bgi-event-row,
-.calendar-bgi-today-button,
-.calendar-bgi-settings-button,
 .calendar-bgi-clock-divided {
     border-color: #394761;
+}
+
+/* Button edges: the discreet colour, 5.08:1 on the popup background */
+.calendar-bgi-today-button,
+.calendar-bgi-settings-button {
+    border-color: #818CA4;
 }
 
 /* Today: thin light outline, also on a selected today */
@@ -109,12 +119,11 @@
     border-color: #DDE3F0;
 }
 
-/* Light violet: keyboard focus, and the scroll bar handle on hover, whose border covers it
-   whole (7.83:1 on the popup background) */
+/* Light violet: keyboard focus of the two buttons, and the scroll bar handle on hover,
+   whose border covers it whole (7.83:1 on the popup background) */
 .calendar-bgi-events StScrollBar StButton#vhandle:hover,
-.calendar-bgi-day:focus,
-.calendar-bgi-settings-button:focus,
-.calendar-bgi-month-row StButton:focus {
+.calendar-bgi-today-button:focus,
+.calendar-bgi-settings-button:focus {
     border-color: #BAA3F0;
 }
 
@@ -212,7 +221,7 @@
 }
 
 .calendar-bgi-event-time-block {
-    min-width: 96px;
+    min-width: 8em;
     padding: 0 9px;
 }
 
@@ -240,7 +249,7 @@
     padding-left: 6px;
 }
 
-/* Right column: the calendar panel, the day summary card, the Today button. */
+/* Right column: the calendar panel, then the Today button. */
 .calendar-bgi-calendar-column {
     spacing: 12px;
     padding: 12px 12px 0 12px;
@@ -251,9 +260,15 @@
     padding: 6px 8px 8px 8px;
 }
 
-/* One month row: '<  Novembre 2026  >'. */
+/* One month row: '<  November 2026  >'. The arrows grow with the Days size: the theme's
+   16px images at 100% (12px font). */
 .calendar-bgi-month-row {
     padding: 0.3em 0;
+}
+
+.calendar-bgi-month-row StButton {
+    width: 1.33333em;
+    height: 1.33333em;
 }
 
 .calendar-bgi-month-label {
@@ -271,8 +286,7 @@
     text-align: center;
 }
 
-/* Day cells. Before the third review round: 125%, 2.6em by 2.6em. Now 133%, 2.6em wide
-   (+6%) by 2.75em high (+13%). They grow with the Jours text size. */
+/* Day cells: 133% of the grid's font, 2.6em by 2.75em. They grow with the Days size. */
 .calendar-bgi-day {
     font-size: 133%;
     font-weight: 500;
@@ -302,10 +316,6 @@
 .calendar-bgi-day-marker-box {
     font-size: 80%;
     margin-top: 3.25em;
-}
-
-.calendar-bgi-day-marker {
-    font-size: 100%;
 }
 
 /* Today button, full width of the column, the card's corners. */

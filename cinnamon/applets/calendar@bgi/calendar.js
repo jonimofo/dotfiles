@@ -14,6 +14,7 @@ const Mainloop = imports.mainloop;
 const Constants = require('./constants');
 const DateText = require('./dateText');
 const DayMarker = require('./dayMarker');
+const DayCell = require('./dayCell');
 
 const MSECS_IN_DAY = 24 * 60 * 60 * 1000;
 const WEEKDATE_HEADER_WIDTH_DIGITS = 3;
@@ -303,10 +304,6 @@ class Calendar {
         iter.setHours(12);
         for (let i = 0; i < 7; i++) {
             let styleClass = Constants.STYLE.dayHeading;
-            if (_isWorkDay(iter))
-                styleClass += ' calendar-work-day';
-            else
-                styleClass += ' calendar-nonwork-day';
 
             // Could use iter.toLocaleFormat('%a') but that normally gives three characters
             // and we want, ideally, a single character for e.g. S M T W T F S
@@ -431,24 +428,14 @@ class Calendar {
                 this.setDate(newlySelectedDate, false);
             }));
 
-            let styleClass = Constants.STYLE.day;
-            if (_isWorkDay(iter))
-                styleClass += ' calendar-work-day';
-            else
-                styleClass += ' calendar-nonwork-day';
-
-            // Hack used in lieu of border-collapse - see cinnamon.css
-            if (row == 2)
-                styleClass = 'calendar-day-top ' + styleClass;
-            if (iter.getDay() == this._weekStart)
-                styleClass = 'calendar-day-left ' + styleClass;
-
-            if (_today(iter))
-                styleClass += ' calendar-today';
-            else if (iter.getMonth() != this._selectedDate.getMonth())
-                styleClass += ' calendar-other-month-day';
-            else
-                styleClass += ' calendar-not-today';
+            // The applet's own state classes only: theme day classes would mix their
+            // colours and borders with the applet's palette.
+            let styleClass = DayCell.dayStyleClass({
+                today: _today(iter),
+                selected: _sameDay(this._selectedDate, iter),
+                outside: iter.getMonth() != this._selectedDate.getMonth(),
+                weekend: !_isWorkDay(iter)
+            });
 
             if (_sameDay(this._selectedDate, iter)) {
                 button.add_style_pseudo_class('selected');
@@ -462,7 +449,7 @@ class Calendar {
 
             if (this.show_week_numbers && iter.getDay() == 4) {
                 let label = new St.Label({ text: iter.toLocaleFormat('%V'),
-                                           style_class: 'calendar-day-base calendar-week-number'});
+                                           style_class: Constants.STYLE.weekNumber});
                 this.actor.add(label,
                                { row: row, col: 0, y_align: St.Align.MIDDLE });
             }

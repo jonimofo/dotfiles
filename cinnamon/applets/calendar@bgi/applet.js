@@ -30,7 +30,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.orientation = orientation;
 
             this._initContextMenu();
-            this.menu.setCustomStyleClass('calendar-background');
+            this.menu.setCustomStyleClass(`calendar-background ${Constants.STYLE.popup}`);
 
             this.settings = new Settings.AppletSettings(this, Constants.UUID, this.instance_id);
             this.desktop_settings = new Gio.Settings({ schema_id: "org.cinnamon.desktop.interface" });

@@ -52,11 +52,17 @@ const DAY_MARKER_MAX = 1;
 
 // Class names of stylesheet.css. They replace the stock classes whose sizes the themes set.
 const STYLE = {
+    popup: 'calendar-bgi-popup',
     headerTime: 'calendar-bgi-header-time',
     monthRow: 'calendar-bgi-month-row',
     monthLabel: 'calendar-bgi-month-label',
     dayHeading: 'calendar-bgi-day-heading',
     day: 'calendar-bgi-day',
+    dayToday: 'calendar-bgi-day-today',
+    daySelected: 'calendar-bgi-day-selected',
+    dayOutside: 'calendar-bgi-day-outside',
+    dayWeekend: 'calendar-bgi-day-weekend',
+    weekNumber: 'calendar-bgi-week-number',
     dayMarkerBox: 'calendar-bgi-day-marker-box',
     dayMarker: 'calendar-bgi-day-marker',
     events: 'calendar-bgi-events',

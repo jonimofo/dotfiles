@@ -1,8 +1,9 @@
-// Logic tests of the calendar@bgi applet modules, run by cinnamon-calendar-test.sh: panel text,
-// popup header texts, second time zone (unknown id, DST, day change), day marker, settings
-// defaults, and the stylesheet conventions (relative sizes, no colour). Events are
-// fabricated; no calendar server, setting or desktop is touched.
-// Usage: gjs cinnamon-calendar-test.js <applet folder>
+// Logic tests of the calendar@bgi applet modules, run by cinnamon-calendar-test.sh: English
+// dates and wording, panel and header texts, second time zone (unknown id, DST, day change),
+// tick clock, day cells and marker, appearance settings, schema against constants.js, and the
+// stylesheet conventions (colours once in the palette block, day sizes in em, classes set
+// both ways). Events are fabricated; no calendar server, real setting or desktop is touched.
+// Usage: GSETTINGS_BACKEND=memory gjs cinnamon-calendar-test.js <applet folder>
 const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
 const CinnamonDesktop = imports.gi.CinnamonDesktop;
@@ -354,8 +355,9 @@ function testSchema() {
 
 // Sizes in em or %, no colour, every class of constants.js styled.
 // The palette of the validated design, by role: each colour written once in the stylesheet.
-const PALETTE = ['#151B2B', '#1C2436', '#202B40', '#29364D', '#2F405B', '#394761', '#F1F4FB', '#B5BED0',
-    '#818CA4', '#9274DD', '#BAA3F0', '#DDE3F0', '#FFFFFF'];
+// The stylesheet's palette block: every colour rule sits above this line, by role.
+const SIZES_MARKER = '/* ---- Sizes ---- */';
+const HEX_COLOUR = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
 // Day cells grow with the theme's font: their sizes are in em or %, not px.
 const DAY_RULES = ['day', 'dayMarked', 'dayHeading', 'dayMarkerBox', 'dayMarker', 'weekNumber', 'monthRow', 'monthLabel'];
 
@@ -371,33 +373,49 @@ function listJs() {
 
 function testStylesheet() {
     const css = readText(`${appletDir}/stylesheet.css`).replace(/\/\*[\s\S]*?\*\//g, '');
-    const hexes = (css.match(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g) || []).map(hex => hex.toUpperCase());
+    const raw = readText(`${appletDir}/stylesheet.css`);
+    const marker = raw.indexOf(SIZES_MARKER);
+    check('stylesheet: palette block ends with the sizes marker', marker > 0);
+    const paletteBlock = raw.slice(0, marker).replace(/\/\*[\s\S]*?\*\//g, '');
+    const sizes = raw.slice(marker).replace(/\/\*[\s\S]*?\*\//g, '');
+    const hexes = (css.match(HEX_COLOUR) || []).map(hex => hex.toUpperCase());
     const repeated = [...new Set(hexes.filter((hex, i) => hexes.indexOf(hex) !== i))];
     check(`stylesheet: each colour written once${repeated.length ? ` (repeated ${repeated.join(', ')})` : ''}`,
         repeated.length === 0);
-    const foreign = [...new Set(hexes)].filter(hex => !PALETTE.includes(hex));
-    check(`stylesheet: only palette colours${foreign.length ? ` (found ${foreign.join(', ')})` : ''}`,
-        foreign.length === 0 && !/\b(rgba?|hsla?)\(|\bopacity\s*:/.test(css));
+    const palette = (paletteBlock.match(HEX_COLOUR) || []);
+    const outside = sizes.match(HEX_COLOUR) || [];
+    check(`stylesheet: colours only in the palette block (${palette.length} there${outside.length ? `, ${outside.join(', ')} outside` : ''})`,
+        palette.length > 0 && outside.length === 0 && !/\b(rgba?|hsla?)\(|\bopacity\s*:|\bcolor\s*:/.test(sizes));
+    check('stylesheet: no colour function or opacity', !/\b(rgba?|hsla?)\(|\bopacity\s*:/.test(css));
     const dayPx = DAY_RULES.filter(key => {
         const rules = [...css.matchAll(new RegExp(`\\.${Constants.STYLE[key]}(?![\\w-])[^{]*\\{([^}]*)\\}`, 'g'))];
         return rules.some(rule => /(^|[;{\s])(width|height|font-size|margin|padding)[\w-]*\s*:[^;]*\d(px|pt)/.test(rule[1]));
     });
     check(`stylesheet: day cell sizes in em or %${dayPx.length ? ` (px in ${dayPx.join(', ')})` : ''}`,
         dayPx.length === 0);
+    // Any string literal of the code holding a colour, style strings included.
     const jsColours = [];
     for (const file of listJs()) {
         const source = readText(`${appletDir}/${file}`);
-        if (/['"`]#[0-9a-fA-F]{3,8}['"`;]|\b(rgba?|hsla?)\(/.test(source))
+        const strings = source.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || [];
+        if (strings.some(text => /#[0-9a-fA-F]{3,8}\b|\b(rgba?|hsla?)\(/.test(text)))
             jsColours.push(file);
     }
     check(`code: no colour in JavaScript${jsColours.length ? ` (${jsColours.join(', ')})` : ''}`,
         jsColours.length === 0);
-    const unstyled = Object.values(Constants.STYLE).filter(name => !css.includes(`.${name}`));
+    // Classes: exact names both ways, every class of constants.js styled and every applet
+    // class of the stylesheet set by the code.
+    const styled = new Set([...css.matchAll(/\.(calendar-bgi-[\w-]+)/g)].map(match => match[1]));
+    const used = new Set(Object.values(Constants.STYLE));
+    const unstyled = [...used].filter(name => !styled.has(name));
+    const unused = [...styled].filter(name => !used.has(name));
     const eventsRule = css.match(new RegExp(`\\.${Constants.STYLE.events}\\s*\\{([^}]*)\\}`));
     check('stylesheet: events column has no fixed height',
         eventsRule !== null && !/(^|[^-])height\s*:/.test(eventsRule[1]));
     check(`stylesheet: every class styled${unstyled.length ? ` (missing ${unstyled.join(', ')})` : ''}`,
         unstyled.length === 0);
+    check(`stylesheet: every class set by the code${unused.length ? ` (unused ${unused.join(', ')})` : ''}`,
+        unused.length === 0);
 }
 
 testSummarySplit();

@@ -253,6 +253,17 @@ const SESSION_MANAGER_INTERFACE = 'org.gnome.SessionManager';
 const INHIBIT_IDLE_FLAG = 8;
 const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming';
 
+// The CPU line under the tiles: the process using the most CPU, read with top when the menu
+// opens. Two frames half a second apart: the first covers the time since each process
+// started, the second measures that half second. Per-core percent (212% is a bit over two
+// cores); wide lines so no command name is cut.
+const CPU_LINE_ID = 'cpu-line';
+const CPU_LINE_ITEM = { id: CPU_LINE_ID, name: 'CPU line' };
+const CPU_LINE_TITLE = 'CPU';
+const CPU_TOP_COMMAND = ['top', '-b', '-n', '2', '-d', '0.5', '-o', '%CPU', '-w', '512'];
+const CPU_IGNORED_COMMANDS = ['top'];
+const CPU_PERCENT_SUFFIX = '%';
+
 // Settings dialog (settings-schema.json): one list per group, rows { show, id }.
 const LAYOUT_KEYS = {
     tiles: 'tiles',
@@ -263,3 +274,7 @@ const LAYOUT_KEYS = {
 
 // The header as the settings dialog lists it.
 const HEADER_ITEMS = [HEADER_BATTERY_ITEM, ...HEADER_BUTTONS];
+
+// The Tiles tab: the tiles, then the CPU line. The line stays under the tiles whatever its
+// place in the list, as the battery stays on the left of the header.
+const TILE_LAYOUT_ITEMS = [...TILES, CPU_LINE_ITEM];

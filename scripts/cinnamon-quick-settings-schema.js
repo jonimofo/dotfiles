@@ -35,7 +35,7 @@ function listSetting(declared, columnTitle, layoutModel) {
 
 function buildSchema(constants, layoutModel) {
     const tabs = [
-        { key: constants.LAYOUT_KEYS.tiles, title: 'Tiles', column: 'Tile', declared: constants.TILES },
+        { key: constants.LAYOUT_KEYS.tiles, title: 'Tiles', column: 'Tile', declared: constants.TILE_LAYOUT_ITEMS },
         { key: constants.LAYOUT_KEYS.sliders, title: 'Sliders', column: 'Slider', declared: constants.SLIDERS },
         { key: constants.LAYOUT_KEYS.header, title: 'Header', column: 'Element', declared: constants.HEADER_ITEMS },
         { key: constants.LAYOUT_KEYS.panelIcons, title: 'Panel', column: 'Icon', declared: constants.PANEL_ICON_ITEMS },

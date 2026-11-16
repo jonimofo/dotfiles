@@ -138,6 +138,17 @@
     font-weight: bold;
 }
 
+/* CPU line, under the tiles */
+
+.quick-settings-cpu-line {
+    padding: 0 8px;
+    spacing: 12px;
+}
+
+.quick-settings-cpu-title {
+    font-weight: bold;
+}
+
 /* In-place list, under the row whose arrow opened it */
 
 .quick-settings-list {

@@ -91,7 +91,8 @@
                     "Mic mute": "mic-mute",
                     "Keyboard light": "keyboard-light",
                     "Airplane mode": "airplane-mode",
-                    "Touchpad": "touchpad"
+                    "Touchpad": "touchpad",
+                    "CPU line": "cpu-line"
                 }
             }
         ],
@@ -147,6 +148,10 @@
             {
                 "show": true,
                 "id": "touchpad"
+            },
+            {
+                "show": true,
+                "id": "cpu-line"
             }
         ]
     },

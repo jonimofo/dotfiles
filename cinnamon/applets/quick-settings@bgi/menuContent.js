@@ -1,3 +1,4 @@
+const Clutter = imports.gi.Clutter;
 const St = imports.gi.St;
 const Constants = require('./constants');
 const Header = require('./header');
@@ -7,9 +8,10 @@ const ThemeColors = require('./themeColors');
 const ListPanel = require('./listPanel');
 const ListHost = require('./listHost');
 const LayoutModel = require('./layoutModel');
+const TopParser = require('./topParser');
 
-// Everything inside the menu, top to bottom: header, sliders, tile grid. Every tile and
-// slider row is built once; applyLayout() picks which ones show and in which order.
+// Everything inside the menu, top to bottom: header, sliders, tile grid, CPU line. Every tile
+// and slider row is built once; applyLayout() picks which ones show and in which order.
 class MenuContent {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-content', vertical: true });
@@ -31,6 +33,16 @@ class MenuContent {
         this._grid = new St.BoxLayout({ style_class: 'quick-settings-grid', vertical: true });
         this.actor.add_child(this._grid);
 
+        this._cpuLine = new St.BoxLayout({ style_class: 'quick-settings-cpu-line' });
+        this._cpuLine.add_child(new St.Label({
+            text: Constants.CPU_LINE_TITLE,
+            style_class: 'quick-settings-cpu-title',
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        this._cpuProcess = new St.Label({ y_align: Clutter.ActorAlign.CENTER });
+        this._cpuLine.add_child(this._cpuProcess);
+        this.actor.add_child(this._cpuLine);
+
         // One in-place list at a time, moved under the row whose arrow opened it.
         this.listPanel = new ListPanel.ListPanel();
         this.lists = new ListHost.ListHost(this.listPanel);
@@ -39,13 +51,15 @@ class MenuContent {
         for (const row of Object.values(this.sliders))
             row.slider.actor.connect('style-changed', () => this.refreshColors());
 
-        this.applyLayout(Constants.SLIDERS.map(item => item.id), Constants.TILES.map(item => item.id));
+        this.applyLayout(Constants.SLIDERS.map(item => item.id), Constants.TILE_LAYOUT_ITEMS.map(item => item.id));
     }
 
-    // @sliderIds, @tileIds: the ones to show, in order. Hidden rows leave no gap; tiles
-    // reflow two per row, an odd last tile on the left. An open list is closed first: its
-    // row may be gone.
-    applyLayout(sliderIds, tileIds) {
+    // @sliderIds, @tileLayoutIds: the ones to show, in order; @tileLayoutIds may hold the CPU
+    // line's id. Hidden rows leave no gap; tiles reflow two per row, an odd last tile on the
+    // left. An open list is closed first: its row may be gone.
+    applyLayout(sliderIds, tileLayoutIds) {
+        const tileIds = tileLayoutIds.filter(id => id !== Constants.CPU_LINE_ID);
+        this._cpuLine.visible = tileLayoutIds.includes(Constants.CPU_LINE_ID);
         this.lists.close();
         this._detach(this.listPanel.actor);
 
@@ -65,6 +79,11 @@ class MenuContent {
             this._grid.add_child(row);
         }
         this._grid.visible = tileIds.length > 0;
+    }
+
+    // @process: from TopParser.busiestProcess(), null shows the title alone.
+    setTopProcess(process) {
+        this._cpuProcess.text = TopParser.label(process);
     }
 
     // Called each time the menu opens, when every actor has its style.

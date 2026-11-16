@@ -35,6 +35,7 @@ const PowerProfiles = require('./powerProfiles');
 const PowerProfileModel = require('./powerProfileModel');
 const Settings = imports.ui.settings;
 const LayoutModel = require('./layoutModel');
+const TopProcess = require('./topProcess');
 
 class QuickSettingsApplet extends Applet.Applet {
     constructor(metadata, orientation, panelHeight, instanceId) {
@@ -58,6 +59,8 @@ class QuickSettingsApplet extends Applet.Applet {
                     this._brightness.refresh();
                 if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'nordvpn'))
                     this._nordvpn.refresh();
+                if (this._isShown(Constants.LAYOUT_KEYS.tiles, Constants.CPU_LINE_ID))
+                    this._topProcess.refresh();
             } else {
                 this._content.lists.close();
             }
@@ -80,6 +83,8 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpKeepAwake();
         this._setUpKeyboardLight();
         this._setUpMicMute();
+        this._topProcess = new TopProcess.TopProcess(Subprocess.runCommand,
+            () => this._content.setTopProcess(this._topProcess.process));
         this._setUpHeader();
         this._setUpLayoutSettings(metadata.uuid, instanceId);
     }
@@ -114,6 +119,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._darkStyle.destroy();
         this._touchpad.destroy();
         this._keyboardLight.destroy();
+        this._topProcess.destroy();
         this._content.destroy();
         this.menu.destroy();
     }
@@ -402,7 +408,7 @@ class QuickSettingsApplet extends Applet.Applet {
 
     _declared(key) {
         return {
-            [Constants.LAYOUT_KEYS.tiles]: Constants.TILES,
+            [Constants.LAYOUT_KEYS.tiles]: Constants.TILE_LAYOUT_ITEMS,
             [Constants.LAYOUT_KEYS.sliders]: Constants.SLIDERS,
             [Constants.LAYOUT_KEYS.header]: Constants.HEADER_ITEMS,
             [Constants.LAYOUT_KEYS.panelIcons]: Constants.PANEL_ICON_ITEMS,

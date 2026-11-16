@@ -22,6 +22,7 @@ const [appletDir, fixturesRoot] = ARGV;
 const fixturesDir = `${fixturesRoot}/ddcutil`;
 const nordvpnFixtures = `${fixturesRoot}/nordvpn`;
 const powerFixtures = `${fixturesRoot}/power`;
+const topFixtures = `${fixturesRoot}/top`;
 const SCROLL_DELAY_MS = 30;
 const VOLUME_NORM = 65536;
 let failures = 0;
@@ -847,6 +848,55 @@ function testAirplaneMode() {
     check(`airplane: Bluetooth goes through Adapter1.Powered (${calls})`, `${calls}` === 'Set false');
 }
 
+async function testTopProcess() {
+    const Parser = load('./topParser');
+    const text = readText(`${topFixtures}/top-two-frames.txt`);
+    const busiest = Parser.busiestProcess(text);
+    check(`cpu: the last frame's busiest process, top itself skipped, decimal comma read (${JSON.stringify(busiest)})`,
+        busiest !== null && busiest.name === 'php' && Math.abs(busiest.percent - 211.8) < 1e-9);
+    check(`cpu: label (${Parser.label(busiest)})`, Parser.label(busiest) === 'php 212%');
+    const spaced = text.replace('211,8   0,6   1:03.17 php', '  1,0   0,6   1:03.17 php');
+    check(`cpu: a command name with spaces is kept whole (${Parser.label(Parser.busiestProcess(spaced))})`,
+        Parser.label(Parser.busiestProcess(spaced)) === 'Isolated Web Co 16%');
+    check('cpu: decimal points read too', Parser.busiestProcess(text.replace(/(\d),(\d)/g, '$1.$2')).percent === busiest.percent);
+    check('cpu: no process line, no process', Parser.busiestProcess(text.split('    PID')[0]) === null && Parser.label(null) === '');
+    check('cpu: COMMAND not last (a reordering toprc), no guess',
+        Parser.busiestProcess('  PID COMMAND %CPU\n 1 php 50,0\n') === null);
+
+    const Constants = load('./constants');
+    check('cpu: top runs from an argv array, never a shell',
+        Array.isArray(Constants.CPU_TOP_COMMAND) && Constants.CPU_TOP_COMMAND[0] === 'top'
+        && Constants.CPU_TOP_COMMAND.every(part => typeof part === 'string') && !Constants.CPU_TOP_COMMAND.includes('-c'));
+    const TopProcess = load('./topProcess');
+    const runs = [];
+    let pending = deferred();
+    let changes = 0;
+    const top = new TopProcess.TopProcess(argv => {
+        runs.push(argv);
+        return pending.promise;
+    }, () => changes++);
+    const first = top.refresh();
+    top.refresh();
+    check('cpu: a request while a read runs starts no second top', runs.length === 1 && changes === 0);
+    pending.resolve(text);
+    await first;
+    check('cpu: the read shows the busiest process', changes === 1 && top.process.name === 'php');
+    errors = [];
+    pending = deferred();
+    const failing = top.refresh();
+    pending.reject(new Error('top exited with 1'));
+    await failing;
+    check(`cpu: a failed read is logged and shows the title alone (${errors})`,
+        top.process === null && changes === 2 && errors.length === 1 && errors[0].includes('top exited with 1'));
+    errors = [];
+    pending = deferred();
+    const late = top.refresh();
+    top.destroy();
+    pending.resolve(text);
+    await late;
+    check('cpu: nothing shows after destroy', changes === 2);
+}
+
 function testBatteryModel() {
     const Model = load('./batteryModel');
     const kinds = { battery: 2, unknownState: 0 };
@@ -893,7 +943,7 @@ function testSchemaMatchesDeclarations() {
     const tabs = schema.layout.pages.map(page => schema.layout[page].title);
     check(`settings dialog: four tabs (${tabs})`, `${tabs}` === 'Tiles,Sliders,Header,Panel');
     const groups = [
-        ['tiles', Constants.TILES], ['sliders', Constants.SLIDERS], ['header', Constants.HEADER_ITEMS], ['panel-icons', Constants.PANEL_ICON_ITEMS],
+        ['tiles', Constants.TILE_LAYOUT_ITEMS], ['sliders', Constants.SLIDERS], ['header', Constants.HEADER_ITEMS], ['panel-icons', Constants.PANEL_ICON_ITEMS],
     ];
     for (const [key, declared] of groups) {
         check(`settings dialog: ${key} defaults are every element shown, in declaration order`,
@@ -902,7 +952,7 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute,Keyboard light,Airplane mode,Touchpad'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Night Light,Dark style,Do Not Disturb,Keep awake,Mic mute,Keyboard light,Airplane mode,Touchpad,CPU line'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
         && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume,Battery');
@@ -919,6 +969,17 @@ function testLayoutModel() {
     check(`layout: unknown ids ignored, first duplicate kept, missing appended shown (${Model.visibleIds(messy, declared)})`,
         `${Model.visibleIds(messy, declared)}` === 'c,a,b,d');
     check('layout: an emptied list brings everything back', `${Model.visibleIds([], declared)}` === 'a,b,c,d');
+    // A configuration saved before the extras, reordered and with a tile hidden: it keeps its
+    // own order and the new elements come at the end, shown.
+    const Constants = load('./constants');
+    const before = ['wifi', 'bluetooth', 'nordvpn', 'vpn', 'power-profile', 'night-light', 'dark-style', 'do-not-disturb', 'keep-awake', 'mic-mute'];
+    const saved = before.map(id => ({ show: id !== 'dark-style', id }));
+    check(`layout: a saved Tiles list gets the new tiles and the CPU line appended (${Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS)})`,
+        `${Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS)}`
+        === 'wifi,bluetooth,nordvpn,vpn,power-profile,night-light,do-not-disturb,keep-awake,mic-mute,keyboard-light,airplane-mode,touchpad,cpu-line');
+    check('layout: a saved Sliders list gets Warmth, a saved Panel list gets Battery',
+        `${Model.visibleIds(Model.defaults(Constants.SLIDERS.slice(0, 3)), Constants.SLIDERS)}` === 'output,input,monitors,warmth'
+        && `${Model.visibleIds(Model.defaults(Constants.PANEL_ICON_ITEMS.slice(0, 4)), Constants.PANEL_ICON_ITEMS)}` === 'wifi,bluetooth,vpn,volume,battery');
     check('layout: odd count leaves one tile on the last row',
         JSON.stringify(Model.rows(['a', 'b', 'c'], 2)) === '[["a","b"],["c"]]');
     const all = { wifi: true, bluetooth: false, vpn: false, volume: true };
@@ -1447,6 +1508,7 @@ async function main() {
     await testTouchpad();
     testKeyboardLight();
     testAirplaneMode();
+    await testTopProcess();
     testBatteryModel();
     testMicMute();
     testSchemaMatchesDeclarations();

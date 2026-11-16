@@ -18,6 +18,7 @@ const DateText = require('./dateText');
 const SecondZone = require('./secondZone');
 const DaySummary = require('./daySummary');
 const Appearance = require('./appearance');
+const TickClock = require('./tickClock');
 
 
 class CinnamonCalendarApplet extends Applet.TextApplet {
@@ -38,6 +39,9 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
             this.clock = new CinnamonDesktop.WallClock();
             this.clock_notify_id = 0;
+            // Ticks for the applet's own times (seconds included), whatever the custom format
+            this._tickClock = TickClock.newTickClock();
+            this._tick_notify_id = 0;
 
             // Events
             this.events_manager = new EventView.EventsManager(this.settings, this.desktop_settings);
@@ -434,6 +438,9 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         if (this.clock_notify_id == 0) {
             this.clock_notify_id = this.clock.connect("notify::clock", () => this._clockNotify());
         }
+        if (this._tick_notify_id == 0) {
+            this._tick_notify_id = this._tickClock.connect("notify::clock", () => this._clockNotify());
+        }
 
         /* Populates the calendar so our menu allocation is correct for animation */
         this.events_manager.start_events();
@@ -444,6 +451,10 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         if (this.clock_notify_id > 0) {
             this.clock.disconnect(this.clock_notify_id);
             this.clock_notify_id = 0;
+        }
+        if (this._tick_notify_id > 0) {
+            this._tickClock.disconnect(this._tick_notify_id);
+            this._tick_notify_id = 0;
         }
     }
 

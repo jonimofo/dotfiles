@@ -4,7 +4,15 @@
 // fabricated; no calendar server, setting or desktop is touched.
 // Usage: gjs cinnamon-calendar-test.js <applet folder>
 const GLib = imports.gi.GLib;
+const Gio = imports.gi.Gio;
+const CinnamonDesktop = imports.gi.CinnamonDesktop;
 const ByteArray = imports.byteArray;
+
+// The tick clock test sets the desktop's seconds setting: only on the memory backend.
+if (GLib.getenv('GSETTINGS_BACKEND') !== 'memory') {
+    printerr('Refusing to run: set GSETTINGS_BACKEND=memory');
+    imports.system.exit(2);
+}
 
 const [appletDir] = ARGV;
 let failures = 0;
@@ -40,6 +48,7 @@ const DateText = load('./dateText');
 const SecondZone = load('./secondZone');
 const DayMarker = load('./dayMarker');
 const DayCell = load('./dayCell');
+const TickClock = load('./tickClock');
 const DaySummary = load('./daySummary');
 const Appearance = load('./appearance');
 const EventsHeight = load('./eventsHeight');
@@ -196,6 +205,37 @@ function testDaySummary() {
     checkEqual('header count: zero (hidden)', DaySummary.formatEventCount(0), '0 events');
 }
 
+// Ticks of @clock over @ms of main loop.
+function countTicks(clock, ms) {
+    let ticks = 0;
+    const id = clock.connect('notify::clock', () => ticks++);
+    const loop = GLib.MainLoop.new(null, false);
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+        loop.quit();
+        return GLib.SOURCE_REMOVE;
+    });
+    loop.run();
+    clock.disconnect(id);
+    return ticks;
+}
+
+// Audit M1: with a custom date format without seconds, the panel's clock ticks once a
+// minute; the tick clock must follow the desktop's seconds setting instead.
+function testTickClock() {
+    const desktop = new Gio.Settings({ schema_id: 'org.cinnamon.desktop.interface' });
+    desktop.set_boolean('clock-show-seconds', true);
+    const panelClock = new CinnamonDesktop.WallClock();
+    panelClock.set_format_string('%a %e');
+    const tickClock = TickClock.newTickClock();
+    const panelTicks = countTicks(panelClock, 2500);
+    const secondTicks = countTicks(tickClock, 2500);
+    desktop.set_boolean('clock-show-seconds', false);
+    const minuteTicks = countTicks(TickClock.newTickClock(), 2500);
+    check(`tick clock: a custom format without seconds ticks too rarely (${panelTicks} in 2.5 s)`, panelTicks <= 1);
+    check(`tick clock: every second while seconds are shown (${secondTicks} in 2.5 s)`, secondTicks >= 2);
+    check(`tick clock: not every second without them (${minuteTicks} in 2.5 s)`, minuteTicks <= 1);
+}
+
 function testEventsHeight() {
     const ratio = Constants.EVENTS_MAX_HEIGHT_RATIO;
     checkEqual('events cap: ratio', ratio, 0.7);
@@ -343,6 +383,7 @@ testHeaderTexts();
 testSecondZone();
 testDayMarker();
 testEventsHeight();
+testTickClock();
 testDayCell();
 testAppearance();
 testDaySummary();

@@ -275,21 +275,10 @@ class Calendar {
         let offsetCols = this.show_week_numbers ? 1 : 0;
         this.actor.destroy_all_children();
 
-        // Top line of the calendar '<| September |> <| 2009 |>'
-        this._topBoxMonth = new St.BoxLayout();
-        this._topBoxYear = new St.BoxLayout();
-
-        if (this._headerMonthFirst) {
-            this.actor.add(this._topBoxMonth,
-                       {row: 0, col: 0, col_span: offsetCols + 4});
-            this.actor.add(this._topBoxYear,
-                       {row: 0, col: offsetCols + 4, col_span: 3});
-        } else {
-            this.actor.add(this._topBoxMonth,
-                       {row: 0, col: offsetCols + 3, col_span: 4});
-            this.actor.add(this._topBoxYear,
-                       {row: 0, col: 0, col_span: offsetCols + 3});
-        }
+        // Top line of the calendar '<  September 2009  >', one month per arrow
+        this._topBoxMonth = new St.BoxLayout({ style_class: Constants.STYLE.monthRow });
+        this.actor.add(this._topBoxMonth,
+                       {row: 0, col: 0, col_span: offsetCols + 7});
 
         this.actor.connect('style-changed', Lang.bind(this, this._onStyleChange));
 
@@ -297,23 +286,12 @@ class Calendar {
         this._topBoxMonth.add(back);
         back.connect('clicked', Lang.bind(this, this._onPrevMonthButtonClicked));
 
-        this._monthLabel = new St.Label({style_class: 'calendar-month-label'});
+        this._monthLabel = new St.Label({style_class: Constants.STYLE.monthLabel});
         this._topBoxMonth.add(this._monthLabel, { expand: true, x_fill: false, x_align: St.Align.MIDDLE });
 
         let forward = new St.Button({ style_class: 'calendar-change-month-forward' });
         this._topBoxMonth.add(forward);
         forward.connect('clicked', Lang.bind(this, this._onNextMonthButtonClicked));
-
-        back = new St.Button({style_class: 'calendar-change-month-back'});
-        this._topBoxYear.add(back);
-        back.connect('clicked', Lang.bind(this, this._onPrevYearButtonClicked));
-
-        this._yearLabel = new St.Label({style_class: 'calendar-month-label'});
-        this._topBoxYear.add(this._yearLabel, {expand: true, x_fill: false, x_align: St.Align.MIDDLE});
-
-        forward = new St.Button({style_class: 'calendar-change-month-forward'});
-        this._topBoxYear.add(forward);
-        forward.connect('clicked', Lang.bind(this, this._onNextYearButtonClicked));
 
         // Add weekday labels...
         //
@@ -394,14 +372,6 @@ class Calendar {
         this.queue_set_date(newDate);
     }
 
-    _onPrevYearButtonClicked() {
-        this._applyDateBrowseAction(-1, 0);
-    }
-
-    _onNextYearButtonClicked() {
-        this._applyDateBrowseAction(+1, 0);
-    }
-
     _onPrevMonthButtonClicked() {
         this._applyDateBrowseAction(0, -1);
     }
@@ -413,8 +383,9 @@ class Calendar {
     _update(forceReload) {
         let now = new Date();
 
-        this._monthLabel.text = this._selectedDate.toLocaleFormat('%OB').capitalize();
-        this._yearLabel.text = this._selectedDate.toLocaleFormat('%Y');
+        this._monthLabel.text = DateText.formatMonthHeading(this._selectedDate.toLocaleFormat('%OB'),
+                                                            this._selectedDate.toLocaleFormat('%Y'),
+                                                            this._headerMonthFirst);
 
         // Remove everything but the topBox and the weekday labels
         let children = this.actor.get_children();

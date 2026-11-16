@@ -98,6 +98,8 @@ function testHeaderTexts() {
     checkEqual('header left: mockup B',
         DateText.formatLongDate(DateText.datePartsOf(frenchDate(16), Constants.LONG_DATE_FORMATS)),
         'Lundi 16 novembre 2026');
+    checkEqual('month heading: month first', DateText.formatMonthHeading('novembre', '2026', true), 'Novembre 2026');
+    checkEqual('month heading: year first', DateText.formatMonthHeading('novembre', '2026', false), '2026 novembre');
     checkEqual('city: Europe/Paris', DateText.cityFromZoneId('Europe/Paris'), 'Paris');
     checkEqual('city: three parts and underscores', DateText.cityFromZoneId('America/Argentina/Buenos_Aires'),
         'Buenos Aires');

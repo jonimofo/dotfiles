@@ -32,6 +32,12 @@ function formatLongDate(parts) {
         .join(Constants.WORD_SEPARATOR));
 }
 
+// "Novembre 2026", or "2026 Novembre" where GTK puts the year first.
+function formatMonthHeading(month, year, monthFirst) {
+    const parts = monthFirst ? [month, year] : [year, month];
+    return capitaliseFirst(parts.join(Constants.WORD_SEPARATOR));
+}
+
 function timeFormatFor(use24h, showSeconds) {
     if (use24h)
         return showSeconds ? Constants.TIME_FORMATS.h24Seconds : Constants.TIME_FORMATS.h24;

@@ -49,6 +49,8 @@ const DAY_MARKER_MAX = 1;
 // Class names of stylesheet.css. They replace the stock classes whose sizes the themes set.
 const STYLE = {
     headerTime: 'calendar-bgi-header-time',
+    monthRow: 'calendar-bgi-month-row',
+    monthLabel: 'calendar-bgi-month-label',
     dayHeading: 'calendar-bgi-day-heading',
     day: 'calendar-bgi-day',
     dayMarkerBox: 'calendar-bgi-day-marker-box',

@@ -229,6 +229,27 @@ icon alone.
 - Before this round the tile already showed the name when exactly one device was connected,
   and `Bluetooth` with two or more.
 
+## Bluetooth struck through in airplane mode (seventh review round)
+
+Request: "si airplane mode, peut on avoir icone bluetooth barré au lieu d edisparu ?"
+
+```
+Airplane mode on:
+
+  [wifi off]  [bluetooth off]  vol  [bat] 87%
+
+Airplane mode off, Bluetooth adapter off (unchanged):
+
+  wifi  vol  [bat] 87%
+```
+
+- `BluetoothModel.panelIconName(summary, airplaneActive)`: adapter off and airplane mode on
+  gives `BLUETOOTH_OFF_ICON` (`bluetooth-disabled-symbolic`, the tile's off icon), no name;
+  adapter off otherwise still hides the item.
+- The applet redraws the Bluetooth panel item on every Wi-Fi, Bluetooth and airplane-mode
+  change, so it follows airplane mode ending by a click, by a radio turned on by hand, or by a
+  radio that refused to turn off. The Panel-tab Show flag still hides it.
+
 ## Out of scope
 
 - `Charge 80%` tile: issue #52.

@@ -181,6 +181,7 @@ const BLUEZ_DEVICE_INTERFACE = 'org.bluez.Device1';
 const DBUS_PROPERTIES_INTERFACE = 'org.freedesktop.DBus.Properties';
 const BLUETOOTH_ON_ICON = 'bluetooth-active-symbolic';
 const BLUETOOTH_IDLE_ICON = 'bluetooth-symbolic';
+// The tile while off, and the panel while airplane mode holds the adapter off.
 const BLUETOOTH_OFF_ICON = 'bluetooth-disabled-symbolic';
 const BLUETOOTH_DEVICE_ICON = 'bluetooth-symbolic';
 

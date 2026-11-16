@@ -466,6 +466,15 @@ function testBluetoothModel() {
     const off = Model.summarize([{ path: adapter, powered: false }], devices);
     check('bluetooth: adapter off hides the panel icon', Model.panelIconName(off) === null && Model.tileLabel(off, 'Bluetooth') === 'Bluetooth');
     check('bluetooth: no adapter means unavailable', Model.summarize([], devices).available === false);
+    check('bluetooth: airplane mode with the adapter off shows the struck-through panel icon, no name',
+        Model.panelIconName(off, true) === 'bluetooth-disabled-symbolic' && Model.deviceName(off) === null);
+    check('bluetooth: airplane mode off, adapter off still hides the panel icon', Model.panelIconName(off, false) === null);
+    check('bluetooth: adapter on, the airplane flag changes nothing',
+        Model.panelIconName(on, true) === 'bluetooth-active-symbolic' && Model.panelIconName(idle, true) === 'bluetooth-symbolic');
+    const PanelModel = load('./layoutModel');
+    check('bluetooth: the Panel-tab Show flag still hides the struck-through icon',
+        !PanelModel.panelIconVisibility(['wifi'], { wifi: true, bluetooth: Model.panelIconName(off, true) !== null }).visible.bluetooth
+        && PanelModel.panelIconVisibility(['bluetooth'], { bluetooth: Model.panelIconName(off, true) !== null }).visible.bluetooth);
     check('bluetooth: the panel names the connected device, nothing when idle or off',
         Model.deviceName(on) === 'Speaker' && Model.deviceName(idle) === null && Model.deviceName(off) === null);
     const pair = [

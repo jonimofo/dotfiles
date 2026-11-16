@@ -33,9 +33,10 @@ function tileLabel(summary, defaultLabel) {
     return deviceName(summary) || defaultLabel;
 }
 
-// Panel icon: none while off, the active variant while a device is connected.
-function panelIconName(summary) {
+// Panel icon: the active variant while a device is connected, the idle one while on. While
+// off: the struck-through icon when airplane mode turned it off (@airplaneActive), else none.
+function panelIconName(summary, airplaneActive = false) {
     if (!summary.powered)
-        return null;
+        return airplaneActive ? Constants.BLUETOOTH_OFF_ICON : null;
     return summary.connectedNames.length > 0 ? Constants.BLUETOOTH_ON_ICON : Constants.BLUETOOTH_IDLE_ICON;
 }

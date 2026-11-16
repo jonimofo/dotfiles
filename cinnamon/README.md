@@ -216,7 +216,8 @@ Assumptions about behaviour:
 ## Quick Settings: what it does
 
 One button on the panel. Its icons, left to right: Wi-Fi, VPN (only while a NetworkManager
-VPN or NordVPN is up), Bluetooth (only while the adapter is on), volume, then the battery
+VPN or NordVPN is up), Bluetooth (only while the adapter is on; struck through while airplane
+mode is on), volume, then the battery
 icon and level, like `87%` (only with a battery). The VPN icon is followed by the name of
 the VPN that is up: NordVPN's country, or the NetworkManager profile's name; with both up,
 `<country> + <profile>`. The Bluetooth icon is followed by the connected device's name; with
@@ -247,7 +248,8 @@ the menu:
   - Power profile: shows the active profile. A click goes back to Balanced, or from
     Balanced to the last other profile used (Power Saver the first time).
   - Airplane mode: a click turns Wi-Fi and Bluetooth off; a second click turns back on the
-    ones that were on. Turning one back on by hand ends airplane mode.
+    ones that were on. Turning one back on by hand ends airplane mode. While it is on, the
+    panel shows Wi-Fi and Bluetooth struck through instead of hiding Bluetooth.
   - Keyboard light: a click goes to the next backlight level, back to off after the
     brightest, through UPower. Shows the level: Off, Low, High for a two-level light (On
     for a one-level light, Medium above half on a light with more levels). Follows the

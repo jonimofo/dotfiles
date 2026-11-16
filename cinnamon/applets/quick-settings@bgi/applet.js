@@ -187,7 +187,6 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setChecked(summary.powered);
         tile.setIconName(summary.powered ? Constants.BLUETOOTH_ON_ICON : Constants.BLUETOOTH_OFF_ICON);
         tile.setLabel(BluetoothModel.tileLabel(summary, tile.defaultLabel));
-        this._panelIcons.setBluetooth(BluetoothModel.panelIconName(summary), BluetoothModel.deviceName(summary));
         this._content.lists.refresh('bluetooth');
         this._syncAirplaneMode();
     }
@@ -363,14 +362,25 @@ class QuickSettingsApplet extends Applet.Applet {
         this._syncAirplaneMode();
     }
 
-    // Runs on every Wi-Fi and Bluetooth change, also before airplane mode is set up.
+    // Runs on every Wi-Fi and Bluetooth change, also before airplane mode is set up. The
+    // Bluetooth panel item follows both, so it is drawn here.
     _syncAirplaneMode() {
-        if (!this._airplaneMode)
+        if (this._airplaneMode) {
+            const tile = this._content.tiles['airplane-mode'];
+            this._airplaneMode.sync();
+            tile.setAvailable(this._wifi.available || this._bluetooth.summary.available);
+            tile.setChecked(this._airplaneMode.active);
+        }
+        this._syncBluetoothPanel();
+    }
+
+    // Struck through while airplane mode holds the adapter off, hidden while it is off otherwise.
+    _syncBluetoothPanel() {
+        if (!this._bluetooth)
             return;
-        const tile = this._content.tiles['airplane-mode'];
-        this._airplaneMode.sync();
-        tile.setAvailable(this._wifi.available || this._bluetooth.summary.available);
-        tile.setChecked(this._airplaneMode.active);
+        const summary = this._bluetooth.summary;
+        const airplaneActive = Boolean(this._airplaneMode && this._airplaneMode.active);
+        this._panelIcons.setBluetooth(BluetoothModel.panelIconName(summary, airplaneActive), BluetoothModel.deviceName(summary));
     }
 
     // Same stream as the Microphone row: dimmed while there is no source.

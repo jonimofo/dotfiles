@@ -18,16 +18,18 @@ const TEXT_SCALES = {
 };
 // Space between two event rows, in px.
 const EVENT_GAP = { key: 'event-gap', label: 'Gap between events', default: 8, min: 0, max: 24, step: 1 };
-// Elements shown or hidden. Week numbers and events are stock keys.
+// Elements shown or hidden, in the order of the Shown elements section. Week numbers and
+// events are stock keys.
 const ELEMENT_SWITCHES = {
+    events: { key: 'show-events', label: 'Calendar events', default: true },
     headerClocks: { key: 'show-header-clocks', label: 'Clocks in the header', default: true },
     eventMeta: { key: 'show-event-meta', label: 'Metadata line', default: true },
     eventCountdown: { key: 'show-event-countdown', label: 'Countdown', default: true },
     dayMarker: { key: 'show-day-marker', label: 'Dot under days', default: true },
-    daySummary: { key: 'show-day-summary', label: 'Event count', default: true },
+    // The key keeps its first name (a summary card, later removed): saved settings use it.
+    eventCount: { key: 'show-day-summary', label: 'Event count', default: true },
     todayButton: { key: 'show-today-button', label: 'Today button', default: true },
     weekNumbers: { key: 'show-week-numbers', label: 'Week numbers', default: false },
-    events: { key: 'show-events', label: 'Calendar events', default: true },
 };
 // Configure dialog tabs, in order, with their section titles.
 const SETTINGS_PAGES = [
@@ -79,13 +81,24 @@ const SUMMARY_SEPARATOR = ' | ';
 const EVENTS_MAX_HEIGHT_RATIO = 0.7;
 
 // In the middle of the header band: the selected day's number of events.
-const SUMMARY_COUNT_ONE = 'event';
-const SUMMARY_COUNT_MANY = 'events';
+const EVENT_COUNT_ONE = 'event';
+const EVENT_COUNT_MANY = 'events';
+
+// Desktop settings the applet reads (org.cinnamon.desktop.interface).
+const DESKTOP_24H_KEY = 'clock-use-24h';
+const DESKTOP_SECONDS_KEY = 'clock-show-seconds';
+
+// A changed zone id is resolved this long after the last keystroke of the settings field, so
+// a half-typed id is not logged as unknown.
+const ZONE_ID_DEBOUNCE_MS = 500;
 
 // Every phrase the applet shows, in English whatever the locale: the stock applet's
 // gettext strings are replaced by these. %d stands for a number.
 const TEXT = {
     today: 'Today',
+    backToToday: 'Back to today',
+    previousMonth: 'Previous month',
+    nextMonth: 'Next month',
     noEvents: 'No Events',
     allDay: 'All day',
     inProgress: 'In progress',

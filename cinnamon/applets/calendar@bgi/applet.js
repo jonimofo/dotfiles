@@ -12,11 +12,10 @@ const Calendar = require('./calendar');
 const EventView = require('./eventView');
 const CinnamonDesktop = imports.gi.CinnamonDesktop;
 const Main = imports.ui.main;
-const Separator = imports.ui.separator;
 const Constants = require('./constants');
 const DateText = require('./dateText');
 const SecondZone = require('./secondZone');
-const DaySummary = require('./daySummary');
+const EventCount = require('./eventCount');
 const Appearance = require('./appearance');
 const TickClock = require('./tickClock');
 
@@ -45,9 +44,12 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
             // Events
             this.events_manager = new EventView.EventsManager(this.settings, this.desktop_settings);
-            this.events_manager.connect("events-manager-ready", this._events_manager_ready.bind(this));
-            this.events_manager.connect("has-calendars-changed", this._has_calendars_changed.bind(this));
-            this.events_manager.connect("events-updated", () => this._updateDaySummary());
+            this._eventsManagerIds = [
+                this.events_manager.connect("events-manager-ready", this._events_manager_ready.bind(this)),
+                this.events_manager.connect("has-calendars-changed", this._has_calendars_changed.bind(this)),
+                this.events_manager.connect("events-updated", () => this._updateHeaderCount())
+            ];
+            this._zoneIdTimeoutId = 0;
 
             // One table: the header band across both columns, then the events and calendar
             // columns.
@@ -109,6 +111,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.go_home_button = new St.BoxLayout(
                 {
                     style_class: "calendar-today-home-button",
+                    accessible_name: Constants.TEXT.backToToday,
                     y_align: Clutter.ActorAlign.CENTER,
                     reactive: true,
                     vertical: false
@@ -169,6 +172,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                     accessible_name: Constants.TEXT.today,
                     x_expand: true,
                     reactive: true,
+                    can_focus: true,
                     track_hover: true
                 }
             );
@@ -202,37 +206,40 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.settings.bind("custom-tooltip-format", "custom_tooltip_format", this._onSettingsChanged);
             this._secondZoneResolver = new SecondZone.SecondZone(message => global.logError(message));
             this._secondZone = null;
-            this.settings.bind(Constants.SHOW_SECOND_ZONE_KEY, "show_second_zone", this._onSettingsChanged);
-            this.settings.bind(Constants.SECOND_ZONE_ID_KEY, "second_zone_id", this._onSettingsChanged);
-            this.settings.bind(Constants.SECOND_ZONE_LABEL_KEY, "second_zone_label", this._onSettingsChanged);
-            // Appearance tab: applied live by _applyAppearance(); the day marker switch is
-            // read by the calendar grid itself.
-            this.settings.bind(Constants.TEXT_SCALES.events.key, "events_text_scale", this._onSettingsChanged);
-            this.settings.bind(Constants.TEXT_SCALES.days.key, "days_text_scale", this._onSettingsChanged);
-            this.settings.bind(Constants.TEXT_SCALES.header.key, "header_text_scale", this._onSettingsChanged);
-            this.settings.bind(Constants.EVENT_GAP.key, "event_gap", this._onSettingsChanged);
-            this.settings.bind(Constants.ELEMENT_SWITCHES.headerClocks.key, "show_header_clocks", this._onSettingsChanged);
-            this.settings.bind(Constants.ELEMENT_SWITCHES.eventMeta.key, "show_event_meta", this._onSettingsChanged);
-            this.settings.bind(Constants.ELEMENT_SWITCHES.eventCountdown.key, "show_event_countdown", this._onSettingsChanged);
-            this.settings.bind(Constants.ELEMENT_SWITCHES.daySummary.key, "show_day_summary", this._onSettingsChanged);
-            this.settings.bind(Constants.ELEMENT_SWITCHES.todayButton.key, "show_today_button", this._onSettingsChanged);
+            // Second zone and Appearance tab: a light refresh, no forced fetch of the events;
+            // the zone id waits for the end of typing. The day marker switch is read by the
+            // calendar grid itself.
+            this.settings.bind(Constants.SHOW_SECOND_ZONE_KEY, "show_second_zone", this._onSecondZoneChanged);
+            this.settings.bind(Constants.SECOND_ZONE_ID_KEY, "second_zone_id", this._onZoneIdChanged);
+            this.settings.bind(Constants.SECOND_ZONE_LABEL_KEY, "second_zone_label", this._onDisplayChanged);
+            this.settings.bind(Constants.TEXT_SCALES.events.key, "events_text_scale", this._onDisplayChanged);
+            this.settings.bind(Constants.TEXT_SCALES.days.key, "days_text_scale", this._onDisplayChanged);
+            this.settings.bind(Constants.TEXT_SCALES.header.key, "header_text_scale", this._onDisplayChanged);
+            this.settings.bind(Constants.EVENT_GAP.key, "event_gap", this._onDisplayChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.headerClocks.key, "show_header_clocks", this._onDisplayChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.eventMeta.key, "show_event_meta", this._onDisplayChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.eventCountdown.key, "show_event_countdown", this._onDisplayChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.eventCount.key, "show_event_count", this._onDisplayChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.todayButton.key, "show_today_button", this._onDisplayChanged);
 
             /* FIXME: Add gobject properties to the WallClock class to allow easier access from
              * its clients, and possibly a separate signal to notify of updates to these properties
              * (though GObject "changed" would be sufficient.) */
-            this.desktop_settings.connect("changed::clock-use-24h", Lang.bind(this, function (key) {
-                this._onSettingsChanged();
-            }));
-            this.desktop_settings.connect("changed::clock-show-seconds", Lang.bind(this, function (key) {
-                this._onSettingsChanged();
-            }));
+            this._desktopSettingsIds = [
+                this.desktop_settings.connect("changed::" + Constants.DESKTOP_24H_KEY, Lang.bind(this, function (key) {
+                    this._onSettingsChanged();
+                })),
+                this.desktop_settings.connect("changed::" + Constants.DESKTOP_SECONDS_KEY, Lang.bind(this, function (key) {
+                    this._onSettingsChanged();
+                }))
+            ];
 
             // https://bugzilla.gnome.org/show_bug.cgi?id=655129
             this._upClient = new UPowerGlib.Client();
             try {
-                this._upClient.connect('notify-resume', Lang.bind(this, this._updateClockAndDate));
+                this._upClientId = this._upClient.connect('notify-resume', Lang.bind(this, this._updateClockAndDate));
             } catch (e) {
-                this._upClient.connect('notify::resume', Lang.bind(this, this._updateClockAndDate));
+                this._upClientId = this._upClient.connect('notify::resume', Lang.bind(this, this._updateClockAndDate));
             }
         }
         catch (e) {
@@ -271,7 +278,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     }
 
     _updateFormatString() {
-        let in_vertical_panel = (this.orientation == St.Side.LEFT || this.orientation == St.Side.RIGHT);
+        let in_vertical_panel = this._inVerticalPanel();
 
         if (this.use_custom_format) {
             if (!this.clock.set_format_string(this.custom_format)) {
@@ -279,8 +286,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 this.clock.set_format_string("~CLOCK FORMAT ERROR~ %l:%M %p");
             }
         } else if (in_vertical_panel) {
-            let use_24h = this.desktop_settings.get_boolean("clock-use-24h");
-            let show_seconds = this.desktop_settings.get_boolean("clock-show-seconds");
+            let use_24h = this.desktop_settings.get_boolean(Constants.DESKTOP_24H_KEY);
+            let show_seconds = this.desktop_settings.get_boolean(Constants.DESKTOP_SECONDS_KEY);
 
             if (use_24h) {
                 if (show_seconds) {
@@ -307,7 +314,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
     _has_calendars_changed(em) {
         this.event_list.actor.visible = this.events_manager.is_active();
-        this._updateDaySummary();
+        this._updateHeaderCount();
     }
 
     // Text sizes, gap and element switches of the Appearance tab. The event list rebuilds its
@@ -318,6 +325,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this._calendar.actor.style = Appearance.percentFontStyle(this.days_text_scale, Constants.TEXT_SCALES.days);
         this._header.style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);
         this.go_home_button.visible = this.show_header_clocks;
+        this._todayButton.visible = this.show_today_button;
     }
 
     // @divided: a thin line before it, between the two clocks.
@@ -348,16 +356,35 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     }
 
     // The header's event count for the selected day, hidden without any event.
-    _updateDaySummary() {
+    _updateHeaderCount() {
         let selected = this._calendar.getSelectedDate();
         let count = this.events_manager.is_active() ? this.events_manager.get_events_for_date(selected).length : 0;
 
-        this._headerCount.visible = this.show_day_summary && count > 0;
-        this._headerCount.set_text(DaySummary.formatEventCount(count));
+        this._headerCount.visible = EventCount.headerCountVisible(this.show_event_count, count);
+        this._headerCount.set_text(EventCount.formatEventCount(count));
     }
 
-    _updateTodayButton() {
-        this._todayButton.visible = this.show_today_button;
+    // Second zone switch and label, Appearance tab: no forced fetch of the events.
+    _onDisplayChanged() {
+        this._applyAppearance();
+        this._updateClockAndDate();
+    }
+
+    _onSecondZoneChanged() {
+        this._updateSecondZone();
+        this._onDisplayChanged();
+    }
+
+    // The zone id field saves on each keystroke: resolve it once typing stops.
+    _onZoneIdChanged() {
+        if (this._zoneIdTimeoutId > 0) {
+            GLib.source_remove(this._zoneIdTimeoutId);
+        }
+        this._zoneIdTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Constants.ZONE_ID_DEBOUNCE_MS, () => {
+            this._zoneIdTimeoutId = 0;
+            this._onSecondZoneChanged();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _updateSecondZone() {
@@ -369,8 +396,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     }
 
     _timeFormat() {
-        return DateText.timeFormatFor(this.desktop_settings.get_boolean("clock-use-24h"),
-                                      this.desktop_settings.get_boolean("clock-show-seconds"));
+        return DateText.timeFormatFor(this.desktop_settings.get_boolean(Constants.DESKTOP_24H_KEY),
+                                      this.desktop_settings.get_boolean(Constants.DESKTOP_SECONDS_KEY));
     }
 
     // {label, time} of the second zone, or null when it is hidden.
@@ -402,7 +429,6 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         let now = GLib.DateTime.new_now_local();
         let label_string = this._panelText(now);
 
-        this.go_home_button.reactive = !this._calendar.todaySelected();
         if (this._calendar.todaySelected()) {
             this.go_home_button.reactive = false;
             this.go_home_button.set_style_class_name("calendar-today-home-button");
@@ -428,8 +454,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this.set_applet_tooltip(dateFormattedTooltip);
 
         this.events_manager.select_date(this._calendar.getSelectedDate());
-        this._updateDaySummary();
-        this._updateTodayButton();
+        this._updateHeaderCount();
     }
 
     on_applet_added_to_panel() {
@@ -447,7 +472,16 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         this._resetCalendar();
     }
 
+    // Everything this instance connected goes, so an applet added again starts clean.
     on_applet_removed_from_panel() {
+        if (this._zoneIdTimeoutId > 0) {
+            GLib.source_remove(this._zoneIdTimeoutId);
+            this._zoneIdTimeoutId = 0;
+        }
+        this._eventsManagerIds.forEach(id => this.events_manager.disconnect(id));
+        this._desktopSettingsIds.forEach(id => this.desktop_settings.disconnect(id));
+        this._upClient.disconnect(this._upClientId);
+        this.settings.finalize();
         if (this.clock_notify_id > 0) {
             this.clock.disconnect(this.clock_notify_id);
             this.clock_notify_id = 0;
@@ -456,6 +490,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this._tickClock.disconnect(this._tick_notify_id);
             this._tick_notify_id = 0;
         }
+        this.menu.destroy();
     }
 
     _initContextMenu() {

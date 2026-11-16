@@ -51,7 +51,7 @@ const DayMarker = load('./dayMarker');
 const DayCell = load('./dayCell');
 const TickClock = load('./tickClock');
 const Countdown = load('./countdown');
-const DaySummary = load('./daySummary');
+const EventCount = load('./eventCount');
 const Appearance = load('./appearance');
 const EventsHeight = load('./eventsHeight');
 
@@ -201,10 +201,12 @@ function testDayCell() {
     checkEqual('day: markers shown, room under the digit', style({ marked: true }), `${S.day} ${S.dayMarked}`);
 }
 
-function testDaySummary() {
-    checkEqual('header count: one', DaySummary.formatEventCount(1), '1 event');
-    checkEqual('header count: several', DaySummary.formatEventCount(16), '16 events');
-    checkEqual('header count: zero (hidden)', DaySummary.formatEventCount(0), '0 events');
+function testEventCount() {
+    checkEqual('header count: one', EventCount.formatEventCount(1), '1 event');
+    checkEqual('header count: several', EventCount.formatEventCount(16), '16 events');
+    checkEqual('header count: hidden at zero', EventCount.headerCountVisible(true, 0), false);
+    checkEqual('header count: shown with events', EventCount.headerCountVisible(true, 3), true);
+    checkEqual('header count: hidden by its switch', EventCount.headerCountVisible(false, 3), false);
 }
 
 // Ticks of @clock over @ms of main loop.
@@ -439,7 +441,7 @@ testWording();
 testTickClock();
 testDayCell();
 testAppearance();
-testDaySummary();
+testEventCount();
 testSchema();
 testStylesheet();
 

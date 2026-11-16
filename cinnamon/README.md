@@ -215,9 +215,12 @@ Assumptions about behaviour:
 
 ## Quick Settings: what it does
 
-One button on the panel. Its icons, left to right: Wi-Fi, Bluetooth (only while the adapter
-is on), VPN (only while a NetworkManager VPN or NordVPN is up), volume, then the battery
-level as text, like `87%` (only with a battery). A click opens the menu:
+One button on the panel. Its icons, left to right: Wi-Fi, VPN (only while a NetworkManager
+VPN or NordVPN is up), Bluetooth (only while the adapter is on), volume, then the battery
+level as text, like `87%` (only with a battery). The VPN icon is followed by the name of
+the VPN that is up: NordVPN's country, or the NetworkManager profile's name; with both up,
+`<country> + <profile>`. A name longer than 16 characters is cut with `…`. A click opens
+the menu:
 
 - Header: battery level and charging state on the left (hidden without a battery), then
   four round buttons. Screenshot starts `flameshot gui`, Settings opens System Settings,
@@ -227,19 +230,21 @@ level as text, like `87%` (only with a battery). A click opens the menu:
   Microphone follow the handle live, like the stock sound applet. Brightness sets every
   external monitor that answers DDC/CI to the same value when the handle is released, or
   the laptop panel when no such monitor is connected. Warmth is the Night Light
-  temperature, 4700 K on the left to 1700 K on the right in steps of 100 K (the range of
-  Cinnamon's Night Light page), shown as `3400 K`; the switch at its right end turns Night
-  Light on and off, and while it is off the slider is dimmed.
+  temperature, 6500 K (no tint) on the left to 1000 K (deepest red) on the right in steps
+  of 100 K, wider than Cinnamon's Night Light page (1700 K to 4700 K), shown as `3400 K`;
+  a value set elsewhere outside that range is shown as is, the handle at the nearest end.
+  The switch at its right end turns Night Light on and off; while it is off the slider is
+  dimmed.
 - Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
   - Wi-Fi: wireless on or off. Shows the network in use.
   - Bluetooth: adapter on or off. Shows the device when exactly one is connected.
   - VPN: the active NetworkManager VPN or WireGuard profile, else the last used one. Shows
     its name.
   - NordVPN: connect (quick connect) or disconnect. Shows the country while connected.
-  - Airplane mode: a click turns Wi-Fi and Bluetooth off; a second click turns back on the
-    ones that were on. Turning one back on by hand ends airplane mode.
   - Power profile: shows the active profile. A click goes back to Balanced, or from
     Balanced to the last other profile used (Power Saver the first time).
+  - Airplane mode: a click turns Wi-Fi and Bluetooth off; a second click turns back on the
+    ones that were on. Turning one back on by hand ends airplane mode.
   - Keyboard light: a click goes to the next backlight level, back to off after the
     brightest, through UPower. Shows the level: Off, Low, High for a two-level light (On
     for a one-level light, Medium above half on a light with more levels). Follows the

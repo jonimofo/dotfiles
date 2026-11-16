@@ -5,6 +5,10 @@
     spacing: 6px;
 }
 
+.quick-settings-panel-vpn {
+    spacing: 4px;
+}
+
 .quick-settings-content {
     width: 418px;
     padding: 8px;

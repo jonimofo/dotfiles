@@ -27,14 +27,21 @@ const PANEL_ICONS = {
     vpn: 'network-vpn-symbolic',
     volume: 'audio-volume-high-symbolic',
 };
+// The VPN name after its panel icon: NordVPN's country, the NetworkManager profile's name,
+// both when both are up (NordVPN first). Each name longer than the limit is cut, ending in
+// the ellipsis.
+const PANEL_VPN_NAME_MAX = 16;
+const PANEL_VPN_NAME_ELLIPSIS = '…';
+const PANEL_VPN_NAME_SEPARATOR = ' + ';
 // Shown alone when every panel icon is hidden or absent, so the button never disappears.
 const PANEL_FALLBACK_ICON = 'preferences-system-symbolic';
 
 // Panel icons, left to right: this array is the only place that sets their order.
 const PANEL_ICON_ITEMS = [
     { id: 'wifi', name: 'Wi-Fi' },
-    { id: 'bluetooth', name: 'Bluetooth' },
+    // The VPN icon, then the name of the VPN that is up.
     { id: 'vpn', name: 'VPN' },
+    { id: 'bluetooth', name: 'Bluetooth' },
     { id: 'volume', name: 'Volume' },
     // The battery level as text ("87%"), the header's figure.
     { id: 'battery', name: 'Battery' },
@@ -70,8 +77,8 @@ const TILES = [
     { id: 'bluetooth', label: 'Bluetooth', icon: 'bluetooth-active-symbolic', name: 'Bluetooth', hasMenu: true },
     { id: 'vpn', label: 'VPN', name: 'VPN', icon: 'network-vpn-symbolic', hasMenu: true },
     { id: 'nordvpn', label: 'NordVPN', name: 'NordVPN', icon: 'globe-symbolic', hasMenu: true },
-    { id: 'airplane-mode', label: 'Airplane mode', name: 'Airplane mode', icon: 'airplane-mode-symbolic', hasMenu: false },
     { id: 'power-profile', label: 'Balanced', name: 'Power profile', icon: 'power-profile-balanced-symbolic', hasMenu: true },
+    { id: 'airplane-mode', label: 'Airplane mode', name: 'Airplane mode', icon: 'airplane-mode-symbolic', hasMenu: false },
     { id: 'keyboard-light', label: 'Keyboard', name: 'Keyboard light', icon: 'keyboard-brightness-symbolic', hasMenu: false },
     { id: 'dark-style', label: 'Dark style', name: 'Dark style', icon: 'dark-mode-symbolic', hasMenu: false },
     { id: 'do-not-disturb', label: 'Do Not Disturb', name: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
@@ -215,10 +222,11 @@ const POWER_SETTINGS_COMMAND = ['cinnamon-settings', 'power'];
 const NIGHT_LIGHT_SCHEMA = 'org.cinnamon.settings-daemon.plugins.color';
 const NIGHT_LIGHT_KEY = 'night-light-enabled';
 const NIGHT_LIGHT_TEMPERATURE_KEY = 'night-light-temperature';
-// The Warmth row: the range and step of Cinnamon's Night Light page. Warmer is fewer kelvin,
-// so the slider runs from WARMTH_MAX_KELVIN on the left to WARMTH_MIN_KELVIN on the right.
-const WARMTH_MIN_KELVIN = 1700;
-const WARMTH_MAX_KELVIN = 4700;
+// The Warmth row, wider than Cinnamon's Night Light page (1700 K to 4700 K): from 6500 K, no
+// tint, to 1000 K, the deepest red. Warmer is fewer kelvin, so the slider runs from
+// WARMTH_MAX_KELVIN on the left to WARMTH_MIN_KELVIN on the right.
+const WARMTH_MIN_KELVIN = 1000;
+const WARMTH_MAX_KELVIN = 6500;
 const WARMTH_STEP_KELVIN = 100;
 const WARMTH_UNIT_SUFFIX = ' K';
 

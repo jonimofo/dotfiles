@@ -24,6 +24,7 @@ const VolumeMapping = require('./volumeMapping');
 const Bluetooth = require('./bluetooth');
 const BluetoothModel = require('./bluetoothModel');
 const VpnState = require('./vpnState');
+const VpnModel = require('./vpnModel');
 const Nordvpn = require('./nordvpn');
 const ListSpecs = require('./listSpecs');
 const Battery = require('./battery');
@@ -239,9 +240,11 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     _syncVpnPanelIcon() {
-        const vpnUp = Boolean(this._vpn && this._vpn.summary.active);
+        const active = this._vpn ? this._vpn.summary.active : null;
+        const country = this._nordvpn ? this._nordvpn.connectedCountry : null;
         const nordvpnUp = Boolean(this._nordvpn && this._nordvpn.status.connected);
-        this._panelIcons.setVpnVisible(vpnUp || nordvpnUp);
+        this._panelIcons.setVpn(Boolean(active) || nordvpnUp,
+            VpnModel.panelName(country, active ? active.id : null));
     }
 
     _openSettings(argv) {

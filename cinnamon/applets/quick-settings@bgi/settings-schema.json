@@ -83,8 +83,8 @@
                     "Bluetooth": "bluetooth",
                     "VPN": "vpn",
                     "NordVPN": "nordvpn",
-                    "Airplane mode": "airplane-mode",
                     "Power profile": "power-profile",
+                    "Airplane mode": "airplane-mode",
                     "Keyboard light": "keyboard-light",
                     "Dark style": "dark-style",
                     "Do Not Disturb": "do-not-disturb",
@@ -113,11 +113,11 @@
             },
             {
                 "show": true,
-                "id": "airplane-mode"
+                "id": "power-profile"
             },
             {
                 "show": true,
-                "id": "power-profile"
+                "id": "airplane-mode"
             },
             {
                 "show": true,
@@ -248,8 +248,8 @@
                 "type": "string",
                 "options": {
                     "Wi-Fi": "wifi",
-                    "Bluetooth": "bluetooth",
                     "VPN": "vpn",
+                    "Bluetooth": "bluetooth",
                     "Volume": "volume",
                     "Battery": "battery"
                 }
@@ -262,11 +262,11 @@
             },
             {
                 "show": true,
-                "id": "bluetooth"
+                "id": "vpn"
             },
             {
                 "show": true,
-                "id": "vpn"
+                "id": "bluetooth"
             },
             {
                 "show": true,

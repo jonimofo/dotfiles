@@ -10,11 +10,15 @@ const LayoutModel = require('./layoutModel');
 const PANEL_ICON_STYLE_CLASS = 'system-status-icon';
 const PANEL_LABEL_STYLE_CLASS = 'applet-label';
 
-// The status items shown on the panel: Wi-Fi, Bluetooth, VPN, volume icons and the battery
-// level, in the order and with the selection of applyLayout(). Bluetooth shows only while
+// The status items shown on the panel: Wi-Fi, VPN (icon and name), Bluetooth, volume icons
+// and the battery level, in the order and with the selection of applyLayout(). Bluetooth shows only while
 // the adapter is on, VPN only while a VPN is up, the battery only when there is one: the
 // settings can hide an item, never force one on. With nothing left, one fallback icon keeps
 // the button on the panel.
+function panelLabel() {
+    return new St.Label({ style_class: PANEL_LABEL_STYLE_CLASS, y_align: Clutter.ActorAlign.CENTER });
+}
+
 class PanelIcons {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-panel-icons' });
@@ -24,8 +28,12 @@ class PanelIcons {
             vpn: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.vpn, PANEL_ICON_STYLE_CLASS),
             volume: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.volume, PANEL_ICON_STYLE_CLASS),
         };
-        this._batteryLabel = new St.Label({ style_class: PANEL_LABEL_STYLE_CLASS, y_align: Clutter.ActorAlign.CENTER });
-        this._items = { ...this._icons, battery: this._batteryLabel };
+        this._batteryLabel = panelLabel();
+        this._vpnLabel = panelLabel();
+        const vpn = new St.BoxLayout({ style_class: 'quick-settings-panel-vpn' });
+        vpn.add_child(this._icons.vpn);
+        vpn.add_child(this._vpnLabel);
+        this._items = { ...this._icons, vpn, battery: this._batteryLabel };
         // Whether the state wants each item shown.
         this._wanted = { wifi: true, bluetooth: false, vpn: false, volume: true, battery: false };
         this._allowed = Object.keys(this._items);
@@ -62,8 +70,11 @@ class PanelIcons {
         this._sync();
     }
 
-    setVpnVisible(visible) {
-        this._wanted.vpn = visible;
+    // @up: a VPN is up; @name: from VpnModel.panelName(), null leaves the icon alone.
+    setVpn(up, name) {
+        this._wanted.vpn = up;
+        this._vpnLabel.text = name || '';
+        this._vpnLabel.visible = Boolean(name);
         this._sync();
     }
 

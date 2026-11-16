@@ -474,6 +474,14 @@ function testVpnModel() {
     check('vpn: the active profile names the tile and is marked',
         up.label === 'VPN Office' && up.target.id === 'Office' && up.profiles.find(p => p.id === 'Office').active);
     check('vpn: no profile means unavailable', Model.summarize([wifi], []).available === false);
+    check('vpn panel: no VPN up, no name', Model.panelName(null, null) === null);
+    check('vpn panel: NordVPN shows its country', Model.panelName('France', null) === 'France');
+    check('vpn panel: a NetworkManager VPN shows its profile name', Model.panelName(null, 'Office') === 'Office');
+    check(`vpn panel: both up, NordVPN first (${Model.panelName('France', 'Office')})`, Model.panelName('France', 'Office') === 'France + Office');
+    const long = Model.panelName(null, 'Head Office Datacenter');
+    check(`vpn panel: a name over 16 characters is cut with an ellipsis (${long})`,
+        long === 'Head Office Dat…' && [...long].length === 16 && Model.panelName('Bosnia_and_Herzeg', null) === 'Bosnia_and_Herz…');
+    check('vpn panel: a name of exactly 16 characters is kept', Model.panelName(null, 'Sixteen chars ok') === 'Sixteen chars ok');
 }
 
 function testNordvpnParser() {
@@ -628,14 +636,14 @@ async function testBooleanSettings() {
 
 async function testNightLight() {
     const Model = load('./warmthModel');
-    check('warmth: 4700 K is the left end, 1700 K the right end (warmer to the right)',
-        Model.kelvinToFraction(4700) === 0 && Model.kelvinToFraction(1700) === 1);
-    check(`warmth: 3400 K sits at ${Model.kelvinToFraction(3400).toFixed(3)}`, Math.abs(Model.kelvinToFraction(3400) - 13 / 30) < 1e-9);
-    check('warmth: out-of-range values are clamped', Model.kelvinToFraction(6500) === 0 && Model.kelvinToFraction(1000) === 1);
-    check(`warmth: positions round to the 100 K step (${Model.fractionToKelvin(0.43)})`,
-        Model.fractionToKelvin(0.43) === 3400 && Model.fractionToKelvin(0) === 4700 && Model.fractionToKelvin(1) === 1700);
+    check('warmth: 6500 K is the left end, 1000 K the right end (warmer to the right)',
+        Model.kelvinToFraction(6500) === 0 && Model.kelvinToFraction(1000) === 1);
+    check(`warmth: 3700 K sits at ${Model.kelvinToFraction(3700).toFixed(3)}`, Math.abs(Model.kelvinToFraction(3700) - 28 / 55) < 1e-9);
+    check('warmth: out-of-range values are clamped on the slider', Model.kelvinToFraction(9000) === 0 && Model.kelvinToFraction(500) === 1);
+    check(`warmth: positions round to the 100 K step (${Model.fractionToKelvin(0.5)})`,
+        Model.fractionToKelvin(0.5) === 3800 && Model.fractionToKelvin(0) === 6500 && Model.fractionToKelvin(1) === 1000);
     check('warmth: every step survives a round trip',
-        [1700, 2500, 3400, 4700].every(k => Model.fractionToKelvin(Model.kelvinToFraction(k)) === k));
+        [1000, 1700, 3400, 3700, 4700, 6500].every(k => Model.fractionToKelvin(Model.kelvinToFraction(k)) === k));
     check('warmth: label', Model.label(3400) === '3400 K');
 
     const NightLight = load('./nightLight');
@@ -657,6 +665,15 @@ async function testNightLight() {
     color.set_boolean('night-light-enabled', false);
     await wait(0);
     check(`night light: follows a change made elsewhere (${changes} changes)`, !night.enabled && changes > seen);
+    // A stored value outside the slider's range is shown, never rewritten by reading it.
+    color.set_uint('night-light-temperature', 9000);
+    await wait(0);
+    const beforeRead = changes;
+    const outside = night.temperature;
+    await wait(0);
+    check(`night light: a stored 9000 K reads as is, slider at its left end, no write (${outside})`,
+        outside === 9000 && Model.kelvinToFraction(outside) === 0 && Model.label(outside) === '9000 K'
+        && color.get_uint('night-light-temperature') === 9000 && changes === beforeRead);
     night.destroy();
 }
 
@@ -929,10 +946,10 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Airplane mode,Power profile,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,CPU line'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Airplane mode,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,CPU line'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
-        && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,Volume,Battery');
+        && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,VPN,Bluetooth,Volume,Battery');
 }
 
 function testLayoutModel() {
@@ -968,14 +985,14 @@ function testLayoutModel() {
     ];
     const ownerTiles = Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS);
     check(`layout: the owner's saved Tiles list drops night-light and places the new tiles by the defaults (${ownerTiles})`,
-        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,airplane-mode,power-profile,keyboard-light,cpu-line');
+        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,cpu-line');
     const ownerRows = Model.rows(ownerTiles.filter(id => id !== Constants.CPU_LINE_ID), Constants.TILES_PER_ROW);
     check(`layout: the owner's tile rows (${JSON.stringify(ownerRows)})`,
-        JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["airplane-mode","power-profile"],["keyboard-light"]]');
+        JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["power-profile","airplane-mode"],["keyboard-light"]]');
     check('layout: the owner\'s hidden tiles stay hidden',
         Model.normalize(saved, Constants.TILE_LAYOUT_ITEMS).filter(row => !row.show).map(row => row.id).join() === 'dark-style,do-not-disturb,keep-awake,mic-mute');
     check(`layout: default tile order (${Constants.TILES.map(item => item.id)})`,
-        `${Constants.TILES.map(item => item.id)}` === 'wifi,bluetooth,vpn,nordvpn,airplane-mode,power-profile,keyboard-light,dark-style,do-not-disturb,keep-awake,mic-mute');
+        `${Constants.TILES.map(item => item.id)}` === 'wifi,bluetooth,vpn,nordvpn,power-profile,airplane-mode,keyboard-light,dark-style,do-not-disturb,keep-awake,mic-mute');
     check('layout: no touchpad tile is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'touchpad'));
     const defaultRows = Model.rows(Constants.TILES.map(item => item.id), Constants.TILES_PER_ROW);
     check(`layout: in the default order VPN and NordVPN share one row (${JSON.stringify(defaultRows[1])})`,
@@ -984,7 +1001,12 @@ function testLayoutModel() {
     check('layout: no night-light tile is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'night-light'));
     check('layout: a saved Sliders list gets Warmth after Brightness, a saved Panel list gets Battery after the icons',
         `${Model.visibleIds(Model.defaults(Constants.SLIDERS.slice(0, 3)), Constants.SLIDERS)}` === 'output,input,monitors,warmth'
-        && `${Model.visibleIds(Model.defaults(Constants.PANEL_ICON_ITEMS.slice(0, 4)).reverse(), Constants.PANEL_ICON_ITEMS)}` === 'volume,vpn,bluetooth,wifi,battery');
+        && `${Model.visibleIds(Model.defaults(Constants.PANEL_ICON_ITEMS.slice(0, 4)).reverse(), Constants.PANEL_ICON_ITEMS)}` === 'volume,bluetooth,vpn,wifi,battery');
+    check(`panel: default order (${Constants.PANEL_ICON_ITEMS.map(item => item.id)})`,
+        `${Constants.PANEL_ICON_ITEMS.map(item => item.id)}` === 'wifi,vpn,bluetooth,volume,battery');
+    const savedPanel = ['wifi', 'bluetooth', 'vpn', 'volume'].map(id => ({ show: true, id }));
+    check(`panel: the owner's saved Panel list keeps its order, Battery appended (${Model.visibleIds(savedPanel, Constants.PANEL_ICON_ITEMS)})`,
+        `${Model.visibleIds(savedPanel, Constants.PANEL_ICON_ITEMS)}` === 'wifi,bluetooth,vpn,volume,battery');
     check('layout: a saved Header list is kept as stored',
         `${Model.visibleIds(Model.defaults(Constants.HEADER_ITEMS).reverse(), Constants.HEADER_ITEMS)}` === 'power,lock,settings,screenshot,battery');
     check('layout: odd count leaves one tile on the last row',

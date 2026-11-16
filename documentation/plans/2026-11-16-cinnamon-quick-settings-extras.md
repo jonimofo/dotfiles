@@ -53,7 +53,8 @@ Owner's answers:
 ## Decisions
 
 - Warmth: `org.cinnamon.settings-daemon.plugins.color`, `night-light-temperature` (uint32)
-  and `night-light-enabled`. Same range as Cinnamon's Night Light page: 1700 K to 4700 K,
+  and `night-light-enabled`. Same range as Cinnamon's Night Light page (widened in the third
+  review round): 1700 K to 4700 K,
   step 100, inverted (handle to the right = warmer = fewer kelvin). The value shows as
   `3400 K`. The switch at the right end writes `night-light-enabled`; while off the slider is
   dimmed and takes no input. It follows the keys live. Listed in the Sliders tab as Warmth.
@@ -117,6 +118,63 @@ label is the active profile.)
   (`layoutModel.insertMissing`). So the grid above shows for a saved Tiles list made before
   these tiles existed, without editing it. Warmth still comes after Brightness, Battery after
   the panel icons, the CPU line at the end of the Tiles list.
+
+## Tiles swapped, wider Warmth, VPN name on the panel (third review round)
+
+Request: "ok swap airplane mode and performance tiles; it loads ok , the slicer warmths OK
+(maybe we may need to increse max/min value, based on the software), we also need to make
+sure that VPN selected is displayed in the top bar (next to icon o wifi + i want to be able to
+reorganise elements from bar, tiles, etc)". Reorganising is already the Configure lists.
+
+A. Tile grid for the saved configuration:
+
+```
+| [ Wi-Fi           > ] [ Bluetooth       > ] |
+| [ NordVPN         > ] [ VPN             > ] |
+| [ Performance     > ] [ Airplane mode     ] |
+| [ Keyboard  Low     ]                       |
+```
+
+B. Warmth range, chosen "6500 K to 1000 K (Recommended)" (the captions are mockup notes, not
+UI text):
+
+```
+Warmth   O--------------------   6500 K   [ ON ]
+         no tint
+
+Warmth   ==========O----------   3700 K   [ ON ]
+
+Warmth   ====================O   1000 K   [ ON ]
+         deepest red
+
+Step: 100 K
+```
+
+C. VPN on the panel, chosen "Icon plus short name (Recommended)":
+
+```
+NordVPN connected to France:
+
+  wifi  vpn France  bt  vol  87%
+
+NetworkManager VPN connected:
+
+  wifi  vpn <profile name>  bt  vol  87%
+
+No VPN:
+
+  wifi  bt  vol  87%
+```
+
+- Default `TILES`: wifi, bluetooth, vpn, nordvpn, power-profile, airplane-mode,
+  keyboard-light, dark-style, do-not-disturb, keep-awake, mic-mute.
+- Warmth: 6500 K to 1000 K, step 100, still inverted. A stored value outside the range keeps
+  its value; the slider sits at the nearest end and the text shows the stored value.
+- VPN panel item: icon, then `VpnModel.panelName()`: NordVPN's country, the active
+  NetworkManager profile's name, both joined by ` + ` (NordVPN first). Each name is cut to
+  16 characters, the last one `…`. Same panel text style as the battery label.
+- Default `PANEL_ICON_ITEMS`: wifi, vpn, bluetooth, volume, battery. A saved Panel list keeps
+  its own order.
 
 ## Out of scope
 

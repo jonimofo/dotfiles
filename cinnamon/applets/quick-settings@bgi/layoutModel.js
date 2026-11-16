@@ -35,6 +35,26 @@ function insertMissing(result, declared, seen) {
     });
 }
 
+// The rows to store back when @stored is not already the normalized list (an element added
+// or removed by a later version), so the settings dialog lists every declared element.
+// Returns null when there is nothing to write: storing the result settles the next pass.
+// Rows keep the dialog's shape, { show, id }; stored order and show flags are kept.
+function storedUpdate(stored, declared) {
+    const normalized = normalize(stored, declared).map(row => ({ show: row.show, id: row.id }));
+    const current = Array.isArray(stored) ? stored.map(row => (row ? { show: row.show, id: row.id } : row)) : stored;
+    return JSON.stringify(current) === JSON.stringify(normalized) ? null : normalized;
+}
+
+// Writes @key's normalized list back through @settings (getValue, setValue) when it differs.
+// Returns whether it wrote.
+function writeBackLayout(settings, key, declared) {
+    const update = storedUpdate(settings.getValue(key), declared);
+    if (!update)
+        return false;
+    settings.setValue(key, update);
+    return true;
+}
+
 // The ids to show, in the stored order.
 function visibleIds(stored, declared) {
     return normalize(stored, declared).filter(row => row.show).map(row => row.id);

@@ -217,7 +217,7 @@ Assumptions about behaviour:
 
 One button on the panel. Its icons, left to right: Wi-Fi, VPN (only while a NetworkManager
 VPN or NordVPN is up), Bluetooth (only while the adapter is on), volume, then the battery
-level as text, like `87%` (only with a battery). The VPN icon is followed by the name of
+icon and level, like `87%` (only with a battery). The VPN icon is followed by the name of
 the VPN that is up: NordVPN's country, or the NetworkManager profile's name; with both up,
 `<country> + <profile>`. A name longer than 16 characters is cut with `…`. A click opens
 the menu:
@@ -270,7 +270,9 @@ does what you need: right-click each > Remove from panel.
 Right-click the button > Configure... Four tabs, Tiles, Sliders, Header and Panel, each a
 list with a Show checkbox per row. Move up and Move down change the order. Changes apply at
 once, without a reload. An element added in a later version appears in a saved list, shown,
-just before the first element that follows it in the default order, or at the end.
+just before the first element that follows it in the default order, or at the end. The
+applet writes that list back to its settings when it loads, so the dialog lists the new
+element too; an element no longer declared is dropped the same way.
 
 - The battery stays on the left of the header; the order applies to the buttons.
 - The Tiles tab ends with the CPU line: its checkbox shows or hides it, its place in the

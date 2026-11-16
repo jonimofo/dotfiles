@@ -1009,6 +1009,46 @@ function testLayoutModel() {
         `${Model.visibleIds(savedPanel, Constants.PANEL_ICON_ITEMS)}` === 'wifi,bluetooth,vpn,volume,battery');
     check('layout: a saved Header list is kept as stored',
         `${Model.visibleIds(Model.defaults(Constants.HEADER_ITEMS).reverse(), Constants.HEADER_ITEMS)}` === 'power,lock,settings,screenshot,battery');
+    // The owner's lists as saved on disk by an older version: written back once, normalized.
+    const disk = {
+        tiles: saved,
+        sliders: ['output', 'input', 'monitors'].map(id => ({ show: true, id })),
+        header: Model.defaults(Constants.HEADER_ITEMS),
+        'panel-icons': ['bluetooth', 'vpn', 'volume', 'wifi'].map(id => ({ show: true, id })),
+    };
+    const declaredFor = {
+        tiles: Constants.TILE_LAYOUT_ITEMS, sliders: Constants.SLIDERS,
+        header: Constants.HEADER_ITEMS, 'panel-icons': Constants.PANEL_ICON_ITEMS,
+    };
+    const store = {
+        values: JSON.parse(JSON.stringify(disk)),
+        writes: [],
+        getValue(key) {
+            return this.values[key];
+        },
+        setValue(key, value) {
+            this.writes.push(key);
+            this.values[key] = value;
+        },
+    };
+    const pass = () => Object.keys(declaredFor).filter(key => Model.writeBackLayout(store, key, declaredFor[key]));
+    const first = pass();
+    check(`layout write-back: the lists missing ids are written once (${first})`, `${first}` === 'tiles,sliders,panel-icons');
+    const second = pass();
+    check('layout write-back: a second pass writes nothing (no loop)', second.length === 0 && store.writes.length === 3);
+    const rowsText = key => store.values[key].map(row => `${row.id}${row.show ? '' : ' (hidden)'}`).join(', ');
+    check(`layout write-back: tiles keep their order and show flags (${rowsText('tiles')})`,
+        rowsText('tiles') === 'wifi, bluetooth, nordvpn, vpn, power-profile, airplane-mode, keyboard-light, dark-style (hidden), do-not-disturb (hidden), keep-awake (hidden), mic-mute (hidden), cpu-line');
+    check(`layout write-back: panel-icons (${rowsText('panel-icons')})`, rowsText('panel-icons') === 'bluetooth, vpn, volume, wifi, battery');
+    check(`layout write-back: sliders (${rowsText('sliders')})`, rowsText('sliders') === 'output, input, monitors, warmth');
+    check('layout write-back: rows keep the dialog shape { show, id }',
+        Object.values(store.values).every(list => list.every(row => JSON.stringify(Object.keys(row)) === '["show","id"]')));
+    check('layout write-back: a list already normalized is left alone',
+        Model.storedUpdate(Model.defaults(Constants.SLIDERS), Constants.SLIDERS) === null);
+    check('layout write-back: a row without a show flag is written back shown',
+        JSON.stringify(Model.storedUpdate([{ id: 'output' }, ...Model.defaults(Constants.SLIDERS).slice(1)], Constants.SLIDERS)[0]) === '{"show":true,"id":"output"}');
+    check('layout write-back: a removed id alone is enough to write',
+        Model.storedUpdate([...Model.defaults(Constants.SLIDERS), { show: true, id: 'gone' }], Constants.SLIDERS) !== null);
     check('layout: odd count leaves one tile on the last row',
         JSON.stringify(Model.rows(['a', 'b', 'c'], 2)) === '[["a","b"],["c"]]');
     const all = { wifi: true, bluetooth: false, vpn: false, volume: true };

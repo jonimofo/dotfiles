@@ -423,6 +423,10 @@ class QuickSettingsApplet extends Applet.Applet {
     // A hidden Brightness row runs no ddcutil and a hidden NordVPN tile no nordvpn call:
     // each reads once when it shows (at start, or when the dialog shows it again).
     _applyLayout() {
+        // A list saved by an older version lacks the new elements: written back so the dialog
+        // lists them. The write calls this again, which then finds nothing to write.
+        for (const key of Object.values(Constants.LAYOUT_KEYS))
+            LayoutModel.writeBackLayout(this.settings, key, this._declared(key));
         const sliders = this._visible(Constants.LAYOUT_KEYS.sliders);
         const tiles = this._visible(Constants.LAYOUT_KEYS.tiles);
         this._content.applyLayout(sliders, tiles);

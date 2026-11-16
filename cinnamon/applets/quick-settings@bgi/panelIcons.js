@@ -1,4 +1,5 @@
 const Clutter = imports.gi.Clutter;
+const Gio = imports.gi.Gio;
 const St = imports.gi.St;
 const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
@@ -11,12 +12,19 @@ const PANEL_ICON_STYLE_CLASS = 'system-status-icon';
 const PANEL_LABEL_STYLE_CLASS = 'applet-label';
 
 // The status items shown on the panel: Wi-Fi, VPN (icon and name), Bluetooth, volume icons
-// and the battery level, in the order and with the selection of applyLayout(). Bluetooth shows only while
+// and the battery (icon and level), in the order and with the selection of applyLayout(). Bluetooth shows only while
 // the adapter is on, VPN only while a VPN is up, the battery only when there is one: the
 // settings can hide an item, never force one on. With nothing left, one fallback icon keeps
 // the button on the panel.
 function panelLabel() {
     return new St.Label({ style_class: PANEL_LABEL_STYLE_CLASS, y_align: Clutter.ActorAlign.CENTER });
+}
+
+function iconWithLabel(icon, label) {
+    const box = new St.BoxLayout({ style_class: 'quick-settings-panel-item' });
+    box.add_child(icon);
+    box.add_child(label);
+    return box;
 }
 
 class PanelIcons {
@@ -27,13 +35,17 @@ class PanelIcons {
             bluetooth: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.bluetooth, PANEL_ICON_STYLE_CLASS),
             vpn: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.vpn, PANEL_ICON_STYLE_CLASS),
             volume: UiHelpers.symbolicIcon(Constants.PANEL_ICONS.volume, PANEL_ICON_STYLE_CLASS),
+            // Its icon comes from the battery data, as in the stock power applet.
+            battery: new St.Icon({ icon_type: St.IconType.SYMBOLIC, style_class: PANEL_ICON_STYLE_CLASS }),
         };
         this._batteryLabel = panelLabel();
         this._vpnLabel = panelLabel();
-        const vpn = new St.BoxLayout({ style_class: 'quick-settings-panel-vpn' });
-        vpn.add_child(this._icons.vpn);
-        vpn.add_child(this._vpnLabel);
-        this._items = { ...this._icons, vpn, battery: this._batteryLabel };
+        // One item each in the settings dialog: the icon and its text move and hide together.
+        this._items = {
+            ...this._icons,
+            vpn: iconWithLabel(this._icons.vpn, this._vpnLabel),
+            battery: iconWithLabel(this._icons.battery, this._batteryLabel),
+        };
         // Whether the state wants each item shown.
         this._wanted = { wifi: true, bluetooth: false, vpn: false, volume: true, battery: false };
         this._allowed = Object.keys(this._items);
@@ -85,8 +97,10 @@ class PanelIcons {
     // @battery: from BatteryModel.pickBattery(), null hides the level.
     setBattery(battery) {
         this._wanted.battery = battery !== null;
-        if (battery)
+        if (battery) {
+            this._icons.battery.gicon = Gio.icon_new_for_string(battery.iconString);
             this._batteryLabel.text = BatteryModel.label(battery.percent);
+        }
         this._sync();
     }
 

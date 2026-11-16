@@ -176,6 +176,28 @@ No VPN:
 - Default `PANEL_ICON_ITEMS`: wifi, vpn, bluetooth, volume, battery. A saved Panel list keeps
   its own order.
 
+## New elements in Configure, battery icon on the panel (fourth review round)
+
+Request: "it does but i dont see the options to move the battery percentage (+ i want
+batttery icon next to it),"
+
+Cause: the settings dialog lists what is stored, and the saved lists still held the old ids
+only; the applet normalized them in memory only.
+
+```
+  wifi  vpn France  bt  vol  [battery icon] 87%
+```
+
+- On load and on each settings change, a list that differs from its normalized form
+  (missing ids inserted, undeclared ids dropped) is written back through the applet's own
+  settings object (`LayoutModel.writeBackLayout`). Rows keep the stored shape `{ show, id }`
+  (the dialog's two columns; names come from the schema's options), with their stored order
+  and show flags. The write triggers the change callback once more, which finds nothing to
+  write.
+- The panel battery item is the battery icon (the `iconString` of cinnamon-settings-daemon,
+  symbolic, as the stock power applet uses it) followed by the level; one Panel-tab entry
+  moves and hides both. The header battery is unchanged.
+
 ## Out of scope
 
 - `Charge 80%` tile: issue #52.

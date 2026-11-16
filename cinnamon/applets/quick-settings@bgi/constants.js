@@ -43,7 +43,7 @@ const PANEL_ICON_ITEMS = [
     { id: 'vpn', name: 'VPN' },
     { id: 'bluetooth', name: 'Bluetooth' },
     { id: 'volume', name: 'Volume' },
-    // The battery level as text ("87%"), the header's figure.
+    // The battery icon and level ("87%"), the header's figure.
     { id: 'battery', name: 'Battery' },
 ];
 

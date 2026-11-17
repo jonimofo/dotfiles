@@ -72,13 +72,12 @@
     color: #F1F4FB;
 }
 
-/* Secondary text: metadata, clock suffixes, day headings, countdown, and days of the other
+/* Secondary text: metadata, clock suffixes, day headings, and days of the other
    months on hover (5.61:1 on the hover background, where the discreet colour is 3.10:1) */
 .calendar-bgi-day-outside:hover,
 .calendar-bgi-clock-suffix,
 .calendar-bgi-day-heading,
-.calendar-bgi-event-meta,
-.calendar-bgi-event-countdown {
+.calendar-bgi-event-meta {
     color: #B5BED0;
 }
 
@@ -216,7 +215,7 @@
 }
 
 /* One event: accent bar, time block, title over metadata. Texts in em of the event list's
-   12px at 100%: 13px, 14px, 12px and 11px, the design spec's sizes. */
+   12px at 100%: 13px, 14px and 12px, the design spec's sizes. */
 .calendar-bgi-event-row {
     border-width: 1px;
     border-radius: 8px;
@@ -248,11 +247,6 @@
 
 .calendar-bgi-event-meta {
     font-size: 1em;
-}
-
-.calendar-bgi-event-countdown {
-    font-size: 0.91667em;
-    padding-left: 6px;
 }
 
 /* Right column: the calendar panel, then the Today button. */

@@ -19,7 +19,6 @@ const Tweener = imports.ui.tweener;
 const Interfaces = imports.misc.interfaces;
 const Constants = require('./constants');
 const DateText = require('./dateText');
-const Countdown = require('./countdown');
 const Appearance = require('./appearance');
 const EventsHeight = require('./eventsHeight');
 
@@ -56,12 +55,6 @@ function month_year_only(gdatetime) {
     return month_year_only;
 }
 
-function format_timespan(timespan) {
-    let minutes = Math.floor(timespan / GLib.TIME_SPAN_MINUTE);
-    let start_hour = GLib.DateTime.new_now_local().add_hours(Math.floor(minutes / 60)).get_hour();
-
-    return Countdown.countdownFor(minutes, start_hour);
-}
 
 
 // GLib.DateTime.equal is broken
@@ -636,7 +629,6 @@ class EventList {
         this._rows = [];
         this._current_event_data_list_timestamp = 0;
         this._show_meta = true;
-        this._show_countdown = true;
         this._scale = Constants.TEXT_SCALES.events.default;
         this._max_height = null;
 
@@ -756,13 +748,12 @@ class EventList {
     // Events text size and gap, and the parts of each row. The column and the list both carry
     // the size (see appearance.js). A change of parts rebuilds the rows on the next
     // set_events().
-    set_appearance(scale, gap, show_meta, show_countdown) {
+    set_appearance(scale, gap, show_meta) {
         this._scale = scale;
         this._apply_column_style();
         this.events_box.style = Appearance.eventListStyle(scale, gap);
-        if (show_meta !== this._show_meta || show_countdown !== this._show_countdown) {
+        if (show_meta !== this._show_meta) {
             this._show_meta = show_meta;
-            this._show_countdown = show_countdown;
             this._current_event_data_list_timestamp = 0;
         }
     }
@@ -836,8 +827,7 @@ class EventList {
                 this.selected_date,
                 {
                     use_24h: this.desktop_settings.get_boolean("clock-use-24h"),
-                    show_meta: this._show_meta,
-                    show_countdown: this._show_countdown
+                    show_meta: this._show_meta
                 }
             );
 
@@ -965,16 +955,6 @@ class EventRow {
         event_title.get_clutter_text().ellipsize = Pango.EllipsizeMode.END;
         title_box.add_actor(event_title);
 
-        this.countdown_label = new St.Label(
-            {
-                /// text set below
-                y_align: Clutter.ActorAlign.CENTER,
-                style_class: Constants.STYLE.eventCountdown,
-                visible: params.show_countdown
-            }
-        );
-        title_box.add_actor(this.countdown_label);
-
         if (params.show_meta && summary.meta !== "") {
             let event_meta = new St.Label(
                 {
@@ -1001,21 +981,12 @@ class EventRow {
         let starts_today = dt_equals(today, this.event.start_date);
 
         if (time_until_finish < 0) {
-            this.countdown_label.set_text("");
+            // over: not the row to scroll to
         } else if (time_until_start > 0) {
             if (starts_today) {
-                this.countdown_label.set_text(format_timespan(time_until_start));
                 this.is_current_or_next = !this.event.all_day;
-            } else {
-                this.countdown_label.set_text("");
             }
         } else {
-            if (this.event.all_day || this.event.multi_day) {
-                this.countdown_label.set_text("");
-            } else {
-                this.countdown_label.set_text(Constants.TEXT.inProgress);
-            } 
-
             this.is_current_or_next = this.event.is_today && !this.event.all_day;
         }
 

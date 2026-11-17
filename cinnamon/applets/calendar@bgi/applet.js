@@ -228,7 +228,6 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.settings.bind(Constants.EVENT_GAP.key, "event_gap", this._onDisplayChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.headerClocks.key, "show_header_clocks", this._onDisplayChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.eventMeta.key, "show_event_meta", this._onDisplayChanged);
-            this.settings.bind(Constants.ELEMENT_SWITCHES.eventCountdown.key, "show_event_countdown", this._onDisplayChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.eventCount.key, "show_event_count", this._onDisplayChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.todayButton.key, "show_today_button", this._onDisplayChanged);
 
@@ -330,8 +329,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     // Text sizes, gap and element switches of the Appearance tab. The event list rebuilds its
     // rows on the next select_date(), which _onSettingsChanged() forces.
     _applyAppearance() {
-        this.event_list.set_appearance(this.events_text_scale, this.event_gap,
-                                       this.show_event_meta, this.show_event_countdown);
+        this.event_list.set_appearance(this.events_text_scale, this.event_gap, this.show_event_meta);
         this._calendar.actor.style = Appearance.percentFontStyle(this.days_text_scale, Constants.TEXT_SCALES.days);
         this._header.style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);
         this.go_home_button.visible = this.show_header_clocks;

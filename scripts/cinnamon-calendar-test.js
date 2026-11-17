@@ -50,7 +50,6 @@ const SecondZone = load('./secondZone');
 const DayMarker = load('./dayMarker');
 const DayCell = load('./dayCell');
 const TickClock = load('./tickClock');
-const Countdown = load('./countdown');
 const Refresh = load('./refresh');
 const NowLine = load('./nowLine');
 const EventCount = load('./eventCount');
@@ -278,17 +277,9 @@ function testWording() {
     }
     check(`wording: no gettext call in the applet${gettextCalls.length ? ` (${gettextCalls.join(', ')})` : ''}`,
         gettextCalls.length === 0);
-    const countdown = (minutes, hour) => Countdown.countdownFor(minutes, hour);
-    checkEqual('countdown: a few minutes', countdown(5, 10), 'Starting in a few minutes');
-    checkEqual('countdown: minutes', countdown(25, 10), 'Starting in 25 minutes');
-    checkEqual('countdown: one hour', countdown(60, 11), 'In 1 hour');
-    checkEqual('countdown: several hours', countdown(185, 13), 'In 3 hours');
-    checkEqual('countdown: six hours is still in hours', countdown(6 * 60 + 59, 16), 'In 6 hours');
-    checkEqual('countdown: this evening', countdown(8 * 60, 19), 'This evening');
-    checkEqual('countdown: later today', countdown(8 * 60, 17), 'Starting later today');
     checkEqual('wording: stock phrases in English', [Constants.TEXT.noEvents, Constants.TEXT.allDay,
-        Constants.TEXT.inProgress, Constants.TEXT.today, Constants.TEXT.settings].join(' / '),
-    'No Events / All day / In progress / Today / Date and Time Settings');
+        Constants.TEXT.today, Constants.TEXT.settings].join(' / '),
+    'No Events / All day / Today / Date and Time Settings');
 }
 
 // Performance round: the grid is built once and updated in place from these.
@@ -419,7 +410,7 @@ function testAppearance() {
 
     // At 100%, the event texts in em of the 12px list give the design's px sizes.
     const css = readText(`${appletDir}/stylesheet.css`);
-    const designPx = { eventTime: 13, eventTitle: 14, eventMeta: 12, eventCountdown: 11 };
+    const designPx = { eventTime: 13, eventTitle: 14, eventMeta: 12 };
     for (const [name, px] of Object.entries(designPx)) {
         const rule = css.match(new RegExp(`\\.${Constants.STYLE[name]}\\s*\\{[^}]*font-size:\\s*([0-9.]+)em`));
         const size = rule ? Number(rule[1]) * Constants.EVENTS_BASE_FONT_PX : NaN;
@@ -525,7 +516,6 @@ const CONTRAST_PAIRS = [
     ['.calendar-bgi-event-title', 'color', '.calendar-bgi-event-row:hover', 4.5],
     ['.calendar-bgi-event-meta', 'color', '.calendar-bgi-event-row', 4.5],
     ['.calendar-bgi-event-meta', 'color', '.calendar-bgi-event-row:hover', 4.5],
-    ['.calendar-bgi-event-countdown', 'color', '.calendar-bgi-event-row', 4.5],
     ['.calendar-bgi-month-label', 'color', '.calendar-bgi-calendar-panel', 4.5],
     ['.calendar-bgi-day-heading', 'color', '.calendar-bgi-calendar-panel', 4.5],
     ['.calendar-bgi-month-arrow', 'color', '.calendar-bgi-calendar-panel', 3],

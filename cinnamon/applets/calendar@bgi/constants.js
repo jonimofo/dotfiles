@@ -24,7 +24,6 @@ const ELEMENT_SWITCHES = {
     events: { key: 'show-events', label: 'Calendar events', default: true },
     headerClocks: { key: 'show-header-clocks', label: 'Clocks in the header', default: true },
     eventMeta: { key: 'show-event-meta', label: 'Metadata line', default: true },
-    eventCountdown: { key: 'show-event-countdown', label: 'Countdown', default: true },
     dayMarker: { key: 'show-day-marker', label: 'Dot under days', default: true },
     // The key keeps its first name (a summary card, later removed): saved settings use it.
     eventCount: { key: 'show-day-summary', label: 'Event count', default: true },
@@ -37,7 +36,7 @@ const SETTINGS_PAGES = [
     { title: 'Panel', sections: ['Date', 'Second time zone'] },
 ];
 // Font size of the event list at 100%: the event texts are in em of it, so 100% gives the
-// px sizes of the validated design (time 13px, title 14px, metadata 12px, countdown 11px).
+// px sizes of the validated design (time 13px, title 14px, metadata 12px).
 const EVENTS_BASE_FONT_PX = 12;
 
 // Panel text: "Mon 16 Nov · 15:52 · VN 21:52".
@@ -97,7 +96,7 @@ const FRESH_FETCH_MS = 15000;
 const ZONE_ID_DEBOUNCE_MS = 500;
 
 // Every phrase the applet shows, in English whatever the locale: the stock applet's
-// gettext strings are replaced by these. %d stands for a number.
+// gettext strings are replaced by these.
 const TEXT = {
     today: 'Today',
     backToToday: 'Back to today',
@@ -105,20 +104,8 @@ const TEXT = {
     nextMonth: 'Next month',
     noEvents: 'No Events',
     allDay: 'All day',
-    inProgress: 'In progress',
-    startingSoon: 'Starting in a few minutes',
-    startingInMinutes: 'Starting in %d minutes',
-    thisEvening: 'This evening',
-    startingLaterToday: 'Starting later today',
-    inHours: { one: 'In %d hour', other: 'In %d hours' },
     settings: 'Date and Time Settings',
 };
-const NUMBER_PLACEHOLDER = '%d';
-// Countdown before an event of today (stock thresholds): "Starting in a few minutes" under
-// 10 minutes, "Starting in N minutes" under an hour, "In N hours" up to 6 hours, then
-// "This evening" when it starts after 18:00, else "Starting later today".
-const COUNTDOWN = { imminentMinutes: 10, soonMinutes: 60, laterHours: 6, eveningHour: 18 };
-
 // Month row arrows, symbolic icons found in Adwaita and in the Dracula icon theme; the -rtl
 // variants are not used, the two names swap for a right-to-left desktop.
 const MONTH_ARROW_ICONS = { previous: 'pan-start-symbolic', next: 'pan-end-symbolic' };
@@ -178,7 +165,6 @@ const STYLE = {
     eventTimeBlock: 'calendar-bgi-event-time-block',
     eventContent: 'calendar-bgi-event-content',
     eventMeta: 'calendar-bgi-event-meta',
-    eventCountdown: 'calendar-bgi-event-countdown',
     eventTitle: 'calendar-bgi-event-title',
     eventTime: 'calendar-bgi-event-time',
 };

@@ -30,7 +30,6 @@
                 "show-events",
                 "show-header-clocks",
                 "show-event-meta",
-                "show-event-countdown",
                 "show-day-marker",
                 "show-day-summary",
                 "show-today-button",
@@ -116,11 +115,6 @@
         "type": "switch",
         "default": true,
         "description": "Metadata line"
-    },
-    "show-event-countdown": {
-        "type": "switch",
-        "default": true,
-        "description": "Countdown"
     },
     "show-day-marker": {
         "type": "switch",

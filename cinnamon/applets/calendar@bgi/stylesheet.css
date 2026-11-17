@@ -121,7 +121,7 @@
     border-color: #394761;
 }
 
-/* Violet: the outline of today's ongoing event, the card's own 1px border recoloured */
+/* Violet: the outline of today's ongoing event, the card's own border recoloured */
 .calendar-bgi-event-ongoing {
     border-color: #7B5CD6;
 }
@@ -232,6 +232,11 @@
 .calendar-bgi-event-row {
     border-width: 1px;
     border-radius: 8px;
+}
+
+/* Today's ongoing event: a thicker outline than the other cards. */
+.calendar-bgi-event-ongoing {
+    border-width: 2px;
 }
 
 .calendar-bgi-event-accent {

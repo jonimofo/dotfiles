@@ -6,12 +6,19 @@ sysfs (`/sys/class/power_supply/BAT0`, Dell `dell_laptop` driver):
 
 | Command | Writes |
 |---|---|
-| `battery-charge-limit limit` | `charge_types` = `Custom`, then the thresholds 75 and 80, in an order that keeps the start below the end |
+| `battery-charge-limit limit` | the thresholds 75 and 80, then `charge_types` = `Custom` |
 | `battery-charge-limit full` | `charge_types` = `Adaptive`; the thresholds stay |
+
+The thresholds only apply in `Custom` mode; the driver stores them in any mode, so they are
+written first and the mode last: a failing threshold write never leaves `Custom` with the
+old values. The `dell-laptop` driver keeps the end at least 5 above the start and silently
+moves a value that would break that, so the thresholds are written in the order that keeps
+the gap, a second pass covers a start that was already outside it, and all three values are
+read back: the helper fails with a message rather than report a state it did not reach.
 
 Any other argument, no argument or two arguments: a usage line, exit 2, nothing written.
 Missing sysfs files or a threshold that is not a number: a message, exit 1, nothing written.
-Applying the state already in place exits 0. It uses no environment variable, no current
+A state already in place is left alone: nothing is written, it prints `unchanged`, exit 0. It uses no environment variable, no current
 directory and no other command. Tests: `scripts/battery-charge-limit-test.sh`, on a fake
 sysfs tree.
 

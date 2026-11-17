@@ -5,7 +5,8 @@
 # Runs as root (installed as /usr/local/sbin/battery-charge-limit, root:root 0755). Its only
 # inputs are its one argument, compared with two fixed words, and the sysfs files below:
 # no environment variable, no current directory, no other command. Anything else writes
-# nothing and exits non-zero. Writing the state already in place is fine (exit 0).
+# nothing and exits non-zero. A state already in place is left alone: nothing is written and
+# it prints "unchanged" (exit 0).
 set -eu
 
 PATH='/usr/sbin:/usr/bin:/sbin:/bin'
@@ -16,6 +17,9 @@ readonly LIMIT_MODE='Custom'
 readonly FULL_MODE='Adaptive'
 readonly LIMIT_START=75
 readonly LIMIT_END=80
+# The dell-laptop driver keeps the end at least this far above the start: a write that would
+# bring them closer is moved silently (start = end - 5, or end = start + 5).
+readonly MIN_GAP=5
 
 readonly CHARGE_TYPES="$BATTERY_DIR/charge_types"
 readonly START_FILE="$BATTERY_DIR/charge_control_start_threshold"
@@ -54,25 +58,68 @@ write_value() {
     printf '%s\n' "$2" > "$1"
 }
 
-# The start threshold must stay below the end one at every step: when the new start is not
-# below the current end, the end moves first, else the start does.
-# Everything is read and checked before the first write.
-apply_limit() {
-    current_end=$(read_number "$END_FILE")
-    read_number "$START_FILE" > /dev/null
-    write_value "$CHARGE_TYPES" "$LIMIT_MODE"
-    if [ "$LIMIT_START" -ge "$current_end" ]; then
+# Whether charge_types marks mode $1 as the active one ("... [Custom]").
+mode_active() {
+    types=''
+    IFS= read -r types < "$CHARGE_TYPES" || true
+    case $types in
+        *"[$1]"*) return 0 ;;
+    esac
+    return 1
+}
+
+# Writes both thresholds, in the order that keeps the driver's gap from current end $1.
+write_thresholds() {
+    if [ $((LIMIT_START + MIN_GAP)) -gt "$1" ]; then
         write_value "$END_FILE" "$LIMIT_END"
         write_value "$START_FILE" "$LIMIT_START"
     else
         write_value "$START_FILE" "$LIMIT_START"
         write_value "$END_FILE" "$LIMIT_END"
     fi
+}
+
+# Everything is read and checked before the first write. The thresholds go first (the driver
+# stores them in any mode), the mode last: a failing threshold write never leaves Custom with
+# the old thresholds. They keep the driver's gap at every step: when the new start plus the
+# gap would reach above the current end, the end moves first, else the start does. A start
+# that was not 5 below its end (set outside the driver's rule) can still make the driver
+# move a value: a second pass then finishes the job. All three are read back: the helper
+# never reports a state it did not reach.
+apply_limit() {
+    current_start=$(read_number "$START_FILE")
+    current_end=$(read_number "$END_FILE")
+    if mode_active "$LIMIT_MODE" && [ "$current_start" -eq "$LIMIT_START" ] && [ "$current_end" -eq "$LIMIT_END" ]; then
+        printf '%s: limit unchanged (%s, %s to %s %%)\n' "$NAME" "$LIMIT_MODE" "$LIMIT_START" "$LIMIT_END"
+        return
+    fi
+    write_thresholds "$current_end"
+    final_start=$(read_number "$START_FILE")
+    final_end=$(read_number "$END_FILE")
+    if [ "$final_start" -ne "$LIMIT_START" ] || [ "$final_end" -ne "$LIMIT_END" ]; then
+        write_thresholds "$final_end"
+        final_start=$(read_number "$START_FILE")
+        final_end=$(read_number "$END_FILE")
+    fi
+    if [ "$final_start" -ne "$LIMIT_START" ] || [ "$final_end" -ne "$LIMIT_END" ]; then
+        fail "thresholds read back as $final_start to $final_end, not $LIMIT_START to $LIMIT_END; mode left unchanged"
+    fi
+    write_value "$CHARGE_TYPES" "$LIMIT_MODE"
+    if ! mode_active "$LIMIT_MODE"; then
+        fail "$CHARGE_TYPES does not show $LIMIT_MODE active after the write"
+    fi
     printf '%s: limit applied (%s, %s to %s %%)\n' "$NAME" "$LIMIT_MODE" "$LIMIT_START" "$LIMIT_END"
 }
 
 apply_full() {
+    if mode_active "$FULL_MODE"; then
+        printf '%s: full unchanged (%s)\n' "$NAME" "$FULL_MODE"
+        return
+    fi
     write_value "$CHARGE_TYPES" "$FULL_MODE"
+    if ! mode_active "$FULL_MODE"; then
+        fail "$CHARGE_TYPES does not show $FULL_MODE active after the write"
+    fi
     printf '%s: full applied (%s)\n' "$NAME" "$FULL_MODE"
 }
 

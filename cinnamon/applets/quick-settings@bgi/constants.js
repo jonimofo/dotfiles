@@ -74,6 +74,36 @@ const SLIDERS = [
         switchLabel: 'Night Light' },
 ];
 
+// After a percentage: the battery level, the Charge tile's labels.
+const PERCENT_SUFFIX = '%';
+
+// Charge limit: the battery's charge mode in sysfs (Dell dell_laptop driver), read as files
+// and switched by the root helper system/battery-charge-limit, run with sudo -n (never a
+// password prompt). The limit state is the Custom mode with the end threshold below; the
+// values must match the helper's constants (a test compares them).
+const CHARGE_BATTERY_DIR = '/sys/class/power_supply/BAT0';
+const CHARGE_TYPES_FILE = `${CHARGE_BATTERY_DIR}/charge_types`;
+const CHARGE_START_FILE = `${CHARGE_BATTERY_DIR}/charge_control_start_threshold`;
+const CHARGE_END_FILE = `${CHARGE_BATTERY_DIR}/charge_control_end_threshold`;
+const CHARGE_LIMIT_MODE = 'Custom';
+const CHARGE_FULL_MODE = 'Adaptive';
+const CHARGE_LIMIT_START = 75;
+const CHARGE_LIMIT_END = 80;
+const CHARGE_HELPER = '/usr/local/sbin/battery-charge-limit';
+const CHARGE_HELPER_WORDS = { limit: 'limit', full: 'full' };
+// Absolute, so the session's PATH plays no part.
+const CHARGE_SUDO = ['/usr/bin/sudo', '-n'];
+const CHARGE_FULL_PERCENT = 100;
+const CHARGE_LABEL_PREFIX = 'Charge';
+const CHARGE_LABELS = {
+    limit: `${CHARGE_LABEL_PREFIX} ${CHARGE_LIMIT_END}${PERCENT_SUFFIX}`,
+    full: `${CHARGE_LABEL_PREFIX} ${CHARGE_FULL_PERCENT}${PERCENT_SUFFIX}`,
+};
+// A helper run that does not end within this long is given up on (logged, the tile usable).
+const CHARGE_HELPER_TIMEOUT_MS = 10000;
+// The helper's or sudo's error text in the log is cut to this many characters.
+const CHARGE_ERROR_TEXT_MAX = 200;
+
 // Tiles, left to right then top to bottom, two per row: this array is the only place that
 // sets their order.
 const TILES = [
@@ -84,6 +114,7 @@ const TILES = [
     { id: 'power-profile', label: 'Balanced', name: 'Power profile', icon: 'power-profile-balanced-symbolic', hasMenu: true },
     { id: 'airplane-mode', label: 'Airplane mode', name: 'Airplane mode', icon: 'airplane-mode-symbolic', hasMenu: false },
     { id: 'keyboard-light', label: 'Keyboard', name: 'Keyboard light', icon: 'keyboard-brightness-symbolic', hasMenu: false },
+    { id: 'charge-limit', label: CHARGE_LABELS.limit, name: 'Charge limit', icon: 'battery-level-80-charging-symbolic', hasMenu: false },
     { id: 'dark-style', label: 'Dark style', name: 'Dark style', icon: 'dark-mode-symbolic', hasMenu: false },
     { id: 'do-not-disturb', label: 'Do Not Disturb', name: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
     { id: 'keep-awake', label: 'Keep awake', name: 'Keep awake', icon: 'my-caffeine-on-symbolic', hasMenu: false },
@@ -100,8 +131,6 @@ const DARK_STYLE_OFF = 'default';
 
 // Battery, from cinnamon-settings-daemon like the stock power applet.
 const POWER_PROXY = 'org.cinnamon.SettingsDaemon.Power';
-// After the battery level.
-const PERCENT_SUFFIX = '%';
 
 // Brightness of the external monitors, through DDC/CI. Buses are detected at runtime: they
 // change with the dock.

@@ -3,7 +3,14 @@ const Interfaces = imports.misc.interfaces;
 const Constants = require('./constants');
 const BatteryModel = require('./batteryModel');
 
-const KINDS = { battery: UPowerGlib.DeviceKind.BATTERY, unknownState: UPowerGlib.DeviceState.UNKNOWN };
+const STATES = UPowerGlib.DeviceState;
+const KINDS = {
+    battery: UPowerGlib.DeviceKind.BATTERY,
+    unknownState: STATES.UNKNOWN,
+    onAcStates: [STATES.CHARGING, STATES.FULLY_CHARGED, STATES.PENDING_CHARGE],
+    onBatteryStates: [STATES.DISCHARGING, STATES.EMPTY, STATES.PENDING_DISCHARGE],
+    fullyCharged: STATES.FULLY_CHARGED,
+};
 
 // The laptop battery through cinnamon-settings-daemon, the stock power applet's source. Its
 // icon string carries the charging state. @onChange(battery) gets the value of

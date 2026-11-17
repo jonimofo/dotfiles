@@ -37,6 +37,8 @@ const PowerProfileModel = require('./powerProfileModel');
 const Settings = imports.ui.settings;
 const LayoutModel = require('./layoutModel');
 const MediaPlayers = require('./mediaPlayers');
+const ChargeLimit = require('./chargeLimit');
+const ChargeModel = require('./chargeModel');
 const MediaFocus = require('./mediaFocus');
 const MediaWindows = require('./mediaWindows');
 
@@ -62,6 +64,8 @@ class QuickSettingsApplet extends Applet.Applet {
                     this._brightness.refresh();
                 if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'nordvpn'))
                     this._nordvpn.refresh();
+                if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'charge-limit'))
+                    this._chargeLimit.refresh();
             } else {
                 this._content.lists.close();
             }
@@ -83,6 +87,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpNightLight();
         this._setUpKeepAwake();
         this._setUpKeyboardLight();
+        this._setUpChargeLimit();
         this._setUpMicMute();
         this._media = null;
         this._content.setOnMediaButton((busName, method) => this._media && this._media.call(busName, method),
@@ -120,6 +125,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._nmClient.destroy();
         this._darkStyle.destroy();
         this._keyboardLight.destroy();
+        this._chargeLimit.destroy();
         this._stopMedia();
         this._content.destroy();
         this.menu.destroy();
@@ -349,6 +355,22 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setAvailable(false);
     }
 
+    // Read when the tile shows, when the menu opens, after each click and on each battery
+    // change. A hidden tile does nothing at all: no read, no automatic return.
+    _setUpChargeLimit() {
+        const tile = this._content.tiles['charge-limit'];
+        this._chargeLimit = new ChargeLimit.ChargeLimit(Subprocess.runCommand, () => {
+            const view = ChargeModel.tileView(this._chargeLimit.state);
+            tile.setAvailable(this._chargeLimit.available);
+            tile.setChecked(view.checked);
+            tile.setLabel(view.label);
+        });
+        tile.setOnToggle(() => this._chargeLimit.toggle());
+        tile.setAvailable(false);
+        // The first read comes from _applyLayout(), only when the tile shows.
+        this._chargeShown = false;
+    }
+
     // Wi-Fi and Bluetooth through their own tiles' code; checked while airplane mode is on.
     _setUpAirplaneMode() {
         const tile = this._content.tiles['airplane-mode'];
@@ -406,6 +428,8 @@ class QuickSettingsApplet extends Applet.Applet {
         this._battery = new Battery.Battery(battery => {
             header.setBattery(battery);
             this._panelIcons.setBattery(battery);
+            if (this._chargeShown)
+                this._chargeLimit.onBattery(battery);
         });
         header.setOnButton('screenshot', () => this._closeThen(() => Util.spawn(Constants.SCREENSHOT_COMMAND)));
         header.setOnButton('settings', () => this._closeThen(() => Util.spawn(Constants.SYSTEM_SETTINGS_COMMAND)));
@@ -473,6 +497,10 @@ class QuickSettingsApplet extends Applet.Applet {
         if (nordvpnShown && !this._nordvpnShown)
             this._nordvpn.refresh();
         this._nordvpnShown = nordvpnShown;
+        const chargeShown = tiles.includes('charge-limit');
+        if (chargeShown && !this._chargeShown)
+            this._chargeLimit.refresh();
+        this._chargeShown = chargeShown;
         if (tiles.includes(Constants.MEDIA_ITEM.id))
             this._startMedia();
         else

@@ -86,6 +86,7 @@
                     "Power profile": "power-profile",
                     "Airplane mode": "airplane-mode",
                     "Keyboard light": "keyboard-light",
+                    "Charge limit": "charge-limit",
                     "Dark style": "dark-style",
                     "Do Not Disturb": "do-not-disturb",
                     "Keep awake": "keep-awake",
@@ -122,6 +123,10 @@
             {
                 "show": true,
                 "id": "keyboard-light"
+            },
+            {
+                "show": true,
+                "id": "charge-limit"
             },
             {
                 "show": true,

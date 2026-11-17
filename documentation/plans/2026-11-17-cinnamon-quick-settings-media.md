@@ -74,7 +74,8 @@ D. The CPU line is removed from the applet, with its setting.
   `PlaybackStatus` is `Playing` (else `media-playback-start-symbolic`),
   `media-skip-forward-symbolic`; they call `Previous`, `PlayPause`, `Next`. A button whose
   capability is false (`CanGoPrevious`, `CanGoNext`, `CanPlay` or `CanPause`, `CanControl`) is
-  inactive and dimmed. The look is the header's round buttons.
+  inactive and dimmed. The look was the header's round buttons at first; since the review
+  rounds they are bare icons (below).
 - Live: `PropertiesChanged` of each player. Every signal subscription is released when its
   player leaves and on applet removal; a failed call is logged with the player name.
 - D-Bus only, through the session bus connection: no subprocess, no new package.
@@ -88,8 +89,9 @@ D. The CPU line is removed from the applet, with its setting.
 - `mediaModel.js` (pure: names, texts, button states, order and cap), `mediaPlayers.js`
   (session bus: ListNames, GetNameOwner, NameOwnerChanged, GetAll, PropertiesChanged),
   `mediaBlock.js` (one block's actors), wired in `menuContent.js` and `applet.js`.
-- Cut lengths: title 44, artist 20, player name 16 characters (`VLC media player`, VLC's
-  Identity, fits whole); the labels also ellipsize at their width.
+- Cut lengths (`MEDIA_TITLE_MAX`, `MEDIA_ARTIST_MAX`, `MEDIA_PLAYER_NAME_MAX`): 44, 20 and
+  16 characters (`VLC media player`, VLC's Identity, fits whole); the labels also ellipsize
+  at their width.
 - The fallback player name is the first part after `org.mpris.MediaPlayer2.`, without an
   instance suffix (`firefox.instance_1_2` gives `Firefox`, `vlc-123` gives `Vlc`).
 - Hidden media controls follow no player: the watcher starts when they show and is
@@ -122,8 +124,19 @@ Wanted:
   player name's line; only the hover keeps the header buttons' tint.
 - Line 2 in two labels: `artist · ` normal, the player name in italic (`font-style`). The
   model returns both parts; without an artist only the player name shows. Too long: the
-  artist ellipsizes first, the player name (at most 16 characters) is not cut by the label.
+  artist ellipsizes first, the player name (at most `MEDIA_PLAYER_NAME_MAX` characters) is not cut by the label.
 - Block spacing 4 px to 8 px: under the separator and between the title and the buttons row.
+
+## Audit fixes
+
+- Every signal and reply is checked against its D-Bus type before it is read
+  (`MPRIS_TYPES`); `GetAll` asks for its reply type through `AsyncHelpers.callDbus`. Anything
+  else is ignored and logged once per player, without a stack trace.
+- A player gone before it answers is not logged. Log lines carry the player name cut to
+  `MEDIA_PLAYER_NAME_MAX` and the player's error text cut to `MEDIA_ERROR_TEXT_MAX`.
+- Control and bidi control characters are removed from every text shown.
+- One update per burst of changes (`AsyncHelpers.IdleCoalescer`), cancelled on destroy.
+- One ordered list of button keys, `MEDIA_BUTTON_ORDER`, for the model and the block.
 
 ## Out of scope
 

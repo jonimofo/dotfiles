@@ -64,12 +64,10 @@ the other screens, a setting, the calendar applet, new dependencies.
 
 | File | Change |
 |---|---|
-| `clockText.js` | New. Pure formatter of the row's text, with its English tables |
-| `clockFont.js` | New. Pure: the row's inline style from the panel clock's resolved font |
-| `overviewClock.js` | New. The band, its label and its minute timer |
+| `overviewClock.js` | New. The band and the live copy of the panel clock (see the last follow-up) |
 | `appSearch.js` | The search bar takes a top offset |
 | `extension.js` | Clock band first on `showing`, torn down on `hidden` and in `disable()` |
-| `stylesheet.css` | `.scale-clock-bar`, `.scale-clock` |
+| `stylesheet.css` | `.scale-clock-bar`, `.scale-clock-bar-centred` |
 
 Findings worth keeping:
 
@@ -125,6 +123,64 @@ Decisions:
 4. The style is set in the constructor, before the band is put on stage, and `extension.js`
    reads `clock.getHeight()` after the constructor: the layout gets the height at the panel's
    size.
+
+## Follow-up: the panel clock itself, at its place
+
+Owner's words, after trying the copied look live: "la date peut elle garder eactement la
+meme possiition que la taskbar ? là ça shift vers le bas et ça fait un petit effet , je veux
+du full neutre"
+
+Answer chosen: "Même position et même texte": the overview row shows exactly the panel's text,
+at the same place to the pixel; at opening the clock does not move and does not change. This
+supersedes the row's own text and the copied style above. Look:
+
+```
+Barre, mode normal :
+
+|        Tue 17 Nov · 11:30 · VN 17:30        |
+
+Overview :
+
+|        Tue 17 Nov · 11:30 · VN 17:30        |   même place, même texte
+|                                              |
+|          [ Type to search...      ]          |
+|     [ws 1]   [ws 2]   [ws 3]   [ws 4]        |
+```
+
+What Scale does to the panel (Cinnamon 6.4): `Overview._animateVisible` calls
+`Main.panelManager.disablePanels()` (`overview.js`); `Panel.disable()` (`panel.js`) eases the
+panel actor to opacity 0 in `AUTOHIDE_ANIMATION_TIME` (0.2 s), then hides it. Scale's group
+fades in over the same time (`ANIMATION_TIME` 0.2 s, `* 0.45` to open).
+`_animateNotVisible` calls `enablePanels()` as it starts to close.
+
+Method: a `Clutter.Clone` of the panel clock applet's `actor`, read at each opening, at the
+actor's stage position and size.
+
+1. The clone is the panel clock: the same pixels, its text, font and colour, and its own
+   updates (minute, second zone), with no code of ours. It takes no input, so no calendar
+   opens; the band under it swallows the clicks.
+2. It goes in `global.overlay_group` above Scale's group, at full opacity, while the group
+   fades in and the panel fades out: the text stays still and steady.
+3. The band behind it is the panel's height, so the search field and the strip sit under the
+   panel's bottom edge, as they did under the row before.
+4. Only for a clock on a panel along the primary screen's top edge. Otherwise (bottom or
+   side panel, another screen, panel hidden by autohide) the clone is centred in a band at the
+   top, with the search bar's padding. Without a running `calendar@bgi` or
+   `calendar@cinnamon.org`, no band.
+
+Dropped:
+
+- Mirroring the text in our own label, with the copied style, at the label's position:
+  exact pixels would need the same font rendering, padding and allocation, and the text to be
+  followed by hand (`notify::text`); the clone gives all of it.
+- Letting the real panel show through Scale: it means patching `disablePanels` or the
+  panel's stacking, and the whole panel, its other applets included, would stay visible and
+  take clicks under Scale's modal grab.
+
+Removed with this change: the row's formatter (`clockText.js`), its copied style
+(`clockFont.js`), the minute timer, the resume subscription to logind, the 12 or 24-hour
+setting read, the `.scale-clock` rule, their tests, and the equality test with the calendar's
+formatter (the row no longer formats a date).
 
 ## Known limitations
 

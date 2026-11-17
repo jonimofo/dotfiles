@@ -1,145 +1,109 @@
 const Clutter = imports.gi.Clutter;
-const Gio = imports.gi.Gio;
-const GLib = imports.gi.GLib;
 const St = imports.gi.St;
-const Mainloop = imports.mainloop;
 const Main = imports.ui.main;
-const ClockFont = require('./clockFont');
-const ClockText = require('./clockText');
 const UiHelpers = require('./uiHelpers');
 
-// Desktop setting of the 12 or 24-hour clock, read at each opening of Scale.
-const DESKTOP_INTERFACE_SCHEMA = 'org.cinnamon.desktop.interface';
-const DESKTOP_24H_KEY = 'clock-use-24h';
-// logind's signal before a suspend (true) and after the resume (false): the minute timer
-// does not count the time spent suspended.
-const LOGIN1_BUS_NAME = 'org.freedesktop.login1';
-const LOGIN1_MANAGER_INTERFACE = 'org.freedesktop.login1.Manager';
-const LOGIN1_MANAGER_PATH = '/org/freedesktop/login1';
-const PREPARE_FOR_SLEEP_SIGNAL = 'PrepareForSleep';
-// Panel clocks whose label gives the row its font and colour, first found first used.
+// Panel clocks the row shows, first found first used.
 const PANEL_CLOCK_UUIDS = ['calendar@bgi', 'calendar@cinnamon.org'];
+const BAND_STYLE_CLASS = 'scale-clock-bar';
+// Off the panel's top edge, the copy sits in a band with the search bar's padding.
+const CENTRED_BAND_STYLE_CLASS = 'scale-clock-bar-centred';
 
-// The fallback to the stylesheet rule is logged once per session, not at each opening.
-let fallbackLogged = false;
+// Stage box {x, y, width, height} of @actor.
+function boxOf(actor) {
+    const [x, y] = actor.get_transformed_position();
+    const [width, height] = actor.get_transformed_size();
+    return { x, y, width, height };
+}
 
-// What St resolved for the label of the first running panel clock: {family, size,
-// isAbsolute, weight, color}, or null without a clock, a label or a style yet.
-function readPanelClockFont() {
+// The panel clock's place, relative to @monitor, when its panel runs along the top edge of
+// @monitor: {x, y, bandHeight}, the band reaching the panel's bottom edge. Null otherwise
+// (panel at the bottom or on the side, on another monitor, or hidden by autohide).
+function placeAtPanel(clockBox, panelBox, monitor) {
+    const onTopEdge = panelBox.y === monitor.y && panelBox.x >= monitor.x &&
+        panelBox.x + panelBox.width <= monitor.x + monitor.width;
+    const inPanel = clockBox.x >= panelBox.x && clockBox.x + clockBox.width <= panelBox.x + panelBox.width &&
+        clockBox.y >= panelBox.y && clockBox.y + clockBox.height <= panelBox.y + panelBox.height;
+    if (!onTopEdge || !inPanel)
+        return null;
+
+    return {
+        x: clockBox.x - monitor.x,
+        y: clockBox.y - monitor.y,
+        bandHeight: Math.round(panelBox.y + panelBox.height - monitor.y),
+    };
+}
+
+// The running panel clocks, as {actor, clockBox, panelBox}.
+function findPanelClocks() {
+    const clocks = [];
     for (const uuid of PANEL_CLOCK_UUIDS) {
         for (const applet of Main.AppletManager.getRunningInstancesForUuid(uuid)) {
-            const label = applet._applet_label;
-            const node = label && label.peek_theme_node();
-            if (!node)
-                continue;
-
-            const font = node.get_font();
-            return {
-                family: font.get_family(),
-                size: font.get_size(),
-                isAbsolute: font.get_size_is_absolute(),
-                weight: font.get_weight(),
-                color: node.get_foreground_color(),
-            };
+            if (applet.actor && applet.panel)
+                clocks.push({ actor: applet.actor, clockBox: boxOf(applet.actor), panelBox: boxOf(applet.panel.actor) });
         }
     }
-    return null;
+    return clocks;
 }
 
-// The panel clock's look, read at each opening so a change of the panel's text size shows;
-// the .scale-clock rule when it cannot be read.
-function applyPanelClockStyle(label) {
-    let style = null;
-    try {
-        style = ClockFont.panelClockStyle(readPanelClockFont());
-    } catch (e) {
-        logFallback(`reading the panel clock font failed: ${e}`);
-        return;
+// The clock on @monitor's top panel first, then any other: {clock, place}, place null when
+// the clock is not on that panel. Null without a clock.
+function chooseClock(clocks, monitor) {
+    for (const clock of clocks) {
+        const place = placeAtPanel(clock.clockBox, clock.panelBox, monitor);
+        if (place)
+            return { clock, place };
     }
-    if (style === null) {
-        logFallback('no panel clock font found');
-        return;
-    }
-    label.set_style(style);
+    return clocks.length > 0 ? { clock: clocks[0], place: null } : null;
 }
 
-function logFallback(reason) {
-    if (fallbackLogged)
-        return;
-
-    fallbackLogged = true;
-    global.logError(`[scale-wheel-switch] clock row: ${reason}, the stylesheet size is used`);
+// The panel clock in Scale, on the primary monitor: a live copy of the panel's own, which
+// Scale hides, so the same text, look and updates. With the clock on the primary monitor's
+// top panel, the copy sits on the clock's pixels and the band behind it reaches the panel's
+// bottom edge: the clock does not move when Scale opens. Otherwise the copy is centred in a
+// band at the top. Null without a panel clock: no band.
+function createOverviewClock() {
+    const monitor = Main.layoutManager.primaryMonitor;
+    const chosen = chooseClock(findPanelClocks(), monitor);
+    return chosen ? new OverviewClock(monitor, chosen.clock, chosen.place) : null;
 }
 
-// Band at the top of the primary monitor, above the search field: the date and the local
-// time. It lives only while Scale is open; its timer fires at each minute change and after
-// a resume from suspend.
 var OverviewClock = class OverviewClock {
-    constructor() {
-        this._monitor = Main.layoutManager.primaryMonitor;
-        this._timeoutId = 0;
-        this._sleepSubscriptionId = 0;
-        this._use24h = new Gio.Settings({ schema_id: DESKTOP_INTERFACE_SCHEMA }).get_boolean(DESKTOP_24H_KEY);
-
-        // Never focused, never clicked: like the other bands, it swallows the clicks so they
-        // do not reach Scale's background.
-        this._label = new St.Label({ style_class: 'scale-clock', x_align: Clutter.ActorAlign.CENTER });
-        applyPanelClockStyle(this._label);
-        this.actor = new St.Bin({ style_class: 'scale-clock-bar', child: this._label, reactive: true });
+    // @place is null when the copy goes in the centred band.
+    constructor(monitor, clock, place) {
+        this._isAtPanel = Boolean(place);
+        // Not reactive: the band under it swallows the clicks, so no calendar opens.
+        this._copy = new Clutter.Clone({ source: clock.actor, width: clock.clockBox.width, height: clock.clockBox.height });
+        this.actor = new St.Bin({ style_class: BAND_STYLE_CLASS, reactive: true });
         UiHelpers.swallowClicks(this.actor);
-        this.actor.set_position(this._monitor.x, this._monitor.y);
-        this.actor.set_width(this._monitor.width);
+        this.actor.set_position(monitor.x, monitor.y);
+        this.actor.set_width(monitor.width);
+        if (this._isAtPanel) {
+            this.actor.set_height(place.bandHeight);
+            this._copy.set_position(monitor.x + place.x, monitor.y + place.y);
+        } else {
+            this.actor.add_style_class_name(CENTRED_BAND_STYLE_CLASS);
+            this._copy.x_align = Clutter.ActorAlign.CENTER;
+            this.actor.set_child(this._copy);
+        }
 
         UiHelpers.destroyOnFailure(this, () => this._show());
     }
 
+    // At the panel's place the copy is above Scale's group, at full opacity while the group
+    // fades in and out over the panel, which fades the other way: the text never blinks.
     _show() {
-        this._tick();
-        this._sleepSubscriptionId = Gio.DBus.system.signal_subscribe(LOGIN1_BUS_NAME, LOGIN1_MANAGER_INTERFACE,
-            PREPARE_FOR_SLEEP_SIGNAL, LOGIN1_MANAGER_PATH, null, Gio.DBusSignalFlags.NONE,
-            (connection, sender, path, iface, signal, parameters) => this._onPrepareForSleep(parameters));
         Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
+        if (this._isAtPanel)
+            global.overlay_group.add_actor(this._copy);
     }
 
     getHeight() {
         return UiHelpers.getNaturalHeight(this.actor);
     }
 
-    // Shows the current minute, then waits for the next one.
-    _tick() {
-        const now = GLib.DateTime.new_now_local();
-        this._label.set_text(ClockText.formatClock(ClockText.clockPartsOf(now), this._use24h));
-        const delay = ClockText.msUntilNextMinute(now.get_second(), now.get_microsecond());
-        this._timeoutId = Mainloop.timeout_add(delay, () => {
-            this._timeoutId = 0;
-            this._tick();
-            return false;
-        });
-    }
-
-    // After a resume: the current minute at once, and a timer aligned to it again.
-    _onPrepareForSleep(parameters) {
-        const [isSuspending] = parameters.deep_unpack();
-        if (isSuspending)
-            return;
-
-        this._removeTimeout();
-        this._tick();
-    }
-
-    _removeTimeout() {
-        if (this._timeoutId) {
-            Mainloop.source_remove(this._timeoutId);
-            this._timeoutId = 0;
-        }
-    }
-
     destroy() {
-        this._removeTimeout();
-        if (this._sleepSubscriptionId) {
-            Gio.DBus.system.signal_unsubscribe(this._sleepSubscriptionId);
-            this._sleepSubscriptionId = 0;
-        }
+        this._copy.destroy();
         this.actor.destroy();
     }
 };

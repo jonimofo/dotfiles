@@ -54,12 +54,11 @@ strip with one thumbnail per workspace, all centered, then Scale's windows, then
 applications. The date and time, the search field and the dock are on the primary screen
 only; every other screen has its own strip at its very top.
 
-- The date and time read like `Tue 17 Nov. 2026   ·   09:22`: the date as the header of the
-  calendar applet, in English, and the time after the desktop's 12 or 24-hour clock setting.
-  They take the font, size, weight and colour of the panel clock, read at each opening, so a
-  change of the panel's text size shows at the next one. Without a running calendar applet
-  on the panel, they keep the extension's own 18pt bold white. They change at each minute
-  while Scale is open.
+- The date and time are the panel clock itself, copied live: same text, look and updates
+  (Scale hides the panels). With the clock on the primary screen's top panel, the copy sits
+  on the clock's pixels and a band the panel's height lies behind it, so the clock does not
+  move when Scale opens. With the clock elsewhere (bottom panel, another screen), the copy is
+  centred in a band at the top. Without a running calendar applet, there is no clock row.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
@@ -165,9 +164,9 @@ Then give Super back to the Menu (see above).
   With none, or none of its pinned apps installed, and no other app running, no dock is
   drawn until the next opening of Scale.
 - Many apps make the dock icons smaller to fit the screen's width. Untested.
-- The clock reads the 12 or 24-hour setting when Scale opens: a change while it is open, or
-  of the time zone, shows at the next opening. After the system clock is set with Scale open,
-  the time can lag for up to a minute; after a suspend it is updated at the resume.
+- The clock's place is read when Scale opens: a panel moved or resized while it is open
+  keeps the old place until the next opening. The copy shows the clock as it is drawn,
+  including a hover highlight if the pointer was on it when Scale opened.
 
 ## How it is built
 
@@ -204,8 +203,7 @@ Private fields and methods read, called or written:
 | `imports.ui.dnd` | a monitor's `dragDrop(event)` with `event.targetActor`, returning `DragDropResult.CONTINUE` | clearing the highlights of the targets that do not take a drop |
 | `Main` | `modalCount` | is Scale the only modal |
 | `Main.AppletManager` | `getRunningInstancesForUuid('grouped-window-list@cinnamon.org')` | the panel's window list applet |
-| `Main.AppletManager` | `getRunningInstancesForUuid('calendar@bgi')`, then `('calendar@cinnamon.org')` | the panel clock |
-| panel clock applet (`TextIconApplet`) | `_applet_label`, its `peek_theme_node()` font and foreground colour | the clock row's look |
+| `Main.AppletManager` | `getRunningInstancesForUuid('calendar@bgi')`, then `('calendar@cinnamon.org')` | the panel clock, its `actor` and its `panel.actor` |
 | grouped window list applet | `settings` (its `AppletSettings`), key `pinned-apps` | the pinned apps of the dock |
 
 Assumptions about behaviour:
@@ -228,8 +226,11 @@ Assumptions about behaviour:
 - `Main.activateWindow` does not close Scale when it has to switch workspace, so the dock
   switches to the window's workspace first, then activates it.
 - `Cinnamon.AppSystem`'s `app-state-changed` signal drives the dock's live update.
-- logind emits `org.freedesktop.login1.Manager.PrepareForSleep(false)` on the system bus at
-  each resume: the clock subscribes to it while Scale is open.
+- Scale hides the panels (`Main.panelManager.disablePanels()` in `Overview._animateVisible`:
+  each panel fades to opacity 0, then `actor.hide()`), and gives them back when it starts to
+  close. A `Clutter.Clone` of the panel clock's actor still paints, and follows its text,
+  while the panel is hidden. The copy is added to `global.overlay_group` above Scale's
+  group, so it stays at full opacity while the group fades in and out.
 - `extension.sh reload` calls the D-Bus method `org.Cinnamon.ReloadXlet(uuid, "EXTENSION")`.
 
 ## Quick Settings: what it does

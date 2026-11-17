@@ -88,8 +88,8 @@ function showHeader() {
         return;
 
     try {
-        clock = new OverviewClock.OverviewClock();
-        const clockHeight = clock.getHeight();
+        clock = OverviewClock.createOverviewClock();
+        const clockHeight = clock ? clock.getHeight() : 0;
         search = new AppSearch.AppSearch(clockHeight);
         showDock();
         const primaryIndex = Main.layoutManager.primaryIndex;

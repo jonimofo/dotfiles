@@ -1,11 +1,11 @@
 // Logic tests of scale-wheel-switch@bgi (Scale overview), run by cinnamon-scale-test.sh.
 // Cinnamon's actors, Scale's overview and its window clones are fakes: no running Cinnamon
 // is touched. Each block is a regression test of a fixed bug.
-// Usage: gjs cinnamon-scale-test.js <extension folder>
+// Usage: gjs cinnamon-scale-test.js <extension folder> <calendar@bgi applet folder>
 const GLib = imports.gi.GLib;
 const ByteArray = imports.byteArray;
 
-const [extensionDir] = ARGV;
+const [extensionDir, calendarDir] = ARGV;
 let failures = 0;
 
 function check(label, condition) {
@@ -261,15 +261,15 @@ function makeImports(monitorCount, primaryIndex) {
 }
 
 // Cinnamon's require(): every top-level declaration of the file is exported. @stubs replaces
-// the sibling modules a test does not exercise.
-function makeRequire(moduleImports, stubs = {}) {
+// the sibling modules a test does not exercise. @dir is the extension's folder by default.
+function makeRequire(moduleImports, stubs = {}, dir = extensionDir) {
     const modules = {};
     const require = path => {
         const name = path.replace('./', '');
         if (stubs[name])
             return stubs[name];
         if (!modules[name]) {
-            const source = readText(`${extensionDir}/${name}.js`);
+            const source = readText(`${dir}/${name}.js`);
             const names = [...source.matchAll(/^(?:function|const|let|var|class) ([A-Za-z0-9_]+)/gm)].map(m => m[1]);
             modules[name] = new Function('require', 'imports', '_',
                 `${source}\nreturn { ${names.join(', ')} };`)(require, moduleImports, text => text);
@@ -558,6 +558,80 @@ function testFittingItemWidth() {
     check('#29 fit: a row with no room left keeps items of the minimum width', getFittingItemWidth(1000, 10, 4, 200) === 1);
 }
 
+const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+// Four years, one of them leap.
+const DAYS_2024_TO_2027 = 4 * 365 + 1;
+// Months whose full name is no longer than its abbreviation.
+const SHORT_MONTH_NAMES = [5];
+
+// The clock row: date as the calendar applet's header, local time after the 24h setting.
+function testClockText() {
+    const clockText = makeRequire({})('./clockText');
+    const at = (year, month, day, hour = 0, minute = 0) =>
+        clockText.clockPartsOf(GLib.DateTime.new_local(year, month, day, hour, minute, 0));
+
+    const owner = clockText.formatClock(at(2026, 11, 17, 9, 22), true);
+    print(`  2026-11-17 09:22 gives "${owner}"`);
+    check('clock: 2026-11-17 09:22 in 24h reads "Tue 17 Nov. 2026   ·   09:22"',
+        owner === 'Tue 17 Nov. 2026   ·   09:22');
+
+    const dotted = ALL_MONTHS.every(month => {
+        const date = clockText.formatDate(at(2026, month, 1));
+        const shortName = SHORT_MONTH_NAMES.includes(month);
+        return date.split(' ')[2].endsWith('.') === !shortName;
+    });
+    check('clock: a dot after every month but May, whose name has three letters', dotted);
+    check('clock: "May" keeps its name without a dot', clockText.formatDate(at(2026, 5, 4)) === 'Mon 4 May 2026');
+    check('clock: "Jun" and "Jul" take a dot (June, July are longer)',
+        clockText.formatDate(at(2026, 6, 1)) === 'Mon 1 Jun. 2026' && clockText.formatDate(at(2026, 7, 1)) === 'Wed 1 Jul. 2026');
+    check('clock: a single-digit day is not padded', clockText.formatDate(at(2026, 11, 3)) === 'Tue 3 Nov. 2026');
+    check('clock: the year changes at midnight on 31 December',
+        clockText.formatDate(at(2026, 12, 31, 23, 59)) === 'Thu 31 Dec. 2026' &&
+        clockText.formatDate(at(2027, 1, 1, 0, 0)) === 'Fri 1 Jan. 2027');
+    const week = [15, 16, 17, 18, 19, 20, 21].map(day => clockText.formatDate(at(2026, 11, day)).split(' ')[0]);
+    check('clock: each weekday, Sunday 15 to Saturday 21 Nov. 2026', week.join() === 'Sun,Mon,Tue,Wed,Thu,Fri,Sat');
+
+    check('clock: 24h pads the hour', clockText.formatTime(at(2026, 11, 17, 9, 5), true) === '09:05');
+    check('clock: 24h at midnight and 23:59',
+        clockText.formatTime(at(2026, 11, 17, 0, 0), true) === '00:00' &&
+        clockText.formatTime(at(2026, 11, 17, 23, 59), true) === '23:59');
+    check('clock: 12h morning', clockText.formatTime(at(2026, 11, 17, 9, 22), false) === '9:22 AM');
+    check('clock: 12h midnight is 12 AM, noon is 12 PM',
+        clockText.formatTime(at(2026, 11, 17, 0, 7), false) === '12:07 AM' &&
+        clockText.formatTime(at(2026, 11, 17, 12, 7), false) === '12:07 PM');
+    check('clock: 12h afternoon', clockText.formatTime(at(2026, 11, 17, 21, 40), false) === '9:40 PM');
+    check('clock: 12h row text', clockText.formatClock(at(2026, 11, 17, 21, 40), false) === 'Tue 17 Nov. 2026   ·   9:40 PM');
+
+    check('clock: next minute from 0 s is 60 s away', clockText.msUntilNextMinute(0, 0) === 60000);
+    check('clock: next minute from 59.5 s is 500 ms away', clockText.msUntilNextMinute(59, 500000) === 500);
+}
+
+// The row's date must stay the calendar@bgi header date: compared over every day of 2024
+// (leap year) to 2027.
+function testClockMatchesCalendar() {
+    const clockText = makeRequire({})('./clockText');
+    const dateText = makeRequire({}, {}, calendarDir)('./dateText');
+    const mismatches = [];
+    let day = GLib.DateTime.new_local(2024, 1, 1, 12, 0, 0);
+    const end = GLib.DateTime.new_local(2028, 1, 1, 12, 0, 0);
+    let count = 0;
+    while (day.compare(end) < 0) {
+        const ours = clockText.formatDate(clockText.clockPartsOf(day));
+        const calendar = dateText.headerDateOf(day);
+        if (ours !== calendar)
+            mismatches.push(`${ours} != ${calendar}`);
+        count++;
+        day = day.add_days(1);
+    }
+    print(`  ${count} days compared, first: "${dateText.headerDateOf(GLib.DateTime.new_local(2026, 11, 17, 9, 22, 0))}"`);
+    for (const mismatch of mismatches.slice(0, 3))
+        print(`  mismatch: ${mismatch}`);
+    check('clock: same date as the calendar applet\'s header on every day of 2024 to 2027',
+        count === DAYS_2024_TO_2027 && mismatches.length === 0);
+}
+
+testClockText();
+testClockMatchesCalendar();
 testSearchBlocksOtherScreens();
 testMiddleClickDoesNothing();
 testDragHighlightsClearedOnDrop();

@@ -238,7 +238,9 @@ class Calendar {
         back.connect('clicked', Lang.bind(this, this._onPrevMonthButtonClicked));
 
         this._monthLabel = new St.Label({style_class: Constants.STYLE.monthLabel});
-        this._topBoxMonth.add(this._monthLabel, { expand: true, x_fill: false, x_align: St.Align.MIDDLE });
+        // Centred on the arrows' line: the arrow buttons are taller than the label.
+        this._topBoxMonth.add(this._monthLabel, { expand: true, x_fill: false, x_align: St.Align.MIDDLE,
+                                                  y_fill: false, y_align: St.Align.MIDDLE });
 
         let forward = this._monthArrow(forward_icon, Constants.TEXT.nextMonth);
         this._topBoxMonth.add(forward);

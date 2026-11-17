@@ -1,4 +1,4 @@
-Status: VALIDATED
+Status: DONE
 
 # Cinnamon Quick Settings: media controls
 
@@ -82,6 +82,18 @@ D. The CPU line is removed from the applet, with its setting.
   default. Saved lists holding `cpu-line` drop it and get the media entry.
 - CPU line removal: its modules, fixtures, constants, tests, README lines and the `env`
   option of the subprocess helper (only the CPU line used it).
+
+## As built
+
+- `mediaModel.js` (pure: names, texts, button states, order and cap), `mediaPlayers.js`
+  (session bus: ListNames, GetNameOwner, NameOwnerChanged, GetAll, PropertiesChanged),
+  `mediaBlock.js` (one block's actors), wired in `menuContent.js` and `applet.js`.
+- Cut lengths: title 44, artist 20, player name 16 characters (`VLC media player`, VLC's
+  Identity, fits whole); the labels also ellipsize at their width.
+- The fallback player name is the first part after `org.mpris.MediaPlayer2.`, without an
+  instance suffix (`firefox.instance_1_2` gives `Firefox`, `vlc-123` gives `Vlc`).
+- Hidden media controls follow no player: the watcher starts when they show and is
+  destroyed when they hide.
 
 ## Out of scope
 

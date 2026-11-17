@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 write_value() {
     # Test copy only: models the dell-laptop driver on the fake tree. Logs each write as
     # "file requested stored".

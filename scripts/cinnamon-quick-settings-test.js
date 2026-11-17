@@ -953,6 +953,11 @@ function testAirplaneMode() {
     check(`airplane: Bluetooth goes through Adapter1.Powered (${calls})`, `${calls}` === 'Set false');
 }
 
+// Line 2 of a media block as shown: the artist part, then the player name.
+function line2(text) {
+    return `${text.artist}${text.player}`;
+}
+
 function testMediaModel() {
     const Model = load('./mediaModel');
     check('media: MPRIS names only', Model.isPlayerName('org.mpris.MediaPlayer2.vlc')
@@ -964,25 +969,34 @@ function testMediaModel() {
         && Model.playerName(42, 'org.mpris.MediaPlayer2.player') === 'Player');
     const text = Model.blockText({ 'xesam:title': 'Song title', 'xesam:artist': ['Artist'] }, 'VLC');
     check(`media: title, then artist · player (${JSON.stringify(text)})`,
-        text.title === 'Song title' && text.subtitle === 'Artist · VLC');
+        text.title === 'Song title' && line2(text) === 'Artist · VLC');
     check('media: several artists joined with a comma',
-        Model.blockText({ 'xesam:title': 'Duet', 'xesam:artist': ['First', 'Second'] }, 'VLC').subtitle === 'First, Second · VLC');
+        line2(Model.blockText({ 'xesam:title': 'Duet', 'xesam:artist': ['First', 'Second'] }, 'VLC')) === 'First, Second · VLC');
     check('media: no artist, the player name alone',
-        Model.blockText({ 'xesam:title': 'Video title' }, 'Firefox').subtitle === 'Firefox'
-        && Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': [] }, 'Firefox').subtitle === 'Firefox'
-        && Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': ['', '  '] }, 'Firefox').subtitle === 'Firefox');
+        line2(Model.blockText({ 'xesam:title': 'Video title' }, 'Firefox')) === 'Firefox'
+        && line2(Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': [] }, 'Firefox')) === 'Firefox'
+        && line2(Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': ['', '  '] }, 'Firefox')) === 'Firefox');
     check('media: an artist given as a string works too',
-        Model.blockText({ 'xesam:title': 'T', 'xesam:artist': 'Channel' }, 'Firefox').subtitle === 'Channel · Firefox');
+        line2(Model.blockText({ 'xesam:title': 'T', 'xesam:artist': 'Channel' }, 'Firefox')) === 'Channel · Firefox');
     check('media: no title, empty title or a non-text title gives no block',
         Model.blockText({}, 'VLC') === null && Model.blockText({ 'xesam:title': '  ' }, 'VLC') === null
         && Model.blockText({ 'xesam:title': 7 }, 'VLC') === null && Model.blockText(null, 'VLC') === null);
     const odd = Model.blockText({ 'xesam:title': 'Line one\nline two\t<b>x</b>', 'xesam:artist': ['A & B'] }, 'VLC');
     check(`media: newlines and tabs become spaces, markup characters stay as text (${odd.title})`,
-        odd.title === 'Line one line two <b>x</b>' && odd.subtitle === 'A & B · VLC');
+        odd.title === 'Line one line two <b>x</b>' && line2(odd) === 'A & B · VLC');
+    check('media: line 2 in two parts, the separator with the artist, the player alone',
+        JSON.stringify(text) === '{"title":"Song title","artist":"Artist · ","player":"VLC"}'
+        && JSON.stringify(Model.blockText({ 'xesam:title': 'Video title' }, 'Firefox')) === '{"title":"Video title","artist":"","player":"Firefox"}');
+    const longArtist = Model.blockText({ 'xesam:title': 'T', 'xesam:artist': ['B'.repeat(30)] }, 'VLC media player');
+    check(`media: a long artist is cut, the player name stays whole (${line2(longArtist)})`,
+        longArtist.artist === `${'B'.repeat(19)}… · ` && longArtist.player === 'VLC media player');
+    const longPlayer = Model.blockText({ 'xesam:title': 'T', 'xesam:artist': ['Band'] }, 'A player with a long name');
+    check(`media: a long player name is cut at 16 characters (${longPlayer.player})`,
+        longPlayer.player === 'A player with a…' && [...longPlayer.player].length === 16 && longPlayer.artist === 'Band · ');
     const long = Model.blockText({ 'xesam:title': 'T'.repeat(60), 'xesam:artist': ['A'.repeat(30)] }, 'A very long player');
-    check(`media: long texts are cut with an ellipsis (${long.subtitle})`,
+    check(`media: long texts are cut with an ellipsis (${line2(long)})`,
         [...long.title].length === 44 && long.title.endsWith('…')
-        && long.subtitle === `${'A'.repeat(19)}… · A very long pla…`);
+        && line2(long) === `${'A'.repeat(19)}… · A very long pla…`);
 
     const states = props => Model.buttonStates(props);
     const all = { CanControl: true, CanGoPrevious: true, CanGoNext: true, CanPlay: true, CanPause: true };
@@ -1129,7 +1143,7 @@ function testMediaPlayers() {
         mprisPlayer('Video title', ['Channel'], 'Paused'));
     let changes = 0;
     const players = new MediaPlayers.MediaPlayers(() => changes++, bus);
-    const view = () => players.blocks.map(b => `${b.text.title} | ${b.text.subtitle} | ${b.buttons.playPause.label}`).join(' / ');
+    const view = () => players.blocks.map(b => `${b.text.title} | ${line2(b.text)} | ${b.buttons.playPause.label}`).join(' / ');
     check(`media players: found at start, one block each, by name (${view()})`,
         view() === 'Video title | Channel · Firefox | Play / Song title | Artist · VLC media player | Pause');
     check('media players: one PropertiesChanged subscription per player',
@@ -1142,8 +1156,8 @@ function testMediaPlayers() {
     check('media players: a status change updates the play button live', players.blocks[1].buttons.playPause.label === 'Play');
     bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
         { Metadata: new GLib.Variant('a{sv}', { 'xesam:title': new GLib.Variant('s', 'Next song') }) });
-    check(`media players: a new track updates the block live (${players.blocks[1].text.subtitle})`,
-        players.blocks[1].text.title === 'Next song' && players.blocks[1].text.subtitle === 'VLC media player');
+    check(`media players: a new track updates the block live (${line2(players.blocks[1].text)})`,
+        players.blocks[1].text.title === 'Next song' && line2(players.blocks[1].text) === 'VLC media player');
     bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
         { Metadata: new GLib.Variant('a{sv}', {}) });
     check('media players: a player that loses its track loses its block', players.blocks.length === 1);

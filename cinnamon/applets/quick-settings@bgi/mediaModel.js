@@ -29,8 +29,10 @@ function playerName(identity, busName) {
     return plainText(identity) || fallbackName(busName);
 }
 
-// { title, subtitle } for a block, or null when the metadata has no title. @metadata: the
-// unpacked Metadata map; @name: from playerName().
+// { title, artist, player } for a block, or null when the metadata has no title. Line 2 is
+// artist then player: artist ends with the separator ("Artist · "), or is empty without an
+// artist, so the player name shows alone. @metadata: the unpacked Metadata map; @name: from
+// playerName().
 function blockText(metadata, name) {
     const title = plainText(metadata ? metadata['xesam:title'] : null);
     if (!title)
@@ -39,9 +41,8 @@ function blockText(metadata, name) {
     const player = PanelText.cutText(name, Constants.MEDIA_PLAYER_NAME_MAX);
     return {
         title: PanelText.cutText(title, Constants.MEDIA_TITLE_MAX),
-        subtitle: artist
-            ? `${PanelText.cutText(artist, Constants.MEDIA_ARTIST_MAX)}${Constants.MEDIA_PLAYER_SEPARATOR}${player}`
-            : player,
+        artist: artist ? `${PanelText.cutText(artist, Constants.MEDIA_ARTIST_MAX)}${Constants.MEDIA_PLAYER_SEPARATOR}` : '',
+        player,
     };
 }
 

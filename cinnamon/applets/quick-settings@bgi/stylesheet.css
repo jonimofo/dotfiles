@@ -42,10 +42,16 @@
     width: 36px;
     height: 36px;
     border-radius: 18px;
+}
+
+/* The media buttons share the header buttons' colours, at three quarters of their size. */
+.quick-settings-header-button,
+.quick-settings-media-button {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-.quick-settings-header-button:hover {
+.quick-settings-header-button:hover,
+.quick-settings-media-button:hover {
     background-color: rgba(255, 255, 255, 0.18);
 }
 
@@ -150,7 +156,7 @@
 
 .quick-settings-media-block {
     padding: 0 8px;
-    spacing: 4px;
+    spacing: 8px;
 }
 
 .quick-settings-media-title {
@@ -158,7 +164,26 @@
 }
 
 .quick-settings-media-row {
-    spacing: 12px;
+    spacing: 0;
+}
+
+.quick-settings-media-player {
+    font-style: italic;
+}
+
+.quick-settings-media-buttons {
+    padding-left: 12px;
+    spacing: 6px;
+}
+
+.quick-settings-media-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+}
+
+.quick-settings-media-icon {
+    icon-size: 12px;
 }
 
 /* In-place list, under the row whose arrow opened it */

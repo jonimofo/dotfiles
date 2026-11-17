@@ -95,6 +95,33 @@ D. The CPU line is removed from the applet, with its setting.
 - Hidden media controls follow no player: the watcher starts when they show and is
   destroyed when they hide.
 
+## Smaller buttons, italic player name, more space (review round)
+
+Request: "reduit un peu la taille des boutons de lecture et >>, + je veux en italic le nom VLC
+player - Mozilla, etc + rajoute un peu de gap pour ne pas que la ligne du haut ne touche les
+boutons ?"
+
+```
+Now:
++--------------------------------------------+      separator line
+| Song title                                 |
+| Artist · VLC media player  (<<) (||) (>>)  |      large round buttons, close to what is above
+
+Wanted:
++--------------------------------------------+
+                                                     more space under the line
+| Song title                                 |
+                                                     more space above the buttons
+| Artist · VLC media player    (<<)(||)(>>)  |      smaller buttons, player name in italic
+```
+
+- Media buttons: own classes, 28 px round with 12 px icons (the header's are 36 px with
+  16 px icons), 6 px apart (header 8 px); same colours, shared with the header's rules.
+- Line 2 in two labels: `artist · ` normal, the player name in italic (`font-style`). The
+  model returns both parts; without an artist only the player name shows. Too long: the
+  artist ellipsizes first, the player name (at most 16 characters) is not cut by the label.
+- Block spacing 4 px to 8 px: under the separator and between the title and the buttons row.
+
 ## Out of scope
 
 Cover art, progress bar, volume per player, a player chooser; anything else.

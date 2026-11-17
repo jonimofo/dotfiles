@@ -1575,9 +1575,142 @@ function testMediaFocus() {
         `${times}` === 'Process window@777,App@888');
 }
 
+async function testChargeLimit() {
+    const Model = load('./chargeModel');
+    const Constants = load('./constants');
+    check('charge: the active charge type is the bracketed one',
+        Model.activeChargeType('Trickle Fast Standard [Adaptive] Custom\n') === 'Adaptive'
+        && Model.activeChargeType('Trickle Fast Standard Adaptive [Custom]') === 'Custom'
+        && Model.activeChargeType('Trickle Fast Standard Adaptive Custom') === null && Model.activeChargeType(null) === null);
+    check('charge: Custom with the end at 80 is the limit state',
+        Model.chargeState('Trickle Fast Standard Adaptive [Custom]\n', '80\n') === 'limit');
+    check('charge: Adaptive, Custom with another end, or no mode marked, is the full state',
+        Model.chargeState('Trickle Fast Standard [Adaptive] Custom', '80') === 'full'
+        && Model.chargeState('Adaptive [Custom]', '90') === 'full'
+        && Model.chargeState('Adaptive Custom', '80') === 'full');
+    check('charge: a malformed end threshold is the full state, an unreadable file no state',
+        Model.chargeState('[Custom]', 'eighty') === 'full' && Model.chargeState('[Custom]', '') === 'full'
+        && Model.chargeState(null, '80') === null && Model.chargeState('[Custom]', null) === null);
+    check('charge: labels and checked state',
+        JSON.stringify(Model.tileView('limit')) === '{"checked":false,"label":"Charge 80%"}'
+        && JSON.stringify(Model.tileView('full')) === '{"checked":true,"label":"Charge 100%"}');
+    check(`charge: a click asks for the other state, through sudo -n and the helper (${Model.helperArgv('full')})`,
+        Model.toggledState('limit') === 'full' && Model.toggledState('full') === 'limit'
+        && `${Model.helperArgv('limit')}` === 'sudo,-n,/usr/local/sbin/battery-charge-limit,limit'
+        && `${Model.helperArgv('full')}` === 'sudo,-n,/usr/local/sbin/battery-charge-limit,full');
+    check('charge: the labels follow the thresholds', Constants.CHARGE_LABELS.limit === `Charge ${Constants.CHARGE_LIMIT_END}${Constants.PERCENT_SUFFIX}`
+        && Constants.TILES.find(tile => tile.id === 'charge-limit').label === Constants.CHARGE_LABELS.limit);
+
+    // Every input combination of the automatic return: state, seen full, on AC, battery full.
+    const table = [];
+    for (const state of ['limit', 'full']) {
+        for (const seen of [false, true]) {
+            for (const onAc of [false, true]) {
+                for (const full of [false, true]) {
+                    const out = Model.autoReturn(state, seen, onAc, full);
+                    table.push(`${state[0]}${+seen}${+onAc}${+full}:${+out.seenFull}${+out.fire}`);
+                }
+            }
+        }
+    }
+    const expected = [
+        'l000:00', 'l001:00', 'l010:00', 'l011:00', 'l100:00', 'l101:00', 'l110:00', 'l111:00',
+        'f000:00', 'f001:00', 'f010:00', 'f011:10', 'f100:01', 'f101:01', 'f110:10', 'f111:10',
+    ];
+    check(`charge: automatic return, the 16 combinations (${table.join(' ')})`, `${table}` === `${expected}`);
+
+    // The tile on fake files and a fake command.
+    const files = new Map([
+        [Constants.CHARGE_TYPES_FILE, 'Trickle Fast Standard [Adaptive] Custom\n'],
+        [Constants.CHARGE_END_FILE, '80\n'],
+        [Constants.CHARGE_HELPER, '#!/bin/sh'],
+    ]);
+    const fakeFiles = { exists: path => files.has(path), readText: path => Promise.resolve(files.has(path) ? files.get(path) : null) };
+    const runs = [];
+    let failNext = false;
+    const run = argv => {
+        runs.push(argv.join(' '));
+        if (failNext) {
+            failNext = false;
+            return Promise.reject(new Error('sudo: a password is required'));
+        }
+        const word = argv[argv.length - 1];
+        files.set(Constants.CHARGE_TYPES_FILE, word === 'limit' ? 'Trickle Fast Standard Adaptive [Custom]' : 'Trickle Fast Standard [Adaptive] Custom');
+        return Promise.resolve('');
+    };
+    let changes = 0;
+    const ChargeLimit = load('./chargeLimit');
+    const charge = new ChargeLimit.ChargeLimit(run, () => changes++, fakeFiles);
+    await charge.refresh();
+    check('charge tile: Adaptive today reads as full, available', charge.state === 'full' && charge.available && changes === 1);
+    await charge.toggle();
+    check(`charge tile: a click runs the helper for the limit, then reads again (${runs})`,
+        `${runs}` === 'sudo -n /usr/local/sbin/battery-charge-limit limit' && charge.state === 'limit');
+    errors = [];
+    failNext = true;
+    await charge.toggle();
+    check(`charge tile: a refused sudo is logged, the tile shows the real state (${errors})`,
+        errors.length === 1 && errors[0].includes('setting the battery charge to full failed: sudo: a password is required') && charge.state === 'limit');
+    errors = [];
+
+    // Automatic return: full, then full on AC, then unplugged: limit once.
+    await charge.toggle();
+    runs.length = 0;
+    await charge.onBattery({ onAc: true, full: true });
+    check('charge tile: full on AC is remembered, nothing run yet', runs.length === 0 && charge.state === 'full');
+    await charge.onBattery({ onAc: false, full: true });
+    check(`charge tile: unplugged after full, the limit comes back once (${runs})`,
+        `${runs}` === 'sudo -n /usr/local/sbin/battery-charge-limit limit' && charge.state === 'limit');
+    await charge.onBattery({ onAc: false, full: false });
+    await charge.onBattery({ onAc: true, full: true });
+    await charge.onBattery({ onAc: false, full: true });
+    check('charge tile: in the limit state nothing more runs', runs.length === 1);
+    await charge.onBattery(null);
+    await charge.onBattery({ onAc: null, full: true });
+    check('charge tile: no battery or an unknown power source decides nothing', runs.length === 1);
+
+    files.delete(Constants.CHARGE_HELPER);
+    await charge.refresh();
+    check('charge tile: no helper installed, the tile is dimmed', !charge.available);
+    runs.length = 0;
+    await charge.toggle();
+    check('charge tile: a dimmed tile runs nothing', runs.length === 0);
+    files.set(Constants.CHARGE_HELPER, '#!/bin/sh');
+    files.delete(Constants.CHARGE_END_FILE);
+    await charge.refresh();
+    check('charge tile: no sysfs threshold file, dimmed', !charge.available);
+    const before = changes;
+    charge.destroy();
+    await charge.refresh();
+    check('charge tile: nothing shown after destroy', changes === before);
+}
+
+// The applet's charge values are the helper's: read from the helper's constants.
+function testChargeHelperAgrees() {
+    const Constants = load('./constants');
+    const helper = readText(`${GLib.path_get_dirname(fixturesRoot)}/../system/battery-charge-limit/battery-charge-limit`);
+    const value = name => {
+        const match = helper.match(new RegExp(`^readonly ${name}='?([^'\n]*)'?$`, 'm'));
+        return match ? match[1] : null;
+    };
+    const pairs = [
+        ['BATTERY_DIR', Constants.CHARGE_BATTERY_DIR], ['LIMIT_MODE', Constants.CHARGE_LIMIT_MODE],
+        ['FULL_MODE', Constants.CHARGE_FULL_MODE], ['LIMIT_START', `${Constants.CHARGE_LIMIT_START}`],
+        ['LIMIT_END', `${Constants.CHARGE_LIMIT_END}`],
+    ];
+    const mismatches = pairs.filter(([name, applet]) => value(name) !== applet).map(([name, applet]) => `${name}=${value(name)}/${applet}`);
+    check(`charge: the applet and the helper agree on the battery, modes and thresholds (${mismatches.length ? mismatches : 'all equal'})`,
+        mismatches.length === 0);
+    check('charge: the helper accepts exactly the applet\'s two words',
+        helper.includes(`limit | full) ;;`) && Constants.CHARGE_HELPER_WORDS.limit === 'limit' && Constants.CHARGE_HELPER_WORDS.full === 'full'
+        && helper.includes(`if [ "$1" = '${Constants.CHARGE_HELPER_WORDS.limit}' ]; then`));
+    check('charge: the applet reads the files the helper writes',
+        Constants.CHARGE_TYPES_FILE === `${value('BATTERY_DIR')}/charge_types` && Constants.CHARGE_END_FILE === `${value('BATTERY_DIR')}/charge_control_end_threshold`);
+}
+
 function testBatteryModel() {
     const Model = load('./batteryModel');
-    const kinds = { battery: 2, unknownState: 0 };
+    const kinds = { battery: 2, unknownState: 0, onAcStates: [1, 4, 5], onBatteryStates: [2, 3, 6], fullyCharged: 4 };
     const text = readText(`${powerFixtures}/get-devices.txt`);
     const devices = GLib.Variant.parse(new GLib.VariantType('(a(sssusduut))'), text, null, null).deepUnpack()[0];
     const battery = Model.pickBattery(devices, null, kinds);
@@ -1585,6 +1718,13 @@ function testBatteryModel() {
         battery !== null && battery.percent === 100 && battery.iconString.includes('battery-level-100-charged-symbolic'));
     check('battery: no battery hides the figure', Model.pickBattery(devices.filter(d => d[3] !== 2), null, kinds) === null);
     check('battery: label', Model.label(87) === '87%');
+    check(`battery: the captured fully charged battery is on AC and full (${battery.onAc}, ${battery.full})`, battery.onAc === true && battery.full);
+    const device = (state, percentage) => ['/bat', '', '', 2, 'battery-symbolic', percentage, state, 0, 0];
+    const read = (state, percentage) => Model.pickBattery([device(state, percentage)], null, kinds);
+    check('battery: charging is on AC, discharging on battery, not full below 100 %',
+        read(1, 60).onAc === true && read(2, 60).onAc === false && !read(2, 60).full && read(5, 80).onAc === true);
+    check('battery: 100 % while discharging counts as full; an unlisted state is neither on AC nor on battery',
+        read(2, 100).full && read(2, 100).onAc === false && read(7, 50).onAc === null);
 }
 
 function testMicMute() {
@@ -1630,7 +1770,7 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Airplane mode,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,Media controls'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Airplane mode,Keyboard light,Charge limit,Dark style,Do Not Disturb,Keep awake,Mic mute,Media controls'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
         && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,VPN,Bluetooth,Volume,Battery');
@@ -1669,7 +1809,7 @@ function testLayoutModel() {
     ];
     const ownerTiles = Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS);
     check(`layout: the owner's saved Tiles list drops night-light and places the new tiles by the defaults (${ownerTiles})`,
-        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,media');
+        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,charge-limit,media');
     const ownerSplit = Model.splitTileLayout(ownerTiles, Constants.MEDIA_ITEM.id);
     check('layout: the media controls are split off the tiles and show', ownerSplit.media && !ownerSplit.tileIds.includes('media'));
     check('layout: hidden media controls do not show', !Model.splitTileLayout(['wifi', 'vpn'], Constants.MEDIA_ITEM.id).media);
@@ -1682,11 +1822,22 @@ function testLayoutModel() {
     check('layout: no cpu-line is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'cpu-line'));
     const ownerRows = Model.rows(ownerSplit.tileIds, Constants.TILES_PER_ROW);
     check(`layout: the owner's tile rows (${JSON.stringify(ownerRows)})`,
-        JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["power-profile","airplane-mode"],["keyboard-light"]]');
+        JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["power-profile","airplane-mode"],["keyboard-light","charge-limit"]]');
     check('layout: the owner\'s hidden tiles stay hidden',
         Model.normalize(saved, Constants.TILE_LAYOUT_ITEMS).filter(row => !row.show).map(row => row.id).join() === 'dark-style,do-not-disturb,keep-awake,mic-mute');
     check(`layout: default tile order (${Constants.TILES.map(item => item.id)})`,
-        `${Constants.TILES.map(item => item.id)}` === 'wifi,bluetooth,vpn,nordvpn,power-profile,airplane-mode,keyboard-light,dark-style,do-not-disturb,keep-awake,mic-mute');
+        `${Constants.TILES.map(item => item.id)}` === 'wifi,bluetooth,vpn,nordvpn,power-profile,airplane-mode,keyboard-light,charge-limit,dark-style,do-not-disturb,keep-awake,mic-mute');
+    // The owner's saved Tiles list today (written back by the earlier versions): the Charge
+    // tile lands after Keyboard light, on the last row.
+    const savedNow = [
+        ...['wifi', 'bluetooth', 'nordvpn', 'vpn', 'power-profile', 'airplane-mode', 'keyboard-light'].map(id => ({ show: true, id })),
+        ...['dark-style', 'do-not-disturb', 'keep-awake', 'mic-mute'].map(id => ({ show: false, id })),
+        { show: true, id: 'media' },
+    ];
+    const nowTiles = Model.splitTileLayout(Model.visibleIds(savedNow, Constants.TILE_LAYOUT_ITEMS), Constants.MEDIA_ITEM.id);
+    const nowRows = Model.rows(nowTiles.tileIds, Constants.TILES_PER_ROW);
+    check(`layout: the owner's saved list gets [Keyboard] [Charge] as its last row (${JSON.stringify(nowRows)})`,
+        JSON.stringify(nowRows[nowRows.length - 1]) === '["keyboard-light","charge-limit"]' && nowRows.length === 4 && nowTiles.media);
     check('layout: no touchpad tile is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'touchpad'));
     const defaultRows = Model.rows(Constants.TILES.map(item => item.id), Constants.TILES_PER_ROW);
     check(`layout: in the default order VPN and NordVPN share one row (${JSON.stringify(defaultRows[1])})`,
@@ -1732,7 +1883,7 @@ function testLayoutModel() {
     check('layout write-back: a second pass writes nothing (no loop)', second.length === 0 && store.writes.length === 3);
     const rowsText = key => store.values[key].map(row => `${row.id}${row.show ? '' : ' (hidden)'}`).join(', ');
     check(`layout write-back: tiles keep their order and show flags (${rowsText('tiles')})`,
-        rowsText('tiles') === 'wifi, bluetooth, nordvpn, vpn, power-profile, airplane-mode, keyboard-light, dark-style (hidden), do-not-disturb (hidden), keep-awake (hidden), mic-mute (hidden), media');
+        rowsText('tiles') === 'wifi, bluetooth, nordvpn, vpn, power-profile, airplane-mode, keyboard-light, charge-limit, dark-style (hidden), do-not-disturb (hidden), keep-awake (hidden), mic-mute (hidden), media');
     check(`layout write-back: panel-icons (${rowsText('panel-icons')})`, rowsText('panel-icons') === 'bluetooth, vpn, volume, wifi, battery');
     check(`layout write-back: sliders (${rowsText('sliders')})`, rowsText('sliders') === 'output, input, monitors, warmth');
     check('layout write-back: rows keep the dialog shape { show, id }',
@@ -2274,6 +2425,8 @@ async function main() {
     testKeyboardLight();
     testAirplaneMode();
     testMediaModel();
+    await testChargeLimit();
+    testChargeHelperAgrees();
     testMediaFocus();
     await testMediaPlayers();
     testBatteryModel();

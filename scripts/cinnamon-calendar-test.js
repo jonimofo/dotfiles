@@ -324,6 +324,12 @@ function testRefresh() {
     coalescer.cancel();
     checkEqual('coalescer: cancel removes the pending run', scheduled.length, 0);
     check('coalescer: a request after cancel schedules again', coalescer.request());
+    const fresh = Constants.FRESH_FETCH_MS;
+    checkEqual('fetch: first opening forces', Refresh.forcedFetchDue(null, 1000), true);
+    checkEqual('fetch: opening again within the window does not', Refresh.forcedFetchDue(1000, 1000 + fresh - 1), false);
+    checkEqual('fetch: opening at the end of the window forces', Refresh.forcedFetchDue(1000, 1000 + fresh), true);
+    checkEqual('fetch: a clock going back forces', Refresh.forcedFetchDue(5000, 1000), true);
+    check(`fetch: window shorter than the server's 20 s exit (${fresh} ms)`, fresh < 20000);
 }
 
 function testEventsHeight() {

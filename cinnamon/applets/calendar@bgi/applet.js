@@ -58,6 +58,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 }),
                 id => GLib.source_remove(id),
                 () => this._updateHeaderCount());
+            this._lastForcedFetchMs = null;
             this._zoneIdTimeoutId = 0;
 
             // One table: the header band across both columns, then the events and calendar
@@ -514,9 +515,19 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 let monitor = Main.layoutManager.findMonitorForActor(this.actor);
                 this.event_list.set_monitor_height(monitor ? monitor.height : null);
                 this._resetCalendar();
-                this.events_manager.select_date(this._calendar.getSelectedDate(), true);
+                this.events_manager.select_date(this._calendar.getSelectedDate(), this._forcedFetchDue());
             }
         }));
+    }
+
+    // A full refresh of the events at most once per FRESH_FETCH_MS of openings (refresh.js).
+    _forcedFetchDue() {
+        let now_ms = GLib.get_monotonic_time() / 1000;
+        if (!Refresh.forcedFetchDue(this._lastForcedFetchMs, now_ms)) {
+            return false;
+        }
+        this._lastForcedFetchMs = now_ms;
+        return true;
     }
 
     _resetCalendar() {

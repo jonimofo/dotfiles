@@ -88,6 +88,10 @@ const EVENT_COUNT_MANY = 'events';
 const DESKTOP_24H_KEY = 'clock-use-24h';
 const DESKTOP_SECONDS_KEY = 'clock-show-seconds';
 
+// An opening within this time of the last full refresh of the events skips the next one: the
+// calendar server (it exits 20 s after the last request) still sends every change itself.
+const FRESH_FETCH_MS = 15000;
+
 // A changed zone id is resolved this long after the last keystroke of the settings field, so
 // a half-typed id is not logged as unknown.
 const ZONE_ID_DEBOUNCE_MS = 500;

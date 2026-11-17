@@ -60,6 +60,7 @@
             "title": "Second time zone",
             "keys": [
                 "show-second-zone",
+                "show-second-zone-header",
                 "second-zone-id",
                 "second-zone-label"
             ]
@@ -179,18 +180,21 @@
     "show-second-zone": {
         "type": "switch",
         "default": true,
-        "description": "Show a second time zone"
+        "description": "Show on the panel"
+    },
+    "show-second-zone-header": {
+        "type": "switch",
+        "default": true,
+        "description": "Show in the calendar header"
     },
     "second-zone-id": {
         "type": "entry",
         "default": "Asia/Ho_Chi_Minh",
-        "description": "Time zone",
-        "dependency": "show-second-zone"
+        "description": "Time zone"
     },
     "second-zone-label": {
         "type": "entry",
         "default": "VN",
-        "description": "Label",
-        "dependency": "show-second-zone"
+        "description": "Label"
     }
 }

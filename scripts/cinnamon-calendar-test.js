@@ -146,6 +146,31 @@ function testTimeFormats() {
         /^3:52:07 \S+$/.test(afternoon.format(DateText.timeFormatFor(false, true))));
 }
 
+// The second zone on the panel and in the header, switched separately.
+function testSecondZonePlaces() {
+    const second = { label: 'VN', time: '21:52' };
+    const places = (onPanel, inHeader) => [
+        SecondZone.zoneWanted(onPanel, inHeader),
+        DateText.formatPanelText('Mon 16 Nov', '15:52', SecondZone.shownWhere(onPanel, second)),
+        DateText.headerClocks('15:52', 'Paris', SecondZone.shownWhere(inHeader, second))
+            .map(clock => `${clock.time} ${clock.suffix}`).join(' | '),
+    ].join(' / ');
+    checkEqual('second zone: panel and header', places(true, true),
+        'true / Mon 16 Nov · 15:52 · VN 21:52 / 15:52 Paris | 21:52 VN');
+    checkEqual('second zone: panel only', places(true, false),
+        'true / Mon 16 Nov · 15:52 · VN 21:52 / 15:52 Paris');
+    checkEqual('second zone: header only', places(false, true),
+        'true / Mon 16 Nov · 15:52 / 15:52 Paris | 21:52 VN');
+    checkEqual('second zone: neither, the zone is not resolved', places(false, false),
+        'false / Mon 16 Nov · 15:52 / 15:52 Paris');
+    const logged = [];
+    const resolver = new SecondZone.SecondZone(message => logged.push(message));
+    const hidden = resolver.resolve(SecondZone.zoneWanted(false, true), 'Nowhere/Bad') === null &&
+        resolver.resolve(SecondZone.zoneWanted(true, false), 'Nowhere/Bad') === null;
+    check(`second zone: an invalid id hides it in both places, logged once (${logged.length} log)`,
+        hidden && logged.length === 1);
+}
+
 function testTimeOfEventRows() {
     // Audit L16: the rows use timeFormatFor() too, so a single-digit hour has no leading space.
     const morning = GLib.DateTime.new(PARIS, 2026, 11, 16, 9, 5, 0);
@@ -430,7 +455,16 @@ function testAppearance() {
 
 function testSchema() {
     const schema = JSON.parse(readText(`${appletDir}/settings-schema.json`));
-    checkEqual('schema: show second zone default', schema[Constants.SHOW_SECOND_ZONE_KEY].default, true);
+    for (const spec of Object.values(Constants.SECOND_ZONE_SWITCHES)) {
+        const entry = schema[spec.key];
+        check(`schema: ${spec.key} is a switch, default on, "${spec.label}"`,
+            entry !== undefined && entry.type === 'switch' && entry.default === spec.default && spec.default === true &&
+            entry.description === spec.label);
+    }
+    checkEqual('schema: second time zone section order', JSON.stringify(schema.layout['second-zone-section'].keys),
+        JSON.stringify([Constants.SECOND_ZONE_SWITCHES.panel.key, Constants.SECOND_ZONE_SWITCHES.header.key,
+            Constants.SECOND_ZONE_ID_KEY, Constants.SECOND_ZONE_LABEL_KEY]));
+    checkEqual('schema: the panel switch keeps the first key', Constants.SECOND_ZONE_SWITCHES.panel.key, 'show-second-zone');
     check(`schema: date-only default custom format (${schema['custom-format'].default})`,
         !/%[HIklMSpPrRTX]/.test(schema['custom-format'].default));
     checkEqual('schema: zone id default', schema[Constants.SECOND_ZONE_ID_KEY].default, 'Asia/Ho_Chi_Minh');
@@ -469,7 +503,8 @@ function testSchema() {
     }
     for (const spec of specs)
         used.add(spec.key);
-    [Constants.SHOW_SECOND_ZONE_KEY, Constants.SECOND_ZONE_ID_KEY, Constants.SECOND_ZONE_LABEL_KEY].forEach(k => used.add(k));
+    [...Object.values(Constants.SECOND_ZONE_SWITCHES).map(spec => spec.key), Constants.SECOND_ZONE_ID_KEY,
+        Constants.SECOND_ZONE_LABEL_KEY].forEach(k => used.add(k));
     const missing = [...used].filter(key => schema[key] === undefined);
     check(`schema: every key used by the code exists (${used.size} keys${missing.length ? `, missing ${missing.join(', ')}` : ''})`,
         missing.length === 0);
@@ -638,6 +673,7 @@ testPanelText();
 testTimeFormats();
 testHeaderTexts();
 testTimeOfEventRows();
+testSecondZonePlaces();
 testSecondZone();
 testDayMarker();
 testEventsHeight();

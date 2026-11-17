@@ -35,3 +35,13 @@ class SecondZone {
 function timeInZone(datetime, zone, format) {
     return datetime.to_timezone(zone).format(format);
 }
+
+// The zone is resolved when at least one place shows it.
+function zoneWanted(onPanel, inHeader) {
+    return Boolean(onPanel) || Boolean(inHeader);
+}
+
+// @second ({label, time} or null) where its switch @shown is on, else null.
+function shownWhere(shown, second) {
+    return shown ? second : null;
+}

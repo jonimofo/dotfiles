@@ -64,10 +64,10 @@ the other screens, a setting, the calendar applet, new dependencies.
 
 | File | Change |
 |---|---|
-| `overviewClock.js` | New. The band and the live copy of the panel clock (see the last follow-up) |
+| `panelCopy.js` | New. The live copy of the top panel, or the fallback clock band (see the last follow-up) |
 | `appSearch.js` | The search bar takes a top offset |
 | `extension.js` | Clock band first on `showing`, torn down on `hidden` and in `disable()` |
-| `stylesheet.css` | `.scale-clock-bar`, `.scale-clock-bar-centred` |
+| `stylesheet.css` | `.scale-clock-bar` (fallback band) |
 
 Findings worth keeping:
 
@@ -181,6 +181,69 @@ Removed with this change: the row's formatter (`clockText.js`), its copied style
 (`clockFont.js`), the minute timer, the resume subscription to logind, the 12 or 24-hour
 setting read, the `.scale-clock` rule, their tests, and the equality test with the calendar's
 formatter (the row no longer formats a date).
+
+## Follow-up: the whole top panel stays
+
+Owner's words, after the clock's place was confirmed ("nickel"): "nickel, maintenant est il
+possible de supprimer le petit flash violet sur la task bar quand je reviens en mode normal
+depuis le mode oerview??"
+
+Answer chosen: "Toute la barre reste visible": during Scale the whole taskbar stays displayed
+as it is, icons included, as a non-clickable copy; nothing disappears or reappears at the top
+of the screen, at opening or closing. Look:
+
+```
+Mode normal :
+
+| [menu][apps]      Tue 17 Nov · 13:23 · VN 19:23      [tray][bat][vol] |
+
+Overview :
+
+| [menu][apps]      Tue 17 Nov · 13:23 · VN 19:23      [tray][bat][vol] |   identique
+|                    [ Type to search...      ]                        |
+|               [ws 1]   [ws 2]   [ws 3]   [ws 4]                      |
+
+Retour au mode normal : rien ne bouge en haut, aucun flash
+```
+
+Verified sequence (Cinnamon 6.4):
+
+- Opening, `Overview._animateVisible` (`overview.js`): the group is shown at opacity 0,
+  `Main.panelManager.disablePanels()` starts each panel's ease to opacity 0 (`Panel.disable`,
+  `panel.js`, `AUTOHIDE_ANIMATION_TIME` 0.2 s, then `actor.hide()`), the group's tween to 255
+  starts (0.2 s × 0.45), then `showing` is emitted in the same call; `shown` follows the
+  group's tween.
+- Closing, `_animateNotVisible`: `enablePanels()` (`Panel.enable`: `actor.show()`, ease from
+  0 to 255 in 0.2 s), the windows zoom back, the group's tween to 0 (0.2 s) starts, `hiding`
+  is emitted; `_hideDone` hides the group and emits `hidden` when that tween completes.
+- The panels are chrome in `Main.uiGroup`, added after `global.overlay_group`, so above
+  Scale's group.
+- The hypothesis holds: on closing, the panel comes back half transparent over a group that
+  is itself fading out, so the wallpaper shows through the panel's strip for about 0.2 s.
+  The clock band (`rgba(0, 0, 0, 0.45)`) was never the panel's own background either. The
+  panel's fade and the group's tween have the same length but run on two different
+  animation systems (Clutter ease, Tweener): which one ends first is not fixed.
+
+Method: a `Clutter.Clone` of the primary screen's top panel actor, found through
+`Main.panelManager.getPanelsInMonitor(primaryIndex)` (a panel whose snapped box is on the
+monitor's top edge), at the panel's stage box, in `global.overlay_group` above Scale's group.
+
+1. Muffin's Clutter exports `clutter_actor_set_opacity_override`, the call Clutter's clone
+   uses to paint its source with the clone's opacity: the source's own opacity (0 during the
+   fade) does not reach the copy. The clone of the hidden clock was confirmed live to keep
+   painting with the right text.
+2. The real panel fades out above the copy at opening and back in above it at closing: the
+   same pixels over the same pixels, so the strip does not change.
+3. After `hidden`, the copy stays until the panel's `notify::opacity` reports it visible at
+   255, with a 1 s timeout that removes it anyway. Scale opened again, or `disable()`, removes
+   a waiting copy at once.
+4. The copy takes no input. A transparent reactive actor as high as the panel, in Scale's
+   group, swallows the clicks there; the search field and the strip start under it.
+5. Fallback without a top panel on the primary screen: the panel clock's copy centred in the
+   `scale-clock-bar` band, as before. Without a clock either: nothing.
+
+The module is renamed `panelCopy.js` (`PanelCopy`, and `ClockBand` for the fallback); the
+clock placement inside a panel (`placeAtPanel`, `chooseClock`) is removed.
 
 ## Known limitations
 

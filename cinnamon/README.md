@@ -49,16 +49,17 @@ bindings (`media-keys`, `wm`).
 
 ## What scale-wheel-switch does
 
-In Scale (hot corner or Super), from top to bottom: the date and time, a search field, a
+In Scale (hot corner or Super), from top to bottom: the top panel, a search field, a
 strip with one thumbnail per workspace, all centered, then Scale's windows, then a dock of
-applications. The date and time, the search field and the dock are on the primary screen
-only; every other screen has its own strip at its very top.
+applications. The panel, the search field and the dock are on the primary screen only;
+every other screen has its own strip at its very top.
 
-- The date and time are the panel clock itself, copied live: same text, look and updates
-  (Scale hides the panels). With the clock on the primary screen's top panel, the copy sits
-  on the clock's pixels and a band the panel's height lies behind it, so the clock does not
-  move when Scale opens. With the clock elsewhere (bottom panel, another screen), the copy is
-  centred in a band at the top. Without a running calendar applet, there is no clock row.
+- The top panel of the primary screen stays as it is: Scale hides the panels, and shows a
+  live copy of that one at its pixels, icons and clock included, which takes no click. Nothing
+  changes at the top of the screen when Scale opens or closes.
+- Without a top panel on the primary screen (panel at the bottom or on another screen), the
+  panel clock is copied, centred in a band at the top. Without a running calendar applet
+  either, nothing is shown above the search field.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
@@ -164,16 +165,17 @@ Then give Super back to the Menu (see above).
   With none, or none of its pinned apps installed, and no other app running, no dock is
   drawn until the next opening of Scale.
 - Many apps make the dock icons smaller to fit the screen's width. Untested.
-- The clock's place is read when Scale opens: a panel moved or resized while it is open
-  keeps the old place until the next opening. The copy shows the clock as it is drawn,
-  including a hover highlight if the pointer was on it when Scale opened.
+- The panel's place is read when Scale opens: a panel moved or resized while it is open
+  keeps the old place until the next opening. The copy shows the panel as it was drawn, a
+  hover highlight included if the pointer was on an applet when Scale opened; the applets'
+  menus cannot be opened from it.
 
 ## How it is built
 
 Design records: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../documentation/plans/2026-11-11-cinnamon-scale-overview.md),
 then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../documentation/plans/2026-11-12-cinnamon-scale-second-screen.md) for several screens,
 then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/plans/2026-11-12-cinnamon-scale-dock.md) for the dock,
-then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time,
+then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time, then the top panel,
 then [`documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md`](../documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md) for entering a workspace.
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
@@ -191,7 +193,7 @@ Private fields and methods read, called or written:
 
 | Object | Members | Used for |
 |---|---|---|
-| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the clock, the header and the dock are inserted, close animation in progress |
+| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the panel's click blocker, the header and the dock are inserted, close animation in progress |
 | `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written) | reach each workspace, hide the windows during a search |
 | `Workspace` | `_monitors` | the per-monitor objects, one per screen |
 | `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
@@ -203,7 +205,8 @@ Private fields and methods read, called or written:
 | `imports.ui.dnd` | a monitor's `dragDrop(event)` with `event.targetActor`, returning `DragDropResult.CONTINUE` | clearing the highlights of the targets that do not take a drop |
 | `Main` | `modalCount` | is Scale the only modal |
 | `Main.AppletManager` | `getRunningInstancesForUuid('grouped-window-list@cinnamon.org')` | the panel's window list applet |
-| `Main.AppletManager` | `getRunningInstancesForUuid('calendar@bgi')`, then `('calendar@cinnamon.org')` | the panel clock, its `actor` and its `panel.actor` |
+| `Main.panelManager` | `getPanelsInMonitor(primaryIndex)`, each panel's `actor` | the top panel copied in Scale |
+| `Main.AppletManager` | `getRunningInstancesForUuid('calendar@bgi')`, then `('calendar@cinnamon.org')`, the applet's `actor` | the clock of the fallback band |
 | grouped window list applet | `settings` (its `AppletSettings`), key `pinned-apps` | the pinned apps of the dock |
 
 Assumptions about behaviour:
@@ -227,10 +230,14 @@ Assumptions about behaviour:
   switches to the window's workspace first, then activates it.
 - `Cinnamon.AppSystem`'s `app-state-changed` signal drives the dock's live update.
 - Scale hides the panels (`Main.panelManager.disablePanels()` in `Overview._animateVisible`:
-  each panel fades to opacity 0, then `actor.hide()`), and gives them back when it starts to
-  close. A `Clutter.Clone` of the panel clock's actor still paints, and follows its text,
-  while the panel is hidden. The copy is added to `global.overlay_group` above Scale's
-  group, so it stays at full opacity while the group fades in and out.
+  each panel eases to opacity 0 in 0.2 s, then `actor.hide()`), and gives them back as it
+  starts to close (`enablePanels()`: `actor.show()`, then an ease to 255 in 0.2 s), while
+  Scale's group fades out in 0.2 s. The panels are stacked above `global.overlay_group`.
+- A `Clutter.Clone` paints its source with the clone's own opacity, whatever the source's
+  opacity, and still paints a hidden source: the panel's copy stays whole while the panel
+  fades. It is in `global.overlay_group` above Scale's group, so it does not fade with the
+  group. After Scale closes, it stays until the panel's `notify::opacity` reports 255, or
+  1 s at most.
 - `extension.sh reload` calls the D-Bus method `org.Cinnamon.ReloadXlet(uuid, "EXTENSION")`.
 
 ## Quick Settings: what it does
@@ -404,7 +411,7 @@ scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
-scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, clock row, thumbnail click, on fakes
+scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, panel copy, thumbnail click, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, tick clock, day marker, stylesheet rules
 ```

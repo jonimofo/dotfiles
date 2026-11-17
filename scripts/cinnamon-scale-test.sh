@@ -2,7 +2,7 @@
 # Logic tests of the scale-wheel-switch@bgi Scale overview: the search blocks clicks on the
 # other screens, a middle click on a window does nothing, drop highlights are cleared after
 # a fast drop, dock icon size at 2x display scaling, no bar left after a failing constructor,
-# the fit-to-width rule, the panel clock's copy (its place, the fallbacks, its lifecycle),
+# the fit-to-width rule, the top panel's copy (its place, the fallbacks, its lifecycle),
 # and a thumbnail click that enters its workspace and closes Scale. Runs on fake actors and
 # a fake overview, no running Cinnamon is touched.
 # Usage: scripts/cinnamon-scale-test.sh (from any directory). Needs gjs.

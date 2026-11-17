@@ -248,7 +248,23 @@ function makeImports(monitorCount, primaryIndex) {
         get_event_state: () => 0,
     };
 
-    const Mainloop = {};
+    // Main loop timeouts: recorded, fired by the test.
+    const timers = new Map();
+    let nextTimerId = 1;
+    const Mainloop = {
+        timeout_add(delay, callback) {
+            const id = nextTimerId++;
+            timers.set(id, { delay, callback: () => {
+                timers.delete(id);
+                return callback();
+            } });
+            return id;
+        },
+        source_remove(id) {
+            if (!timers.delete(id))
+                throw new Error(`No source ${id}`);
+        },
+    };
 
     const monitors = [];
     for (let i = 0; i < monitorCount; i++)
@@ -274,7 +290,9 @@ function makeImports(monitorCount, primaryIndex) {
         overview,
         modalCount: 0,
         getWorkspaceName: index => `Workspace ${index + 1}`,
-        // Running applets by uuid: the panel clock the overview copies.
+        // The panels: the top one is copied in Scale.
+        panelManager: { panels: [], getPanelsInMonitor: index => Main.panelManager.panels.filter(panel => panel.monitorIndex === index) },
+        // Running applets by uuid: the panel clock of the fallback band.
         AppletManager: { instances: {}, getRunningInstancesForUuid: uuid => Main.AppletManager.instances[uuid] || [] },
     };
     // Scale closing: counted, and visible drops as Cinnamon's hide() does.
@@ -314,7 +332,7 @@ function makeImports(monitorCount, primaryIndex) {
             misc: { signalManager: { SignalManager: class {} }, windowUtils: {} },
             mainloop: Mainloop,
         },
-        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, strips: [],
+        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, strips: [], timers,
     };
 }
 
@@ -632,120 +650,156 @@ function closeScale(env) {
     env.Main.overview.emit('hidden');
 }
 
-// The owner's top panel on a 1920x1080 primary screen: 40 px high, the clock in the centre.
+// The owner's top panel on a 1920x1080 primary screen, 40 px high.
 const TOP_PANEL = { x: 0, y: 0, width: 1920, height: 40 };
-const CLOCK_ON_TOP_PANEL = { x: 830.5, y: 6, width: 259, height: 28 };
+const BOTTOM_PANEL = { x: 0, y: 1040, width: 1920, height: 40 };
 
-// A running panel clock: its applet actor and its panel's actor at the given stage boxes.
-function panelClock(clockBox, panelBox) {
-    return { actor: new FakeActor(clockBox), panel: { actor: new FakeActor(panelBox) } };
+// A panel of Main.panelManager, its actor at @box.
+function fakePanel(box, monitorIndex = 0) {
+    return { monitorIndex, actor: new FakeActor(box) };
 }
 
-// Owner's choice "Même position et même texte": with the clock on the primary screen's top
-// panel, the copy sits on its pixels; anywhere else it is centred in a band.
-function testClockPlacement() {
+// The copy of the panel above Scale's group, if any.
+function panelCopiesOf(env) {
+    return global.overlay_group.children.filter(actor => actor instanceof env.Clutter.Clone);
+}
+
+// The real panel fading back in after Scale closed: @steps opacities, each notified.
+function fadePanelIn(panel, steps) {
+    for (const opacity of steps) {
+        panel.actor.opacity = opacity;
+        panel.actor.emit('notify::opacity');
+    }
+}
+
+// Which panel is copied: the one on the primary screen's top edge, despite float noise.
+function testPanelChoice() {
     const env = setUp();
-    const { placeAtPanel, chooseClock } = env.require('./overviewClock');
+    const { isOnTopEdge, findTopPanel, isPanelShown, boxOf } = env.require('./panelCopy');
     const monitor = env.monitors[0];
 
-    const place = placeAtPanel(CLOCK_ON_TOP_PANEL, TOP_PANEL, monitor);
-    print(`  top panel: ${JSON.stringify(place)}`);
-    check('place: on the top panel, the copy takes the clock\'s position and the band the panel\'s height',
-        place && place.x === 830.5 && place.y === 6 && place.bandHeight === 40);
-    check('place: float noise in the stage coordinates still counts as the top edge',
-        JSON.stringify(placeAtPanel(
-            { x: 815, y: 0.0001220703125, width: 290, height: 29.9998779296875 },
-            { x: 0.00011444091796875, y: 0.0001220703125, width: 1919.999755859375, height: 29.9998779296875 },
-            { x: 0, y: 0, width: 1920, height: 1200 })) ===
-        JSON.stringify({ x: 815, y: 0, bandHeight: 30 }));
-    const second = { x: 1920, y: 0, width: 1920, height: 1080 };
-    check('place: a top panel of a screen right of the primary, offsets stay relative to its screen',
-        JSON.stringify(placeAtPanel({ ...CLOCK_ON_TOP_PANEL, x: 2750.5 }, { ...TOP_PANEL, x: 1920 }, second)) ===
-        JSON.stringify({ x: 830.5, y: 6, bandHeight: 40 }));
-    check('place: a bottom panel gives no place (centred band)',
-        placeAtPanel({ ...CLOCK_ON_TOP_PANEL, y: 1046 }, { ...TOP_PANEL, y: 1040 }, monitor) === null);
-    check('place: a top panel of another screen gives no place',
-        placeAtPanel({ ...CLOCK_ON_TOP_PANEL, x: 2750.5 }, { ...TOP_PANEL, x: 1920 }, monitor) === null);
-    check('place: a panel hidden by autohide (moved above the screen) gives no place',
-        placeAtPanel({ ...CLOCK_ON_TOP_PANEL, y: -34 }, { ...TOP_PANEL, y: -40 }, monitor) === null);
-    check('place: a clock outside its panel\'s box gives no place',
-        placeAtPanel({ ...CLOCK_ON_TOP_PANEL, y: 30 }, TOP_PANEL, monitor) === null);
+    check('panel: a panel on the top edge is copied', isOnTopEdge(TOP_PANEL, monitor));
+    const noisy = boxOf(new FakeActor({ x: 0.00011444091796875, y: 0.0001220703125, width: 1919.999755859375,
+        height: 29.9998779296875 }));
+    print(`  live panel box snapped: ${JSON.stringify(noisy)}`);
+    check('panel: float noise in the stage coordinates still counts as the top edge (live panel at y 0.000122)',
+        isOnTopEdge(noisy, monitor) && noisy.height === 30);
+    check('panel: a bottom panel is not on the top edge', !isOnTopEdge(BOTTOM_PANEL, monitor));
+    check('panel: a panel hidden by autohide (moved above the screen) is not on the top edge',
+        !isOnTopEdge({ ...TOP_PANEL, y: -40 }, monitor));
+    check('panel: a top panel of the screen right of the primary is not on its top edge',
+        !isOnTopEdge({ ...TOP_PANEL, x: 1920 }, monitor));
+    const bottom = { box: BOTTOM_PANEL };
+    const top = { box: TOP_PANEL };
+    check('panel: the top panel is chosen among the primary screen\'s panels', findTopPanel([bottom, top], monitor) === top);
+    check('panel: no top panel, none chosen', findTopPanel([bottom], monitor) === null);
 
-    const bottom = { clockBox: { ...CLOCK_ON_TOP_PANEL, y: 1046 }, panelBox: { ...TOP_PANEL, y: 1040 } };
-    const top = { clockBox: CLOCK_ON_TOP_PANEL, panelBox: TOP_PANEL };
-    check('place: the clock on the top panel wins over one listed before it', chooseClock([bottom, top], monitor).clock === top);
-    const fallback = chooseClock([bottom], monitor);
-    check('place: a clock elsewhere only is used, centred', fallback.clock === bottom && fallback.place === null);
-    check('place: no clock, nothing chosen', chooseClock([], monitor) === null);
+    check('panel: shown only when visible at full opacity',
+        isPanelShown({ visible: true, opacity: 255 }) && !isPanelShown({ visible: true, opacity: 254 }) &&
+        !isPanelShown({ visible: false, opacity: 255 }));
 }
 
-// The copy at the panel clock's place: created on opening, removed on closing and on
-// disable(); the search and the strip follow the band's height; clicks go nowhere.
-function testClockAtPanel() {
+// The copy of the top panel: at its pixels from the opening; after closing, kept until the
+// real panel is fully back; removed in every other exit path.
+function testPanelCopy() {
     const env = setUp(2, 0);
     const extension = env.loadExtension();
     extension.enable();
-    const source = panelClock(CLOCK_ON_TOP_PANEL, TOP_PANEL);
-    env.Main.AppletManager.instances['calendar@bgi'] = [source];
+    const panel = fakePanel(TOP_PANEL);
+    const otherScreenPanel = fakePanel({ ...TOP_PANEL, x: 1920 }, 1);
+    env.Main.panelManager.panels = [panel, otherScreenPanel];
 
     openScale(env);
-    const [band] = clockBarsOf(env);
-    const copies = global.overlay_group.children.filter(actor => actor instanceof env.Clutter.Clone);
-    const copy = copies[0];
-    check('clock: one copy of the panel clock, a live clone of the applet\'s actor',
-        copies.length === 1 && copy.source === source.actor);
-    check('clock: the copy sits on the panel clock\'s pixels, at its size',
-        copy.x === 830.5 && copy.y === 6 && copy.width === 259 && copy.height === 28);
-    check('clock: the copy is above Scale\'s group, so it does not fade with it',
-        global.overlay_group.children.indexOf(copy) > global.overlay_group.children.indexOf(env.Main.overview._group));
-    check('clock: the band behind it is the panel\'s height on the primary screen',
-        band && band.x === 0 && band.y === 0 && band.width === 1920 && band.height === 40);
-    check('clock: the search field starts under the band', searchBarOf(env).y === 40);
-    check('clock: the primary strip follows the band and the search',
+    let [copy] = panelCopiesOf(env);
+    check('copy: one live clone of the primary screen\'s top panel', panelCopiesOf(env).length === 1 && copy.source === panel.actor);
+    check('copy: at the panel\'s place and size', copy.x === 0 && copy.y === 0 && copy.width === 1920 && copy.height === 40);
+    check('copy: above Scale\'s group, at its own full opacity',
+        global.overlay_group.children.indexOf(copy) > global.overlay_group.children.indexOf(env.Main.overview._group) &&
+        copy.opacity === 255);
+    check('copy: no clock band', clockBarsOf(env).length === 0);
+    const blocker = env.Main.overview._group.children.find(actor => actor.reactive && actor.height === 40);
+    check('copy: the copy takes no click; a blocker as high as the panel swallows them',
+        !copy.reactive && blocker && blocker.emit('button-press-event', buttonEvent(BUTTON.PRIMARY)) === true &&
+        blocker.emit('button-release-event', buttonEvent(BUTTON.PRIMARY)) === true);
+    check('copy: the search field starts under the panel', searchBarOf(env).y === 40);
+    check('copy: the primary strip follows the panel and the search',
         env.strips.find(strip => strip.index === 0).topOffset === 40 + NATURAL_HEIGHTS['scale-search-bar']);
-    check('clock: the other screen keeps its strip at the very top', env.strips.find(strip => strip.index === 1).topOffset === 0);
-    check('clock: the copy takes no click (no calendar opens)', !copy.reactive);
-    check('clock: a click on the band is swallowed',
-        band.emit('button-press-event', buttonEvent(BUTTON.PRIMARY)) === true &&
-        band.emit('button-release-event', buttonEvent(BUTTON.PRIMARY)) === true);
     typeKey(env, keyEvent('f'));
-    check('clock: typing still goes to the search', searchBarOf(env).child.get_text() === 'f');
+    check('copy: typing still searches', searchBarOf(env).child.get_text() === 'f');
     typeKey(env, keyEvent(null, ESCAPE_KEY));
 
+    // Scale closes: the real panel starts its fade-in from 0.
+    panel.actor.opacity = 0;
     closeScale(env);
-    check('clock: closing Scale removes the copy and the band', copy.destroyed && band.destroyed &&
-        clockBarsOf(env).length === 0 && !global.overlay_group.children.includes(copy));
+    check('copy: Scale closed with the panel still fading in: the copy stays', !copy.destroyed &&
+        panelCopiesOf(env).length === 1 && blocker.destroyed);
+    check('copy: one safety timer while it waits', env.timers.size === 1 && [...env.timers.values()][0].delay === 1000);
+    fadePanelIn(panel, [120, 254]);
+    check('copy: still there while the panel is not fully opaque', !copy.destroyed);
+    fadePanelIn(panel, [255]);
+    check('copy: removed once the real panel is fully back, with its timer', copy.destroyed &&
+        panelCopiesOf(env).length === 0 && env.timers.size === 0);
+    fadePanelIn(panel, [255]);
+    check('copy: a later opacity change does nothing (handler gone)', !throws(() => fadePanelIn(panel, [200, 255])));
 
-    source.actor.x = 900;
     openScale(env);
-    const moved = global.overlay_group.children.find(actor => actor instanceof env.Clutter.Clone);
-    check('clock: the place is read again at each opening', moved.x === 900);
+    copy = panelCopiesOf(env)[0];
+    closeScale(env);
+    check('copy: closing with the panel already opaque removes the copy at once', copy.destroyed && env.timers.size === 0);
+
+    panel.actor.opacity = 0;
+    openScale(env);
+    copy = panelCopiesOf(env)[0];
+    closeScale(env);
+    const [timer] = [...env.timers.values()];
+    timer.callback();
+    check('copy: the safety timer removes a copy whose panel never comes back', copy.destroyed &&
+        panelCopiesOf(env).length === 0);
+
+    openScale(env);
+    const first = panelCopiesOf(env)[0];
+    closeScale(env);
+    closeScale(env);
+    check('copy: Scale closed twice keeps one waiting copy', panelCopiesOf(env).length === 1 && env.timers.size === 1);
+    openScale(env);
+    check('copy: Scale opened again during the fade-in replaces the waiting copy',
+        first.destroyed && panelCopiesOf(env).length === 1 && env.timers.size === 0);
+    closeScale(env);
     extension.disable();
-    check('clock: disable() with Scale open removes the copy and the band', moved.destroyed && clockBarsOf(env).length === 0);
+    check('copy: disable() during the fade-in removes the copy and its timer',
+        panelCopiesOf(env).length === 0 && env.timers.size === 0);
+
+    extension.enable();
+    openScale(env);
+    copy = panelCopiesOf(env)[0];
+    extension.disable();
+    check('copy: disable() with Scale open removes the copy', copy.destroyed && panelCopiesOf(env).length === 0 &&
+        env.timers.size === 0);
 }
 
-// The clock off the primary screen's top panel: the copy centred in a band; no clock: no band.
-function testClockFallbacks() {
+// No top panel on the primary screen: the panel clock centred in a band; no clock: nothing.
+function testPanelFallbacks() {
     const env = setUp();
     const extension = env.loadExtension();
     extension.enable();
-    const bottomClock = panelClock({ ...CLOCK_ON_TOP_PANEL, y: 1046 }, { ...TOP_PANEL, y: 1040 });
-    env.Main.AppletManager.instances['calendar@cinnamon.org'] = [bottomClock];
+    env.Main.panelManager.panels = [fakePanel(BOTTOM_PANEL)];
+    const clockActor = new FakeActor({ x: 830, y: 1046, width: 259, height: 28 });
+    env.Main.AppletManager.instances['calendar@cinnamon.org'] = [{ actor: clockActor }];
 
     openScale(env);
     const [band] = clockBarsOf(env);
-    check('fallback: a bottom panel clock is copied centred in a band (stock calendar used)',
-        band && band.child instanceof env.Clutter.Clone && band.child.source === bottomClock.actor &&
-        band.child.x_align === env.Clutter.ActorAlign.CENTER && band.style_classes.includes('scale-clock-bar-centred'));
-    check('fallback: the search field starts under the centred band', searchBarOf(env).y === NATURAL_HEIGHTS['scale-clock-bar']);
-    check('fallback: no copy above Scale\'s group', !global.overlay_group.children.some(actor => actor instanceof env.Clutter.Clone));
+    check('fallback: a bottom panel: its clock copied centred in a band (stock calendar used)',
+        band && band.child instanceof env.Clutter.Clone && band.child.source === clockActor &&
+        band.child.x_align === env.Clutter.ActorAlign.CENTER);
+    check('fallback: no copy above Scale\'s group', panelCopiesOf(env).length === 0);
+    check('fallback: the search field starts under the band', searchBarOf(env).y === NATURAL_HEIGHTS['scale-clock-bar']);
     closeScale(env);
-    check('fallback: closing Scale removes the band and its copy', band.destroyed && band.child.destroyed);
+    check('fallback: closing Scale removes the band and its copy at once', band.destroyed && env.timers.size === 0);
 
     env.Main.AppletManager.instances = {};
     openScale(env);
-    check('fallback: no panel clock, no band, the search field at the top',
-        clockBarsOf(env).length === 0 && searchBarOf(env).y === 0);
+    check('fallback: no top panel and no clock: nothing, the search field at the top',
+        clockBarsOf(env).length === 0 && panelCopiesOf(env).length === 0 && searchBarOf(env).y === 0);
     extension.disable();
 }
 
@@ -858,9 +912,9 @@ function testWheelKeepsScaleOpen() {
     extension.disable();
 }
 
-testClockPlacement();
-testClockAtPanel();
-testClockFallbacks();
+testPanelChoice();
+testPanelCopy();
+testPanelFallbacks();
 testThumbnailClickEntersWorkspace();
 testWheelKeepsScaleOpen();
 testSearchBlocksOtherScreens();

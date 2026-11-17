@@ -1442,7 +1442,7 @@ function testMediaFocus() {
             describe: window => window,
             activate: window => done.push(`activate ${window.title}`),
         };
-        Focus.focusPlayer('org.mpris.MediaPlayer2.vlc', players, windowApi);
+        Focus.focusPlayer('org.mpris.MediaPlayer2.vlc', players, windowApi, 1234);
         return `${done}`;
     };
     const vlcWindow = { title: 'Song - VLC media player', userTime: 1 };
@@ -1459,6 +1459,31 @@ function testMediaFocus() {
     check('media focus: nothing found and no Raise, only the log',
         run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, pid: 42 }) === 'app vlc,pid 42,none org.mpris.MediaPlayer2.vlc');
     check('media focus: a player no longer listed does nothing', run({ info: null }) === '');
+
+    // The click's time reaches every activation, also after the asynchronous pid reply.
+    const times = [];
+    let answerPid = null;
+    const slowPlayers = {
+        focusInfo: () => ({ desktopEntry: 'vlc', canRaise: false, title: 'Song' }),
+        processId: (busName, onPid) => {
+            answerPid = () => onPid(42);
+        },
+        raise: () => {},
+        noWindow: () => {},
+    };
+    const timedWindows = {
+        ofApp: entry => (entry === 'app' ? [{ title: 'App', userTime: 1 }] : []),
+        ofPid: () => [{ title: 'Process window', userTime: 1 }],
+        describe: window => window,
+        activate: (window, time) => times.push(`${window.title}@${time}`),
+    };
+    Focus.focusPlayer('org.mpris.MediaPlayer2.vlc', slowPlayers, timedWindows, 777);
+    check('media focus: nothing activated before the pid reply', times.length === 0);
+    answerPid();
+    Focus.focusPlayer('org.mpris.MediaPlayer2.app', { ...slowPlayers, focusInfo: () => ({ desktopEntry: 'app', canRaise: false, title: '' }) },
+        timedWindows, 888);
+    check(`media focus: the click's time is used after the asynchronous pid reply and for application windows (${times})`,
+        `${times}` === 'Process window@777,App@888');
 }
 
 function testBatteryModel() {

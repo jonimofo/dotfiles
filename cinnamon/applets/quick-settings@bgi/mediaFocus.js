@@ -7,8 +7,11 @@ const MediaModel = require('./mediaModel');
 // this runs on fakes in the tests.
 // @players: MediaPlayers (focusInfo, processId, raise, noWindow).
 // @windows: { ofApp(desktopEntry), ofPid(pid), describe(window) -> { title, userTime },
-//             activate(window) }.
-function focusPlayer(busName, players, windows) {
+//             activate(window, time) }.
+// @time: the click's event time, read during the click: the window found after the
+// asynchronous process id reply is still activated with it, as the window manager wants for
+// a focus the user asked for.
+function focusPlayer(busName, players, windows, time) {
     const info = players.focusInfo(busName);
     if (!info)
         return;
@@ -16,7 +19,7 @@ function focusPlayer(busName, players, windows) {
         const index = MediaModel.chooseWindow(candidates.map(window => windows.describe(window)), info.title);
         if (index < 0)
             return false;
-        windows.activate(candidates[index]);
+        windows.activate(candidates[index], time);
         return true;
     };
     const fallBack = () => {

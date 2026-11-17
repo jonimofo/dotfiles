@@ -21,9 +21,10 @@ const CINNAMON_WINDOWS = {
         return { title: window.get_title() || '', userTime: window.get_user_time() };
     },
 
-    // A window on every workspace has none of its own: no workspace switch then.
-    activate(window) {
+    // @time: the click's event time. A window on every workspace has none of its own: no
+    // workspace switch then.
+    activate(window, time) {
         const workspace = window.get_workspace();
-        Main.activateWindow(window, global.get_current_time(), workspace ? workspace.index() : undefined);
+        Main.activateWindow(window, time, workspace ? workspace.index() : undefined);
     },
 };

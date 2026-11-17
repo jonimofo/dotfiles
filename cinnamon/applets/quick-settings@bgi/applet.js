@@ -490,7 +490,10 @@ class QuickSettingsApplet extends Applet.Applet {
     _focusMediaPlayer(busName) {
         if (!this._media)
             return;
-        this._closeThen(() => MediaFocus.focusPlayer(busName, this._media, MediaWindows.CINNAMON_WINDOWS));
+        // Read now, during the click: a window found after the process id reply is activated
+        // with the click's time, not a later one.
+        const time = global.get_current_time();
+        this._closeThen(() => MediaFocus.focusPlayer(busName, this._media, MediaWindows.CINNAMON_WINDOWS, time));
     }
 
     _stopMedia() {

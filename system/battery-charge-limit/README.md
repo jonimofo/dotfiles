@@ -16,6 +16,9 @@ moves a value that would break that, so the thresholds are written in the order 
 the gap, a second pass covers a start that was already outside it, and all three values are
 read back: the helper fails with a message rather than report a state it did not reach.
 
+The applet shows `Charge 80%` only for `Custom` with the end threshold at 80; any other
+state shows as `Charge 100%`, and a click from it applies `limit`.
+
 Any other argument, no argument or two arguments: a usage line, exit 2, nothing written.
 Missing sysfs files or a threshold that is not a number: a message, exit 1, nothing written.
 A state already in place is left alone: nothing is written, it prints `unchanged`, exit 0. It uses no environment variable, no current
@@ -43,11 +46,12 @@ sudo rm /usr/local/sbin/battery-charge-limit
 The battery keeps the last mode written. To go back to the firmware's default first:
 `sudo /usr/local/sbin/battery-charge-limit full`.
 
-## Without passwordless sudo (another machine, optional)
+## Allowing it through `sudo -n` (optional)
 
-The applet runs `sudo -n /usr/local/sbin/battery-charge-limit limit` or `... full`, which
-never asks for a password. On an account that needs a password for sudo, a rule allowing
-only these two command lines does it. Example, not shipped, edited with
+The applet runs `/usr/bin/sudo -n /usr/local/sbin/battery-charge-limit limit` or `... full`:
+`-n` never asks for a password, so the helper must be runnable that way. No sudoers file is
+shipped. Where sudo would ask for a password, a rule allowing only these two command lines
+does it. Example, not shipped, edited with
 `sudo visudo -f /etc/sudoers.d/battery-charge-limit`:
 
 ```

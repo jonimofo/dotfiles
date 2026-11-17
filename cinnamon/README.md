@@ -284,11 +284,17 @@ the menu:
     for a one-level light, Medium above half on a light with more levels). Follows the
     keyboard's own hotkey. Dimmed without a keyboard backlight.
   - Charge: `Charge 80%` while the battery stops charging at 80 % (charge mode Custom,
-    thresholds 75 and 80), `Charge 100%`, highlighted, while it charges fully (Adaptive). A
-    click switches between the two, for example before a trip. After a full charge, the
-    first time the charger is unplugged it goes back to `Charge 80%` by itself. It writes
-    through the root helper [`system/battery-charge-limit`](../system/battery-charge-limit/README.md),
-    run with `sudo -n`; dimmed until the helper is installed or without these sysfs files.
+    thresholds 75 and 80; the thresholds only apply in Custom mode), `Charge 100%`,
+    highlighted, otherwise: Adaptive, and any other mode or threshold set elsewhere. A click
+    switches: from `Charge 100%` it applies the 80 % limit, whatever was set before. It
+    writes through the root helper
+    [`system/battery-charge-limit`](../system/battery-charge-limit/README.md), run with
+    `sudo -n`; dimmed until the helper is installed or without these sysfs files. A hidden
+    tile does nothing at all: no read, no automatic return.
+  - Automatic return to 80 %: while the tile shows `Charge 100%`, once the battery has been
+    seen full on AC (a battery already full on AC when `Charge 100%` is chosen counts at
+    once), the first change to battery power applies the limit, once. A dock unplugged or a
+    short power cut counts as that change.
   - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
     dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
 - Media controls, under the tiles: one block per media player that has a track (any
@@ -384,7 +390,7 @@ or does nothing, and the reason goes to the journal once:
 | `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
 | `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
 | UPower with a keyboard backlight | Keyboard light tile | tile dimmed |
-| `/usr/local/sbin/battery-charge-limit` ([install](../system/battery-charge-limit/README.md)), `sudo` without a password for it, a battery with `charge_types` and charge thresholds in sysfs | Charge tile | tile dimmed; a refused `sudo -n` is logged and the tile shows the real mode |
+| `/usr/local/sbin/battery-charge-limit` ([install](../system/battery-charge-limit/README.md)), the helper runnable through `sudo -n`, a battery with `charge_types` and charge thresholds in sysfs | Charge tile | tile dimmed; a refused `sudo -n` is logged and the tile shows the real mode |
 
 NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon, the session
 manager and the session bus (media players) come with the desktop.
@@ -398,10 +404,12 @@ windows, in Cinnamon's own order; the applet picks by `get_user_time()` itself),
 
 ## Quick Settings: known limitations
 
-- The Charge tile reads the charge mode when the menu opens and on each battery change
-  (sysfs sends no change signal): a mode changed by another tool shows at the next one. The
-  return to 80 % needs the applet running when the charger is unplugged, and is forgotten
-  across a reload until the battery is seen full on AC again.
+- The Charge tile reads the charge mode when it shows, when the menu opens and on each
+  battery change (sysfs sends no change signal): a mode changed by another tool shows at the
+  next one. The return to 80 % needs the applet running when the charger is unplugged, and
+  is forgotten across a reload until the battery is seen full on AC again. A helper run that
+  does not answer within 10 s is given up on: the tile is usable again and shows the real
+  mode.
 
 - A click on a media block brings a window forward, never a browser tab: no browser lets
   another program switch its tabs. Among a browser's windows, the one whose title holds the

@@ -52,8 +52,10 @@ Dell XPS, kernel 6.12, `dell_laptop` loaded.
 
 - Helper `system/battery-charge-limit/battery-charge-limit`, POSIX `sh`, installed by the
   owner as `/usr/local/sbin/battery-charge-limit`, root:root 0755. Exactly one argument:
-  `limit` (Custom, then the thresholds in a safe order, ending at 75 and 80) or `full`
-  (Adaptive, thresholds left). Anything else writes nothing and exits non-zero.
+  `limit` (the thresholds 75 and 80 in an order that keeps the driver's gap, then Custom;
+  all read back) or `full` (Adaptive, thresholds left). A state already in place is left
+  alone (`unchanged`). Anything else writes nothing and exits non-zero. Changed by the
+  audit, below.
 - Tile `charge-limit` (`Charge limit` in Configure), after `keyboard-light`, shown by default.
   `Charge 80%` (not checked) in the limit state, `Charge 100%` (checked) otherwise. The limit
   state is: active charge type `Custom` and end threshold 80. Read from sysfs as files (no
@@ -66,9 +68,8 @@ Dell XPS, kernel 6.12, `dell_laptop` loaded.
   reading on battery runs `limit` once. "On AC" comes from the battery state
   cinnamon-settings-daemon already sends (charging, fully charged, pending charge: on AC;
   discharging, pending discharge: on battery). The memory is kept in the applet instance.
-- No sudoers file is shipped: on this machine the owner's account already runs commands
-  without a password. A narrow rule for another machine is an optional example in the
-  helper's README.
+- No sudoers file is shipped. The helper must be runnable through `sudo -n`; the helper's
+  README shows an optional narrow rule for a machine where it is not.
 
 ## As built
 
@@ -83,6 +84,21 @@ Dell XPS, kernel 6.12, `dell_laptop` loaded.
   `GetDevices()`: `BatteryModel.pickBattery()` now also returns `onAc` and `full`. No extra
   read.
 - A test compares the applet's constants with the helper's.
+
+## Audit fixes
+
+- Helper: the `dell-laptop` driver keeps the end at least 5 above the start and silently
+  moves a value otherwise (v6.12): the thresholds are written in the order that keeps that
+  gap, with a second pass for a start already outside it, then read back; the mode is
+  written last, so a failing threshold write never leaves Custom with old values; a state
+  already in place writes nothing and prints `unchanged`. Its tests run a copy whose
+  `write_value()` is a model of the driver (`scripts/fixtures/battery-charge-limit/`).
+- Tile: two states kept; anything other than Custom with the end at 80 shows as
+  `Charge 100%`, and a click from it applies the limit. Labels built from the constants.
+  `/usr/bin/sudo` by its absolute path; a run without an answer within 10 s is given up on;
+  error text cut in the log; the busy flag cleared after the re-read; the last battery
+  reading applied right after each write (a battery already full on AC when full is chosen
+  counts as seen full); a hidden tile does nothing.
 
 ## Security reasoning for the helper
 

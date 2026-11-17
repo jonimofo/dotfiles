@@ -12,7 +12,7 @@ Written 2026-09-15 after the fix was verified. Related memory: `~/.claude/projec
 | Audio | `sof-audio-pci-intel-tgl` on PCI `0000:00:1f.3`, card `sofsoundwire`, SOF firmware 2:2:0-57864 |
 | Sleep mode | `s2idle` only (`/sys/power/mem_sleep` = `[s2idle]`), no `deep` |
 | Fan | Present (`dell_smm` fan1, nominal max 8100 RPM). Not fanless. |
-| Journal | User is NOT in `adm`/`systemd-journal`: system/kernel journal needs `sudo`. `sudo -n` works (passwordless). |
+| Journal | User is NOT in `adm`/`systemd-journal`: system/kernel journal needs `sudo`. |
 | Journal gotcha | `journalctl -k` implies current boot only. For history use `journalctl -k -b -N` or drop `-k` and grep `kernel:`. |
 | Docking | USB-C dock, 2 external 1920x1080 monitors on DP-MST (`DP-9`/`DP-10` = `DP-3-2`/`DP-3-3` in xrandr). Internal `eDP-1` is disabled by the user's display config. |
 

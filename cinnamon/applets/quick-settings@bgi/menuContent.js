@@ -38,6 +38,7 @@ class MenuContent {
         this._mediaBlocks = new Map();
         this._mediaShown = true;
         this._onMediaButton = () => {};
+        this._onMediaFocus = () => {};
         this.actor.add_child(this._mediaBox);
 
         // One in-place list at a time, moved under the row whose arrow opened it.
@@ -79,9 +80,11 @@ class MenuContent {
         this._grid.visible = tileIds.length > 0;
     }
 
-    // @onButton(busName, method): a media button was clicked.
-    setOnMediaButton(onButton) {
+    // @onButton(busName, method): a media button was clicked; @onFocus(busName): a block's
+    // text was clicked.
+    setOnMediaButton(onButton, onFocus) {
         this._onMediaButton = onButton;
+        this._onMediaFocus = onFocus;
     }
 
     // @blocks: from MediaModel.visibleBlocks(), in order. A block stays in place while its
@@ -96,7 +99,8 @@ class MenuContent {
         }
         for (const { kind, busName, index } of steps) {
             if (kind === 'add') {
-                const view = new MediaBlock.MediaBlock(method => this._onMediaButton(busName, method));
+                const view = new MediaBlock.MediaBlock(method => this._onMediaButton(busName, method),
+                    () => this._onMediaFocus(busName));
                 this._mediaBlocks.set(busName, view);
                 this._mediaBox.insert_child_at_index(view.actor, index);
             } else {

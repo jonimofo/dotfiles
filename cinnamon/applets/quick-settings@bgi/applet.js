@@ -37,6 +37,8 @@ const PowerProfileModel = require('./powerProfileModel');
 const Settings = imports.ui.settings;
 const LayoutModel = require('./layoutModel');
 const MediaPlayers = require('./mediaPlayers');
+const MediaFocus = require('./mediaFocus');
+const MediaWindows = require('./mediaWindows');
 
 class QuickSettingsApplet extends Applet.Applet {
     constructor(metadata, orientation, panelHeight, instanceId) {
@@ -83,7 +85,8 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpKeyboardLight();
         this._setUpMicMute();
         this._media = null;
-        this._content.setOnMediaButton((busName, method) => this._media && this._media.call(busName, method));
+        this._content.setOnMediaButton((busName, method) => this._media && this._media.call(busName, method),
+            busName => this._focusMediaPlayer(busName));
         this._setUpHeader();
         this._setUpLayoutSettings(metadata.uuid, instanceId);
     }
@@ -481,6 +484,13 @@ class QuickSettingsApplet extends Applet.Applet {
         if (this._media)
             return;
         this._media = new MediaPlayers.MediaPlayers(() => this._content.setMediaBlocks(this._media.blocks));
+    }
+
+    // The player's window comes forward once the menu is closed.
+    _focusMediaPlayer(busName) {
+        if (!this._media)
+            return;
+        this._closeThen(() => MediaFocus.focusPlayer(busName, this._media, MediaWindows.CINNAMON_WINDOWS));
     }
 
     _stopMedia() {

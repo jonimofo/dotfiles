@@ -50,6 +50,49 @@ class MediaPlayers {
             `${method} on the media player ${this._logName(player)}`, () => {});
     }
 
+    // What MediaFocus.focusPlayer() needs, or null for a player no longer listed.
+    focusInfo(busName) {
+        const player = this._players.get(busName);
+        if (!player)
+            return null;
+        const metadata = player.metadata || {};
+        return {
+            desktopEntry: MediaModel.plainText(player.root.DesktopEntry) || null,
+            canRaise: player.root.CanRaise === true,
+            title: MediaModel.plainText(metadata['xesam:title']),
+        };
+    }
+
+    // @onPid(pid) with the process that owns @busName; @onNone() when it cannot be read.
+    processId(busName, onPid, onNone) {
+        const player = this._players.get(busName);
+        if (!player) {
+            onNone();
+            return;
+        }
+        AsyncHelpers.callDbus(this._bus, Constants.DBUS_DAEMON, 'GetConnectionUnixProcessID',
+            new GLib.Variant('(s)', [player.owner]), this._cancellable, `finding the process of ${this._logName(player)}`,
+            reply => onPid(reply.deepUnpack()[0]), onNone,
+            { replyType: TYPES.processId, stillWanted: () => this._isCurrent(player) });
+    }
+
+    raise(busName) {
+        const player = this._players.get(busName);
+        if (player) {
+            this._callPlayer(player, Constants.MPRIS_ROOT_INTERFACE, Constants.MEDIA_RAISE_METHOD, null, null,
+                `raising the media player ${this._logName(player)}`, () => {});
+        }
+    }
+
+    // No window found and no Raise: logged once per player.
+    noWindow(busName) {
+        const player = this._players.get(busName);
+        if (!player || player.noWindowLogged)
+            return;
+        player.noWindowLogged = true;
+        global.log(`${Constants.LOG_PREFIX}: no window found for the media player ${this._logName(player)}`);
+    }
+
     destroy() {
         this._destroyed = true;
         this._update.cancel();
@@ -73,7 +116,10 @@ class MediaPlayers {
     _add(busName, owner) {
         if (this._destroyed || this._players.has(busName) || !owner)
             return;
-        const player = { busName, owner, identity: null, metadata: {}, properties: {}, signalId: 0, warned: false };
+        const player = {
+            busName, owner, identity: null, root: {}, metadata: {}, properties: {}, signalId: 0, warned: false,
+            noWindowLogged: false,
+        };
         player.signalId = this._bus.signal_subscribe(busName, Constants.DBUS_PROPERTIES_INTERFACE, 'PropertiesChanged',
             Constants.MPRIS_PATH, null, Gio.DBusSignalFlags.NONE, (connection, sender, path, iface, signal, parameters) => {
                 if (parameters.get_type_string() === TYPES.propertiesChanged)
@@ -134,6 +180,7 @@ class MediaPlayers {
                 this._warnOnce(player, `${property} of type ${variant.get_type_string()}`);
         }
         if (iface === Constants.MPRIS_ROOT_INTERFACE) {
+            Object.assign(player.root, values);
             if ('Identity' in values)
                 player.identity = values.Identity;
         } else {

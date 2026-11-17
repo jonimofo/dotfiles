@@ -138,6 +138,36 @@ Wanted:
 - One update per burst of changes (`AsyncHelpers.IdleCoalescer`), cancelled on destroy.
 - One ordered list of button keys, `MEDIA_BUTTON_ORDER`, for the model and the block.
 
+## A click brings the player's window forward (review round)
+
+Request: "sur les controles medis, on click, est-ce possible de focus la fenetre / onglet si
+navigateur ?" Chosen: "Le titre et la ligne du lecteur": a click on the text, title or artist
+and player line, brings the player's window to the front and closes the menu; the three icons
+keep their role; the text is highlighted on hover. The owner was told: the window yes, the
+browser tab no (no browser exposes tab switching from outside); when the playing tab is
+already the active tab of a window, that window is the one chosen.
+
+```
+| Song title                                 |   clic : fenêtre au premier plan
+| Artist · VLC media player     <<   >   >>  |   clic sur le texte : idem
+                                  ^   ^   ^
+                                  icônes : inchangées
+```
+
+- Order (`MediaFocus.focusPlayer`): the windows of the application named by `DesktopEntry`
+  (`Cinnamon.AppSystem.lookup_app`, `get_windows`), else the windows of the player's process
+  (`GetConnectionUnixProcessID` on its owner, then the window actors' `get_pid`), else MPRIS
+  `Raise` when `CanRaise`, else nothing, logged once per player. VLC reports `CanRaise`
+  false, so its window comes from `DesktopEntry` `vlc`.
+- Among several windows (`MediaModel.chooseWindow`): one whose title holds the track title,
+  else the one used last (`get_user_time`).
+- Activation: `Main.activateWindow(window, time, workspace)`, as the stock window list does,
+  after the menu closes.
+- The text is one `St.Button`, focusable, with the list entries' hover and focus tint and the
+  accessible name `Show <player>`; the icons are outside it.
+- Limits: a window, not a tab; a browser window whose active tab is not the playing one can
+  only be told apart by being used last.
+
 ## Out of scope
 
 Cover art, progress bar, volume per player, a player chooser; anything else.

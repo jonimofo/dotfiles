@@ -1137,6 +1137,8 @@ class FakeMprisBus {
             return new GLib.Variant('(s)', ['not properties']);
         if (call.method === 'ListNames')
             return new GLib.Variant('(as)', [['org.freedesktop.DBus', ...this.owners.keys()]]);
+        if (call.method === 'GetConnectionUnixProcessID')
+            return this.pids && this.pids.has(call.args[0]) ? new GLib.Variant('(u)', [this.pids.get(call.args[0])]) : null;
         if (call.method === 'GetNameOwner')
             return new GLib.Variant('(s)', [this.owners.get(call.args[0])]);
         if (call.method === 'GetAll')
@@ -1282,6 +1284,36 @@ async function testMediaPlayers() {
         errors.length === 1 && errors[0].includes('Next on the media player Other player failed: Next refused xxx') && errors[0].length < 250);
     errors = [];
 
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2',
+        { CanRaise: new GLib.Variant('b', true), DesktopEntry: new GLib.Variant('s', 'vlc') });
+    check(`media players: CanRaise and DesktopEntry are read for the focus (${JSON.stringify(players.focusInfo('org.mpris.MediaPlayer2.vlc'))})`,
+        JSON.stringify(players.focusInfo('org.mpris.MediaPlayer2.vlc')) === '{"desktopEntry":"vlc","canRaise":true,"title":"Other song"}'
+        && players.focusInfo('org.mpris.MediaPlayer2.gone') === null);
+    errors = [];
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.firefox.instance_1_2', 'org.mpris.MediaPlayer2',
+        { CanRaise: new GLib.Variant('s', 'yes'), DesktopEntry: new GLib.Variant('as', ['firefox']) });
+    check(`media players: wrongly typed CanRaise and DesktopEntry are ignored (${JSON.stringify(players.focusInfo('org.mpris.MediaPlayer2.firefox.instance_1_2'))})`,
+        JSON.stringify(players.focusInfo('org.mpris.MediaPlayer2.firefox.instance_1_2')) === '{"desktopEntry":null,"canRaise":false,"title":"Video title"}');
+    errors = [];
+    bus.pids = new Map([[':1.99', 4242]]);
+    let pid = null;
+    let noPid = 0;
+    players.processId('org.mpris.MediaPlayer2.vlc', id => {
+        pid = id;
+    }, () => noPid++);
+    players.processId('org.mpris.MediaPlayer2.gone', () => {}, () => noPid++);
+    check(`media players: the owner's process id comes from GetConnectionUnixProcessID (${pid}, ${bus.calls.filter(c => c.includes('GetConnectionUnixProcessID'))})`,
+        pid === 4242 && noPid === 1 && bus.calls.includes('org.freedesktop.DBus GetConnectionUnixProcessID :1.99'));
+    players.raise('org.mpris.MediaPlayer2.vlc');
+    check('media players: Raise calls the root interface', bus.calls[bus.calls.length - 1] === 'org.mpris.MediaPlayer2.vlc Raise');
+    const logged = [];
+    globalThis.global.log = line => logged.push(line);
+    players.noWindow('org.mpris.MediaPlayer2.vlc');
+    players.noWindow('org.mpris.MediaPlayer2.vlc');
+    globalThis.global.log = () => {};
+    check(`media players: no window found is logged once per player (${logged})`,
+        logged.length === 1 && logged[0].includes('no window found for the media player Other player'));
+
     await nextIdle();
     const before = changes;
     bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { PlaybackStatus: new GLib.Variant('s', 'Paused') });
@@ -1358,6 +1390,57 @@ async function testMediaPlayers() {
     check(`media players: replies after destroy add nothing and log nothing (${errors})`,
         destroyedChanges === 0 && afterDestroy.subscriptions.size === 0 && errors.length === 0);
     errors = [];
+}
+
+function testMediaFocus() {
+    const Model = load('./mediaModel');
+    const windows = [{ title: 'Inbox - Browser', userTime: 30 }, { title: 'Video title - Site - Browser', userTime: 10 },
+        { title: 'Docs - Browser', userTime: 50 }];
+    check('media focus: the window whose title holds the track title wins', Model.chooseWindow(windows, 'Video title') === 1);
+    check('media focus: no title match, the window used last', Model.chooseWindow(windows, 'Other') === 2);
+    check('media focus: an empty track title, the window used last', Model.chooseWindow(windows, '') === 2 && Model.chooseWindow(windows, null) === 2);
+    check('media focus: several browser windows playing it, the most recent of them',
+        Model.chooseWindow([{ title: 'Song - A', userTime: 5 }, { title: 'Song - B', userTime: 9 }, { title: 'Mail', userTime: 99 }], 'Song') === 1);
+    check('media focus: no window, none', Model.chooseWindow([], 'Song') === -1);
+
+    const Focus = load('./mediaFocus');
+    const run = ({ info, appWindows = {}, pidWindows = {}, pid = null }) => {
+        const done = [];
+        const players = {
+            focusInfo: () => info,
+            processId: (busName, onPid, onNone) => (pid === null ? onNone() : onPid(pid)),
+            raise: busName => done.push(`raise ${busName}`),
+            noWindow: busName => done.push(`none ${busName}`),
+        };
+        const windowApi = {
+            ofApp: entry => {
+                done.push(`app ${entry}`);
+                return appWindows[entry] || [];
+            },
+            ofPid: id => {
+                done.push(`pid ${id}`);
+                return pidWindows[id] || [];
+            },
+            describe: window => window,
+            activate: window => done.push(`activate ${window.title}`),
+        };
+        Focus.focusPlayer('org.mpris.MediaPlayer2.vlc', players, windowApi);
+        return `${done}`;
+    };
+    const vlcWindow = { title: 'Song - VLC media player', userTime: 1 };
+    check(`media focus: the window of the DesktopEntry application first (${run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, appWindows: { vlc: [vlcWindow] } })})`,
+        run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, appWindows: { vlc: [vlcWindow] }, pid: 42 }) === 'app vlc,activate Song - VLC media player');
+    check('media focus: no application window, a window of the process',
+        run({ info: { desktopEntry: 'vlc', canRaise: true, title: 'Song' }, pidWindows: { 42: [vlcWindow] }, pid: 42 }) === 'app vlc,pid 42,activate Song - VLC media player');
+    check('media focus: no DesktopEntry, straight to the process',
+        run({ info: { desktopEntry: null, canRaise: false, title: 'Song' }, pidWindows: { 42: [vlcWindow] }, pid: 42 }) === 'pid 42,activate Song - VLC media player');
+    check('media focus: no window at all, MPRIS Raise when the player offers it',
+        run({ info: { desktopEntry: 'vlc', canRaise: true, title: 'Song' }, pid: 42 }) === 'app vlc,pid 42,raise org.mpris.MediaPlayer2.vlc');
+    check('media focus: no process id, Raise too',
+        run({ info: { desktopEntry: null, canRaise: true, title: 'Song' } }) === 'raise org.mpris.MediaPlayer2.vlc');
+    check('media focus: nothing found and no Raise, only the log',
+        run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, pid: 42 }) === 'app vlc,pid 42,none org.mpris.MediaPlayer2.vlc');
+    check('media focus: a player no longer listed does nothing', run({ info: null }) === '');
 }
 
 function testBatteryModel() {
@@ -2059,6 +2142,7 @@ async function main() {
     testKeyboardLight();
     testAirplaneMode();
     testMediaModel();
+    testMediaFocus();
     await testMediaPlayers();
     testBatteryModel();
     testMicMute();

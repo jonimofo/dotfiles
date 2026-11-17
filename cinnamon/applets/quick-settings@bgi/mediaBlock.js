@@ -10,23 +10,36 @@ const UiHelpers = require('./uiHelpers');
 // line. The texts come from the player: they are set as plain text (St.Label.text), never
 // as markup; italic and bold come from style classes. When line 2 is too long the artist
 // gives way first (it ellipsizes; the player name, at most Constants.MEDIA_PLAYER_NAME_MAX
-// characters, does not), so the player name stays readable. @onButton(method) runs on a click of a working button.
+// characters, does not), so the player name stays readable. The title and that line are
+// one button, tinted on hover like the list entries and separate from the three icons:
+// @onFocus() runs on its click (bring the player's window forward), @onButton(method) on a
+// click of a working icon.
 class MediaBlock {
-    constructor(onButton) {
+    constructor(onButton, onFocus) {
         this.actor = new St.BoxLayout({ vertical: true, style_class: 'quick-settings-media-block' });
         this.actor.add_child(new St.Widget({ style_class: 'quick-settings-list-separator' }));
-        this._title = plainLabel('quick-settings-media-title');
-        this.actor.add_child(this._title);
 
         const row = new St.BoxLayout();
+        const lines = new St.BoxLayout({ vertical: true, style_class: 'quick-settings-media-lines' });
+        this._title = plainLabel('quick-settings-media-title');
+        lines.add_child(this._title);
+        const line2 = new St.BoxLayout();
         this._artist = plainLabel(null);
-        row.add_child(this._artist);
+        line2.add_child(this._artist);
         this._player = plainLabel('quick-settings-media-player');
         this._player.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        row.add_child(this._player);
-        // Keeps the buttons on the right.
-        row.add_child(new St.Widget({ x_expand: true }));
-        const buttonsBox = new St.BoxLayout({ style_class: 'quick-settings-media-buttons' });
+        line2.add_child(this._player);
+        lines.add_child(line2);
+        this._text = new St.Button({
+            child: lines,
+            style_class: 'quick-settings-media-text',
+            x_expand: true,
+            x_fill: true,
+            can_focus: true,
+        });
+        this._text.connect('clicked', () => onFocus());
+        row.add_child(this._text);
+        const buttonsBox = new St.BoxLayout({ style_class: 'quick-settings-media-buttons', y_align: Clutter.ActorAlign.END });
         this._buttons = {};
         for (const key of Constants.MEDIA_BUTTON_ORDER) {
             const icon = UiHelpers.symbolicIcon(null, 'quick-settings-media-icon');
@@ -49,6 +62,7 @@ class MediaBlock {
         this._artist.text = block.text.artist;
         this._artist.visible = block.text.artist !== '';
         this._player.text = block.text.player;
+        this._text.accessible_name = `${Constants.MEDIA_FOCUS_LABEL} ${block.name}`;
         for (const key of Constants.MEDIA_BUTTON_ORDER) {
             const state = block.buttons[key];
             const entry = this._buttons[key];

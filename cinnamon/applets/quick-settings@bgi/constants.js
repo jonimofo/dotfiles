@@ -273,6 +273,7 @@ const MPRIS_TYPES = {
     propertiesChanged: '(sa{sv}as)',
     listNames: '(as)',
     nameOwner: '(s)',
+    processId: '(u)',
     getAll: '(a{sv})',
     properties: {
         Identity: 's',
@@ -283,8 +284,17 @@ const MPRIS_TYPES = {
         CanGoNext: 'b',
         CanPlay: 'b',
         CanPause: 'b',
+        CanRaise: 'b',
+        DesktopEntry: 's',
     },
 };
+// A click on a block's text brings the player's window to the front: the window of the
+// application named by DesktopEntry (this suffix makes its desktop file id), else a window
+// of the player's process, else MPRIS Raise. The text's accessible name: this, then the
+// player name.
+const MEDIA_DESKTOP_FILE_SUFFIX = '.desktop';
+const MEDIA_RAISE_METHOD = 'Raise';
+const MEDIA_FOCUS_LABEL = 'Show';
 // A player's error text in the log is cut to this many characters.
 const MEDIA_ERROR_TEXT_MAX = 120;
 // The menu does not grow without bound: the first blocks in display-name order.

@@ -151,7 +151,18 @@
 }
 
 .quick-settings-media-block {
-    padding: 0 8px;
+    padding: 0 4px;
+    spacing: 8px;
+}
+
+/* The title and the artist and player line: one clickable area, 4 px in from the block's
+   edge so the text sits where it did. */
+.quick-settings-media-text {
+    padding: 2px 4px;
+    border-radius: 10px;
+}
+
+.quick-settings-media-lines {
     spacing: 8px;
 }
 
@@ -164,7 +175,7 @@
 }
 
 .quick-settings-media-buttons {
-    padding-left: 12px;
+    padding: 0 4px 0 12px;
     spacing: 6px;
 }
 
@@ -206,7 +217,9 @@
 }
 
 .quick-settings-list-entry:hover,
-.quick-settings-list-entry:focus {
+.quick-settings-list-entry:focus,
+.quick-settings-media-text:hover,
+.quick-settings-media-text:focus {
     background-color: rgba(255, 255, 255, 0.12);
 }
 

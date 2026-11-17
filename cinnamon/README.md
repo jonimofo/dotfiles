@@ -290,7 +290,9 @@ the menu:
   title in bold, then `artist · player` with the player name in italic (the player alone
   without an artist; a long artist is cut first), and previous, play or pause, next as bare
   icons on that line. A button the player does not offer is dimmed. No player
-  with a track: no block. Followed live over D-Bus, like the stock sound applet.
+  with a track: no block. Followed live over D-Bus, like the stock sound applet. A click
+  on the title or the player line closes the menu and brings the player's window to the
+  front: a browser's window, not its tab.
 - '>' on a tile or a slider opens its list under that row, in the menu: networks, paired
   devices, VPN profiles, NordVPN countries, power profiles, output and input devices. The
   active entry has a check mark; a click switches to that entry. The last entry opens the
@@ -376,7 +378,18 @@ or does nothing, and the reason goes to the journal once:
 NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon, the session
 manager and the session bus (media players) come with the desktop.
 
+Cinnamon internals the media controls rely on, read from Cinnamon 6.4: `Cinnamon.AppSystem`
+`lookup_app('<DesktopEntry>.desktop')` and the app's `get_windows()` (most recently used
+first), `global.get_window_actors()` with each `meta_window`'s `get_pid()`, `get_title()`
+and `get_user_time()`, and `Main.activateWindow(window, time, workspace)`, which the stock
+window list uses on a click.
+
 ## Quick Settings: known limitations
+
+- A click on a media block brings a window forward, never a browser tab: no browser lets
+  another program switch its tabs. Among a browser's windows, the one whose title holds the
+  track title (its active tab plays) wins, else the one used last. A player with no window
+  found and no MPRIS Raise does nothing; the journal says so once.
 
 - Microphone and Mic mute are dimmed while there is no input source (the internal microphone
   is disabled on this machine).

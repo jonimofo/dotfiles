@@ -107,3 +107,18 @@ function blockMoves(oldOrder, newOrder) {
     });
     return { remove, steps };
 }
+
+// The window to bring forward among @windows ([{ title, userTime }], from one application or
+// one process): a window whose title holds @trackTitle (a browser whose active tab plays),
+// else the one used last; the most recent wins among several. Returns its index, or -1.
+function chooseWindow(windows, trackTitle) {
+    const title = plainText(trackTitle);
+    const titled = title ? windows.filter(window => plainText(window.title).includes(title)) : [];
+    const pool = titled.length > 0 ? titled : windows;
+    let best = null;
+    for (const window of pool) {
+        if (!best || window.userTime > best.userTime)
+            best = window;
+    }
+    return best ? windows.indexOf(best) : -1;
+}

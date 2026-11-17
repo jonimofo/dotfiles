@@ -219,6 +219,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             // Second zone and Appearance tab: a light refresh, no forced fetch of the events;
             // the zone id waits for the end of typing. The day marker switch is read by the
             // calendar grid itself.
+            // Bound for their callback; their values are read by key in _secondZonePlaces().
             this.settings.bind(Constants.SECOND_ZONE_SWITCHES.panel.key, "show_second_zone", this._onSecondZoneChanged);
             this.settings.bind(Constants.SECOND_ZONE_SWITCHES.header.key, "show_second_zone_header", this._onSecondZoneChanged);
             this.settings.bind(Constants.SECOND_ZONE_ID_KEY, "second_zone_id", this._onZoneIdChanged);
@@ -356,7 +357,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     _updateClocks(now) {
         let city = DateText.cityFromZoneId(GLib.TimeZone.new_local().get_identifier());
         let clocks = DateText.headerClocks(now.format(this._timeFormat()), city,
-                                           SecondZone.shownWhere(this.show_second_zone_header, this._secondTime(now)));
+                                           SecondZone.shownWhere(this._secondZonePlaces().header, this._secondTime(now)));
         this._clocks.forEach((clock, i) => {
             clock.actor.visible = i < clocks.length;
             if (clock.actor.visible) {
@@ -399,9 +400,13 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         });
     }
 
+    _secondZonePlaces() {
+        return SecondZone.secondZonePlaces(key => this.settings.getValue(key));
+    }
+
     _updateSecondZone() {
         this._secondZone = this._secondZoneResolver.resolve(
-            SecondZone.zoneWanted(this.show_second_zone, this.show_second_zone_header), this.second_zone_id);
+            this._secondZonePlaces().resolve, this.second_zone_id);
     }
 
     _inVerticalPanel() {
@@ -436,7 +441,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.clock.get_clock() :
             DateText.panelDateOf(now);
         return DateText.formatPanelText(date_text, now.format(this._timeFormat()),
-                                        SecondZone.shownWhere(this.show_second_zone, this._secondTime(now)));
+                                        SecondZone.shownWhere(this._secondZonePlaces().panel, this._secondTime(now)));
     }
 
     _updateClockAndDate() {

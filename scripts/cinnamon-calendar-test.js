@@ -146,29 +146,47 @@ function testTimeFormats() {
         /^3:52:07 \S+$/.test(afternoon.format(DateText.timeFormatFor(false, true))));
 }
 
-// The second zone on the panel and in the header, switched separately.
+// The second zone on the panel and in the header, switched separately. The settings are
+// given by key, as the applet reads them: swapping the two keys fails here.
 function testSecondZonePlaces() {
     const second = { label: 'VN', time: '21:52' };
-    const places = (onPanel, inHeader) => [
-        SecondZone.zoneWanted(onPanel, inHeader),
-        DateText.formatPanelText('Mon 16 Nov', '15:52', SecondZone.shownWhere(onPanel, second)),
-        DateText.headerClocks('15:52', 'Paris', SecondZone.shownWhere(inHeader, second))
-            .map(clock => `${clock.time} ${clock.suffix}`).join(' | '),
-    ].join(' / ');
-    checkEqual('second zone: panel and header', places(true, true),
+    const keys = { panel: 'show-second-zone', header: 'show-second-zone-header', clocks: 'show-header-clocks' };
+    const placesFor = (onPanel, inHeader, clocks = true) => SecondZone.secondZonePlaces(key => ({
+        [keys.panel]: onPanel, [keys.header]: inHeader, [keys.clocks]: clocks,
+    })[key]);
+    const shown = (onPanel, inHeader, clocks) => {
+        const places = placesFor(onPanel, inHeader, clocks);
+        return [
+            places.resolve,
+            DateText.formatPanelText('Mon 16 Nov', '15:52', SecondZone.shownWhere(places.panel, second)),
+            DateText.headerClocks('15:52', 'Paris', SecondZone.shownWhere(places.header, second))
+                .map(clock => `${clock.time} ${clock.suffix}`).join(' | '),
+        ].join(' / ');
+    };
+    checkEqual('second zone: panel and header', shown(true, true),
         'true / Mon 16 Nov · 15:52 · VN 21:52 / 15:52 Paris | 21:52 VN');
-    checkEqual('second zone: panel only', places(true, false),
+    checkEqual('second zone: panel only', shown(true, false),
         'true / Mon 16 Nov · 15:52 · VN 21:52 / 15:52 Paris');
-    checkEqual('second zone: header only', places(false, true),
+    checkEqual('second zone: header only', shown(false, true),
         'true / Mon 16 Nov · 15:52 / 15:52 Paris | 21:52 VN');
-    checkEqual('second zone: neither, the zone is not resolved', places(false, false),
+    checkEqual('second zone: neither, the zone is not resolved', shown(false, false),
         'false / Mon 16 Nov · 15:52 / 15:52 Paris');
+    checkEqual('second zone: header switch on, header clocks off, still resolved for nothing shown',
+        JSON.stringify(placesFor(false, true, false)), JSON.stringify({ panel: false, header: false, resolve: true }));
+
     const logged = [];
     const resolver = new SecondZone.SecondZone(message => logged.push(message));
-    const hidden = resolver.resolve(SecondZone.zoneWanted(false, true), 'Nowhere/Bad') === null &&
-        resolver.resolve(SecondZone.zoneWanted(true, false), 'Nowhere/Bad') === null;
+    const hidden = resolver.resolve(placesFor(false, true).resolve, 'Nowhere/Bad') === null &&
+        resolver.resolve(placesFor(true, false).resolve, 'Nowhere/Bad') === null;
     check(`second zone: an invalid id hides it in both places, logged once (${logged.length} log)`,
         hidden && logged.length === 1);
+    // Id typed while both switches are off, then one switch turned on: one log, not more.
+    const later = [];
+    const resolverLater = new SecondZone.SecondZone(message => later.push(message));
+    resolverLater.resolve(placesFor(false, false).resolve, 'Nowhere/Bad');
+    resolverLater.resolve(placesFor(false, true).resolve, 'Nowhere/Bad');
+    resolverLater.resolve(placesFor(false, true).resolve, 'Nowhere/Bad');
+    checkEqual('second zone: invalid id set while off, then a switch on: logged once', later.length, 1);
 }
 
 function testTimeOfEventRows() {
@@ -457,10 +475,13 @@ function testSchema() {
     const schema = JSON.parse(readText(`${appletDir}/settings-schema.json`));
     for (const spec of Object.values(Constants.SECOND_ZONE_SWITCHES)) {
         const entry = schema[spec.key];
-        check(`schema: ${spec.key} is a switch, default on, "${spec.label}"`,
-            entry !== undefined && entry.type === 'switch' && entry.default === spec.default && spec.default === true &&
-            entry.description === spec.label);
+        check(`schema: ${spec.key} is a switch, on by default in the schema, "${spec.label}"`,
+            entry !== undefined && entry.type === 'switch' && entry.default === true &&
+            entry.default === spec.default && entry.description === spec.label);
     }
+    check('schema: time zone and label shown whatever the switches (no dependency)',
+        schema[Constants.SECOND_ZONE_ID_KEY].dependency === undefined &&
+        schema[Constants.SECOND_ZONE_LABEL_KEY].dependency === undefined);
     checkEqual('schema: second time zone section order', JSON.stringify(schema.layout['second-zone-section'].keys),
         JSON.stringify([Constants.SECOND_ZONE_SWITCHES.panel.key, Constants.SECOND_ZONE_SWITCHES.header.key,
             Constants.SECOND_ZONE_ID_KEY, Constants.SECOND_ZONE_LABEL_KEY]));

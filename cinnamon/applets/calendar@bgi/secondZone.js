@@ -36,9 +36,15 @@ function timeInZone(datetime, zone, format) {
     return datetime.to_timezone(zone).format(format);
 }
 
-// The zone is resolved when at least one place shows it.
-function zoneWanted(onPanel, inHeader) {
-    return Boolean(onPanel) || Boolean(inHeader);
+// Where the second zone shows, from the settings read by key through @valueOf(key):
+// {panel, header, resolve}. The header also needs the header clocks; the zone is resolved
+// when either switch is on. Reading by key keeps the panel and header switches from being
+// swapped between here and applet.js.
+function secondZonePlaces(valueOf) {
+    const onPanel = Boolean(valueOf(Constants.SECOND_ZONE_SWITCHES.panel.key));
+    const inHeader = Boolean(valueOf(Constants.SECOND_ZONE_SWITCHES.header.key));
+    const clocks = Boolean(valueOf(Constants.ELEMENT_SWITCHES.headerClocks.key));
+    return { panel: onPanel, header: inHeader && clocks, resolve: onPanel || inHeader };
 }
 
 // @second ({label, time} or null) where its switch @shown is on, else null.

@@ -5,7 +5,7 @@ const Tooltips = imports.ui.tooltips;
 const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
 
-// One player's block: a separator line, the title in bold, then "artist · " and the player
+// One player's block: the title in bold, then "artist · " and the player
 // name in italic, and the previous, play or pause, next buttons: bare icons on that
 // line. The texts come from the player: they are set as plain text (St.Label.text), never
 // as markup; italic and bold come from style classes. When line 2 is too long the artist
@@ -14,10 +14,11 @@ const UiHelpers = require('./uiHelpers');
 // one button, tinted on hover like the list entries and separate from the three icons:
 // @onFocus() runs on its click (bring the player's window forward), @onButton(method) on a
 // click of a working icon.
+const TINTED_STYLE_CLASS = 'quick-settings-media-block-tinted';
+
 class MediaBlock {
     constructor(onButton, onFocus) {
         this.actor = new St.BoxLayout({ vertical: true, style_class: 'quick-settings-media-block' });
-        this.actor.add_child(new St.Widget({ style_class: 'quick-settings-list-separator' }));
 
         const row = new St.BoxLayout();
         const lines = new St.BoxLayout({ vertical: true, style_class: 'quick-settings-media-lines' });
@@ -54,6 +55,14 @@ class MediaBlock {
         }
         row.add_child(buttonsBox);
         this.actor.add_child(row);
+    }
+
+    // @tinted: from MediaModel.isTinted() for the block's place on screen.
+    setTinted(tinted) {
+        if (tinted)
+            this.actor.add_style_class_name(TINTED_STYLE_CLASS);
+        else
+            this.actor.remove_style_class_name(TINTED_STYLE_CLASS);
     }
 
     // @block: one of MediaModel.visibleBlocks().

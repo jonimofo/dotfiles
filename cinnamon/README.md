@@ -290,7 +290,8 @@ the menu:
   title in bold, then `artist · player` with the player name in italic (the player alone
   without an artist; a long artist is cut first), and previous, play or pause, next as bare
   icons on that line. A button the player does not offer is dimmed. No player
-  with a track: no block. Followed live over D-Bus, like the stock sound applet. A click
+  with a track: no block. One line separates them from the tiles; with several players,
+  every second block has the lists' faint background. Followed live over D-Bus, like the stock sound applet. A click
   on the title or the player line closes the menu and brings the player's window to the
   front: a browser's window, not its tab.
 - '>' on a tile or a slider opens its list under that row, in the menu: networks, paired

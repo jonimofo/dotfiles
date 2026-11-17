@@ -1070,6 +1070,24 @@ function testMediaModel() {
         }
         return `${list}`;
     };
+    const tints = order => order.map((busName, index) => `${busName}${Model.isTinted(index) ? '*' : ''}`).join(',');
+    check(`media tint: one block plain, three blocks with the second tinted (${tints(['a', 'b', 'c'])})`,
+        tints(['a']) === 'a' && tints(['a', 'b', 'c']) === 'a,b*,c');
+    check(`media tint: follows the place on screen after a reorder, an add and a remove (${tints(['c', 'a', 'b'])})`,
+        tints(['c', 'a', 'b']) === 'c,a*,b' && tints(['a', 'd', 'b', 'c']) === 'a,d*,b,c*' && tints(['a', 'c']) === 'a,c*');
+    // The views get their tint from the order the moves produce.
+    const tintAfter = (before, after) => {
+        const { remove, steps } = Model.blockMoves(before, after);
+        const list = before.filter(id => !remove.includes(id));
+        for (const step of steps) {
+            if (step.kind === 'move')
+                list.splice(list.indexOf(step.busName), 1);
+            list.splice(step.index, 0, step.busName);
+        }
+        return tints(list);
+    };
+    check('media tint: re-applied after the moves (b removed: c takes the tint; reorder swaps it)',
+        tintAfter(['a', 'b', 'c'], ['a', 'c']) === 'a,c*' && tintAfter(['a', 'b'], ['b', 'a']) === 'b,a*');
     check('media moves: applied, they always give the new order',
         [[['a', 'b', 'c'], ['b', 'd', 'a']], [['x'], ['y', 'x']], [['a', 'b', 'c'], ['c', 'b', 'a']], [['a'], ['a']]]
             .every(([before, after]) => apply(before, after) === `${after}`));

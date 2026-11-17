@@ -122,3 +122,9 @@ function chooseWindow(windows, trackTitle) {
     }
     return best ? windows.indexOf(best) : -1;
 }
+
+// Every second block on screen (the second, the fourth) gets the lists' faint background, so
+// several players read as separate rows; a single block stays plain. @index: from 0.
+function isTinted(index) {
+    return index % 2 === 1;
+}

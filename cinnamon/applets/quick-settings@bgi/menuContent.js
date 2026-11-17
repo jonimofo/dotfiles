@@ -34,12 +34,16 @@ class MenuContent {
         this._grid = new St.BoxLayout({ style_class: 'quick-settings-grid', vertical: true });
         this.actor.add_child(this._grid);
 
-        this._mediaBox = new St.BoxLayout({ style_class: 'quick-settings-media', vertical: true, visible: false });
+        // One line under the tiles, then the blocks; the whole section hides with no block.
+        this._mediaSection = new St.BoxLayout({ style_class: 'quick-settings-media-section', vertical: true, visible: false });
+        this._mediaSection.add_child(new St.Widget({ style_class: 'quick-settings-list-separator' }));
+        this._mediaBox = new St.BoxLayout({ style_class: 'quick-settings-media', vertical: true });
+        this._mediaSection.add_child(this._mediaBox);
         this._mediaBlocks = new Map();
         this._mediaShown = true;
         this._onMediaButton = () => {};
         this._onMediaFocus = () => {};
-        this.actor.add_child(this._mediaBox);
+        this.actor.add_child(this._mediaSection);
 
         // One in-place list at a time, moved under the row whose arrow opened it.
         this.listPanel = new ListPanel.ListPanel();
@@ -107,8 +111,11 @@ class MenuContent {
                 this._mediaBox.set_child_at_index(this._mediaBlocks.get(busName).actor, index);
             }
         }
-        for (const block of blocks)
-            this._mediaBlocks.get(block.busName).update(block);
+        blocks.forEach((block, index) => {
+            const view = this._mediaBlocks.get(block.busName);
+            view.update(block);
+            view.setTinted(MediaModel.isTinted(index));
+        });
         this._syncMediaVisibility();
     }
 
@@ -121,7 +128,7 @@ class MenuContent {
     }
 
     _syncMediaVisibility() {
-        this._mediaBox.visible = this._mediaShown && this._mediaBlocks.size > 0;
+        this._mediaSection.visible = this._mediaShown && this._mediaBlocks.size > 0;
     }
 
     // Called each time the menu opens, when every actor has its style.

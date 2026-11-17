@@ -168,6 +168,34 @@ already the active tab of a window, that window is the one chosen.
 - Limits: a window, not a tab; a browser window whose active tab is not the playing one can
   only be told apart by being used last.
 
+## Alternate backgrounds for several players (review round)
+
+Request: "quand plusieurs lecteurs : peut on utiliser alternate colors ?? pour les rows".
+Chosen: "Fonds alternés, sans lignes": every second block gets a faint lighter background with
+rounded corners, the same veil as the menu's lists; the lines between players go; one line
+stays above the first block, to separate it from the tiles.
+
+The look below has the owner's track, channel and video names replaced by neutral ones:
+
+```
+| [ Keyboard Low ]                           |
++--------------------------------------------+   ligne sous les tuiles
+| Song title                                 |
+| Artist · Firefox                  <<  >  >>|   fond normal
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+|░ Video title                              ░|   fond légèrement clair
+|░ VLC media player                <<  >  >>░|
+|░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
+```
+
+- `MediaModel.isTinted(index)`: the second and fourth blocks on screen; applied after every
+  add, remove or move, so a single block is never tinted.
+- The tint is the in-place lists' background, shared through one grouped rule; every block
+  has the same 6 px by 4 px padding and 12 px corners, so the text lines up.
+- One separator at the top of the media section, hidden with the section when no block shows.
+- The text's hover tint (the list entries' 0.12 white) lies over the 0.06 veil, so a hovered
+  text on a tinted block is still visibly lighter.
+
 ## Out of scope
 
 Cover art, progress bar, volume per player, a player chooser; anything else.

@@ -146,13 +146,19 @@
 
 /* Media controls, under the tiles: one block per player */
 
-.quick-settings-media {
-    spacing: 10px;
+.quick-settings-media-section {
+    spacing: 8px;
 }
 
+.quick-settings-media {
+    spacing: 4px;
+}
+
+/* Every block has the same padding and corners, so the text lines up whether its
+   background is tinted (every second block) or not. */
 .quick-settings-media-block {
-    padding: 0 4px;
-    spacing: 8px;
+    padding: 6px 4px;
+    border-radius: 12px;
 }
 
 /* The title and the artist and player line: one clickable area, 4 px in from the block's
@@ -195,6 +201,11 @@
     padding: 10px;
     spacing: 6px;
     border-radius: 16px;
+}
+
+/* The in-place lists' veil, also on every second media block. */
+.quick-settings-list,
+.quick-settings-media-block-tinted {
     background-color: rgba(255, 255, 255, 0.06);
 }
 

@@ -53,7 +53,8 @@
 .calendar-bgi-day-selected,
 .calendar-bgi-day-selected:hover,
 .calendar-bgi-events StScrollBar StButton#vhandle,
-.calendar-bgi-now-line-rule {
+.calendar-bgi-now-line-rule,
+.calendar-bgi-event-ongoing .calendar-bgi-event-accent {
     background-color: #7B5CD6;
 }
 

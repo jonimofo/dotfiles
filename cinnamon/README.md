@@ -428,7 +428,7 @@ Cinnamon 6.4) with a second time zone and its own look:
   the tooltip shows the whole summary. The column is as tall as its events, up to 70% of
   the screen's height (`EVENTS_MAX_HEIGHT_RATIO` in `constants.js`); beyond it only the
   list scrolls.
-- On today, past events are dimmed, the ongoing one has a violet outline, and a violet line
+- On today, past events are dimmed, the ongoing one has a thicker violet outline and a violet accent bar, and a violet line
   with the current time (`09:22`) sits after the last event that has started. The states and
   the line follow the clock minute by minute while the popup is open, and the list scrolls to
   the line on opening. Another day shows no line and nothing dimmed.

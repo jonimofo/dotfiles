@@ -980,14 +980,17 @@ class EventRow {
         }
 
         // Accent bar | time block | title over metadata
-        let color_strip = new St.Bin(
+        // The accent takes the calendar's colour inline; set_state() drops that style for
+        // the ongoing event, so the stylesheet's violet shows.
+        this._accent_style = `background-color: ${event.color};`;
+        this._accent = new St.Bin(
             {
                 style_class: Constants.STYLE.eventAccent,
-                style: `background-color: ${event.color};`
+                style: this._accent_style
             }
         );
 
-        this.actor.add(color_strip);
+        this.actor.add(this._accent);
 
         let time_block = new St.BoxLayout(
             {
@@ -1055,7 +1058,8 @@ class EventRow {
         this.update_variations();
     }
 
-    // 'past', 'ongoing' or null: past cards are dimmed, the ongoing one outlined.
+    // 'past', 'ongoing' or null: past cards are dimmed, the ongoing one outlined in violet,
+    // accent bar included.
     set_state(state) {
         if (state === this._state) {
             return;
@@ -1068,6 +1072,7 @@ class EventRow {
         if (state && classes[state]) {
             this.actor.add_style_class_name(classes[state]);
         }
+        this._accent.style = state === Constants.EVENT_STATES.ongoing ? null : this._accent_style;
     }
 
     update_variations() {

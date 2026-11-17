@@ -52,6 +52,7 @@ const DayCell = load('./dayCell');
 const TickClock = load('./tickClock');
 const Countdown = load('./countdown');
 const Refresh = load('./refresh');
+const NowLine = load('./nowLine');
 const EventCount = load('./eventCount');
 const Appearance = load('./appearance');
 const EventsHeight = load('./eventsHeight');
@@ -342,6 +343,33 @@ function testRefresh() {
     check(`fetch: window shorter than the server's 20 s exit (${fresh} ms)`, fresh < 20000);
 }
 
+// Event states and the now line, from minutes of a day (as ms).
+function testNowLine() {
+    const m = minutes => minutes * 60000;
+    const state = (start, end, allDay, now) => NowLine.eventState(m(start), m(end), allDay, m(now));
+    checkEqual('state: before the start', state(480, 570, false, 479), 'upcoming');
+    checkEqual('state: at the exact start', state(480, 570, false, 480), 'ongoing');
+    checkEqual('state: during', state(480, 570, false, 562), 'ongoing');
+    checkEqual('state: at the exact end', state(480, 570, false, 570), 'past');
+    checkEqual('state: after', state(480, 570, false, 600), 'past');
+    checkEqual('state: all-day, never past or outlined', state(0, 1439, true, 1000), 'upcoming');
+    checkEqual('state: multi-day across midnight, started yesterday', state(-60, 120, false, 30), 'ongoing');
+    checkEqual('state: multi-day across midnight, ends tomorrow', state(1380, 1500, false, 1430), 'ongoing');
+    const at = (events, now) => NowLine.nowLineIndex(events.map(([start, end, allDay]) => state(start, end, allDay, now)));
+    const day = [[420, 480], [480, 570], [570, 660], [660, 750], [720, 810]];
+    checkEqual('line: after the ongoing event (look A, 09:22)', at(day, 562), 2);
+    checkEqual('line: overlapping events, after the last started', at([[480, 600], [540, 570], [560, 700], [700, 760]], 565), 3);
+    checkEqual('line: nothing started, before the first event', at(day, 400), 0);
+    checkEqual('line: everything started, after the last', at(day, 900), 5);
+    checkEqual('line: empty list, no line', at([], 600), null);
+    checkEqual('line: all-day event first reads as upcoming', at([[0, 1439, true], [480, 570]], 500), 2);
+    const date = (year, month, day) => ({ year, month, day });
+    checkEqual('today gate: same day', NowLine.showsToday(date(2026, 11, 16), date(2026, 11, 16)), true);
+    checkEqual('today gate: another day, no states and no line', NowLine.showsToday(date(2026, 11, 17), date(2026, 11, 16)), false);
+    checkEqual('minute: same minute', NowLine.minuteOf(m(562) + 59999) === NowLine.minuteOf(m(562)), true);
+    checkEqual('minute: next minute', NowLine.minuteOf(m(563)) === NowLine.minuteOf(m(562)), false);
+}
+
 function testEventsHeight() {
     const ratio = Constants.EVENTS_MAX_HEIGHT_RATIO;
     checkEqual('events cap: 1080 px monitor', EventsHeight.eventsMaxHeight(1080, ratio, 1), 756);
@@ -606,6 +634,7 @@ testTimeOfEventRows();
 testSecondZone();
 testDayMarker();
 testEventsHeight();
+testNowLine();
 testGrid();
 testRefresh();
 testWording();

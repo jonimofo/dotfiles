@@ -123,6 +123,10 @@ const COUNTDOWN = { imminentMinutes: 10, soonMinutes: 60, laterHours: 6, evening
 // variants are not used, the two names swap for a right-to-left desktop.
 const MONTH_ARROW_ICONS = { previous: 'pan-start-symbolic', next: 'pan-end-symbolic' };
 
+// States of the events of today, and the now line between the started and upcoming ones.
+const EVENT_STATES = { past: 'past', ongoing: 'ongoing', upcoming: 'upcoming' };
+const MS_IN_MINUTE = 60 * 1000;
+
 // The month grid: always six weeks (stock), under the month row and the day headings.
 const DAYS_IN_WEEK = 7;
 const GRID_WEEKS = 6;

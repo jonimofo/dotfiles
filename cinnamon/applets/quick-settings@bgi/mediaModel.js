@@ -128,3 +128,30 @@ function chooseWindow(windows, trackTitle) {
 function isTinted(index) {
     return index % 2 === 1;
 }
+
+// Brings the block views in line with @blocks (MediaModel.visibleBlocks(), in order): the
+// moves of blockMoves() applied through @actions, then every view updated and tinted for its
+// new place. @views: Map of bus name to view ({ update(block), setTinted(bool), destroy() });
+// @onScreen: the bus names in screen order; @actions: { create(busName) -> view,
+// insert(view, index), move(view, index) }.
+function syncBlockViews(views, onScreen, blocks, actions) {
+    const { remove, steps } = blockMoves(onScreen, blocks.map(block => block.busName));
+    for (const busName of remove) {
+        views.get(busName).destroy();
+        views.delete(busName);
+    }
+    for (const { kind, busName, index } of steps) {
+        if (kind === 'add') {
+            const view = actions.create(busName);
+            views.set(busName, view);
+            actions.insert(view, index);
+        } else {
+            actions.move(views.get(busName), index);
+        }
+    }
+    blocks.forEach((block, index) => {
+        const view = views.get(block.busName);
+        view.update(block);
+        view.setTinted(isTinted(index));
+    });
+}

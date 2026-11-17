@@ -1088,6 +1088,41 @@ function testMediaModel() {
     };
     check('media tint: re-applied after the moves (b removed: c takes the tint; reorder swaps it)',
         tintAfter(['a', 'b', 'c'], ['a', 'c']) === 'a,c*' && tintAfter(['a', 'b'], ['b', 'a']) === 'b,a*');
+    // The views as menuContent drives them: moves, then update and tint for the new place.
+    const fakeViews = new Map();
+    const screen = [];
+    const actions = {
+        create: busName => ({
+            busName, tinted: null, updates: 0, destroyed: false,
+            update() {
+                this.updates++;
+            },
+            setTinted(tinted) {
+                this.tinted = tinted;
+            },
+            destroy() {
+                this.destroyed = true;
+                screen.splice(screen.indexOf(this), 1);
+            },
+        }),
+        insert: (view, index) => screen.splice(index, 0, view),
+        move: (view, index) => {
+            screen.splice(screen.indexOf(view), 1);
+            screen.splice(index, 0, view);
+        },
+    };
+    const sync = order => {
+        Model.syncBlockViews(fakeViews, screen.map(view => view.busName), order.map(busName => ({ busName })), actions);
+        return screen.map(view => `${view.busName}${view.tinted ? '*' : ''}`).join(',');
+    };
+    check(`media views: three players, the second tinted (${sync(['a', 'b', 'c'])})`, `${screen.map(v => v.busName + (v.tinted ? '*' : ''))}` === 'a,b*,c');
+    const kept = fakeViews.get('a');
+    check(`media views: b leaves, c takes the tint, a is the same view (${sync(['a', 'c'])})`,
+        `${screen.map(v => v.busName + (v.tinted ? '*' : ''))}` === 'a,c*' && fakeViews.get('a') === kept && !fakeViews.has('b'));
+    check(`media views: a reorder moves the tint with the place (${sync(['c', 'a'])})`,
+        `${screen.map(v => v.busName + (v.tinted ? '*' : ''))}` === 'c,a*' && fakeViews.get('a') === kept);
+    check(`media views: one player left, plain (${sync(['a'])})`, `${screen.map(v => v.busName + (v.tinted ? '*' : ''))}` === 'a');
+    check('media views: every view shown is updated on each pass', kept.updates === 4);
     check('media moves: applied, they always give the new order',
         [[['a', 'b', 'c'], ['b', 'd', 'a']], [['x'], ['y', 'x']], [['a', 'b', 'c'], ['c', 'b', 'a']], [['a'], ['a']]]
             .every(([before, after]) => apply(before, after) === `${after}`));
@@ -1155,8 +1190,13 @@ class FakeMprisBus {
             return new GLib.Variant('(s)', ['not properties']);
         if (call.method === 'ListNames')
             return new GLib.Variant('(as)', [['org.freedesktop.DBus', ...this.owners.keys()]]);
-        if (call.method === 'GetConnectionUnixProcessID')
-            return this.pids && this.pids.has(call.args[0]) ? new GLib.Variant('(u)', [this.pids.get(call.args[0])]) : null;
+        if (call.method === 'GetConnectionUnixProcessID') {
+            // As the bus daemon: an unknown connection is an error, never an empty reply.
+            if (!this.pids || !this.pids.has(call.args[0]))
+                throw new GLib.Error(Gio.DBusError, Gio.DBusError.NAME_HAS_NO_OWNER, `Could not get PID of name '${call.args[0]}'`);
+            const pid = this.pids.get(call.args[0]);
+            return typeof pid === 'number' ? new GLib.Variant('(u)', [pid]) : new GLib.Variant('(s)', [String(pid)]);
+        }
         if (call.method === 'GetNameOwner')
             return new GLib.Variant('(s)', [this.owners.get(call.args[0])]);
         if (call.method === 'GetAll')
@@ -1322,6 +1362,19 @@ async function testMediaPlayers() {
     players.processId('org.mpris.MediaPlayer2.gone', () => {}, () => noPid++);
     check(`media players: the owner's process id comes from GetConnectionUnixProcessID (${pid}, ${bus.calls.filter(c => c.includes('GetConnectionUnixProcessID'))})`,
         pid === 4242 && noPid === 1 && bus.calls.includes('org.freedesktop.DBus GetConnectionUnixProcessID :1.99'));
+    errors = [];
+    let failedPid = 0;
+    bus.pids = new Map();
+    players.processId('org.mpris.MediaPlayer2.vlc', () => {}, () => failedPid++);
+    check(`media players: a failing process id call reaches onNone, logged once (${errors})`,
+        failedPid === 1 && errors.length === 1 && errors[0].includes('finding the process of Other player failed'));
+    errors = [];
+    bus.pids = new Map([[':1.99', 'not a number']]);
+    players.processId('org.mpris.MediaPlayer2.vlc', () => {}, () => failedPid++);
+    check(`media players: a process id of another type reaches onNone, logged once (${errors})`,
+        failedPid === 2 && errors.length === 1 && errors[0].includes('wrong reply type (s)'));
+    errors = [];
+    bus.pids = new Map([[':1.99', 4242]]);
     players.raise('org.mpris.MediaPlayer2.vlc');
     check('media players: Raise calls the root interface', bus.calls[bus.calls.length - 1] === 'org.mpris.MediaPlayer2.vlc Raise');
     const logged = [];
@@ -1405,6 +1458,21 @@ async function testMediaPlayers() {
     gone.destroy();
     while (afterDestroy.held.length > 0)
         afterDestroy.held.shift()();
+    // A process id reply after destroy activates nothing and logs nothing.
+    const afterPid = new FakeMprisBus();
+    afterPid.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
+    afterPid.pids = new Map([[':1.10', 42]]);
+    const pidPlayers = new MediaPlayers.MediaPlayers(() => {}, afterPid);
+    afterPid.held = [];
+    let pidOutcome = 'nothing';
+    pidPlayers.processId('org.mpris.MediaPlayer2.vlc', () => {
+        pidOutcome = 'pid';
+    }, () => {
+        pidOutcome = 'none';
+    });
+    pidPlayers.destroy();
+    afterPid.held.shift()();
+    check(`media players: a process id reply after destroy changes nothing (${pidOutcome}, ${errors})`, pidOutcome === 'nothing' && errors.length === 0);
     check(`media players: replies after destroy add nothing and log nothing (${errors})`,
         destroyedChanges === 0 && afterDestroy.subscriptions.size === 0 && errors.length === 0);
     errors = [];

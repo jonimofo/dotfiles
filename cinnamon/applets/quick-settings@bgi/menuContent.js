@@ -96,25 +96,11 @@ class MenuContent {
     // player appears, destroyed when it goes; none hides the section.
     setMediaBlocks(blocks) {
         const onScreen = this._mediaBox.get_children().map(actor => this._busNameOf(actor));
-        const { remove, steps } = MediaModel.blockMoves(onScreen, blocks.map(block => block.busName));
-        for (const busName of remove) {
-            this._mediaBlocks.get(busName).destroy();
-            this._mediaBlocks.delete(busName);
-        }
-        for (const { kind, busName, index } of steps) {
-            if (kind === 'add') {
-                const view = new MediaBlock.MediaBlock(method => this._onMediaButton(busName, method),
-                    () => this._onMediaFocus(busName));
-                this._mediaBlocks.set(busName, view);
-                this._mediaBox.insert_child_at_index(view.actor, index);
-            } else {
-                this._mediaBox.set_child_at_index(this._mediaBlocks.get(busName).actor, index);
-            }
-        }
-        blocks.forEach((block, index) => {
-            const view = this._mediaBlocks.get(block.busName);
-            view.update(block);
-            view.setTinted(MediaModel.isTinted(index));
+        MediaModel.syncBlockViews(this._mediaBlocks, onScreen, blocks, {
+            create: busName => new MediaBlock.MediaBlock(method => this._onMediaButton(busName, method),
+                () => this._onMediaFocus(busName)),
+            insert: (view, index) => this._mediaBox.insert_child_at_index(view.actor, index),
+            move: (view, index) => this._mediaBox.set_child_at_index(view.actor, index),
         });
         this._syncMediaVisibility();
     }

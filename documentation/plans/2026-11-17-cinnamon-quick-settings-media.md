@@ -154,7 +154,7 @@ already the active tab of a window, that window is the one chosen.
                                   icônes : inchangées
 ```
 
-- Order (`MediaFocus.focusPlayer`): the windows of the application named by `DesktopEntry`
+- Order at first, changed by the delta audit below (`MediaFocus.focusPlayer`): the windows of the application named by `DesktopEntry`
   (`Cinnamon.AppSystem.lookup_app`, `get_windows`), else the windows of the player's process
   (`GetConnectionUnixProcessID` on its owner, then the window actors' `get_pid`), else MPRIS
   `Raise` when `CanRaise`, else nothing, logged once per player. VLC reports `CanRaise`

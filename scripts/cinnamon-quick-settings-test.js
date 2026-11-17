@@ -1061,7 +1061,7 @@ function testMediaModel() {
     const long = Model.blockText({ 'xesam:title': 'T'.repeat(60), 'xesam:artist': ['A'.repeat(30)] }, 'A very long player');
     check(`media: long texts are cut with an ellipsis (${long.subtitle})`,
         [...long.title].length === 44 && long.title.endsWith('…')
-        && long.subtitle === `${'A'.repeat(19)}… · A very long p…`);
+        && long.subtitle === `${'A'.repeat(19)}… · A very long pla…`);
 
     const states = props => Model.buttonStates(props);
     const all = { CanControl: true, CanGoPrevious: true, CanGoNext: true, CanPlay: true, CanPause: true };
@@ -1106,6 +1106,181 @@ function testMediaModel() {
         && Model.visibleBlocks([], 3).length === 0);
     check('media: unknown owners are not merged',
         Model.visibleBlocks([player('org.mpris.MediaPlayer2.a', null, 'A', 't'), player('org.mpris.MediaPlayer2.b', null, 'B', 't')], 3).length === 2);
+}
+
+// The session bus with MPRIS players: names, owners and properties, answered at once
+// (or held, with hold), signals delivered by emit helpers. Records calls and subscriptions.
+class FakeMprisBus {
+    constructor() {
+        this.owners = new Map();
+        this.properties = new Map();
+        this.calls = [];
+        this.failing = new Set();
+        this.subscriptions = new Map();
+        this.nextSubscription = 1;
+        this.held = null;
+    }
+
+    addPlayer(busName, owner, root, player) {
+        this.owners.set(busName, owner);
+        this.properties.set(busName, { 'org.mpris.MediaPlayer2': root, 'org.mpris.MediaPlayer2.Player': player });
+    }
+
+    signal_subscribe(sender, iface, signal, path, arg0, flags, callback) {
+        const id = this.nextSubscription++;
+        this.subscriptions.set(id, { sender, signal, callback });
+        return id;
+    }
+
+    signal_unsubscribe(id) {
+        this.subscriptions.delete(id);
+    }
+
+    call(name, path, iface, method, parameters, replyType, flags, timeout, cancellable, callback) {
+        const call = { name, method, args: parameters ? parameters.deepUnpack() : [], cancellable };
+        this.calls.push(`${name} ${method}${call.args.length ? ` ${call.args}` : ''}`);
+        const answer = () => callback(this, call);
+        if (this.held)
+            this.held.push(answer);
+        else
+            answer();
+    }
+
+    call_finish(call) {
+        if (call.cancellable && call.cancellable.is_cancelled())
+            throw new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED, 'Operation was cancelled');
+        if (this.failing.has(call.method))
+            throw new GLib.Error(Gio.DBusError, Gio.DBusError.FAILED, `${call.method} refused`);
+        if (call.method === 'ListNames')
+            return new GLib.Variant('(as)', [['org.freedesktop.DBus', ...this.owners.keys()]]);
+        if (call.method === 'GetNameOwner')
+            return new GLib.Variant('(s)', [this.owners.get(call.args[0])]);
+        if (call.method === 'GetAll')
+            return new GLib.Variant('(a{sv})', [this.properties.get(call.name)[call.args[0]]]);
+        return null;
+    }
+
+    subscribedTo(sender) {
+        return [...this.subscriptions.values()].filter(sub => sub.sender === sender).length;
+    }
+
+    emitOwnerChanged(busName, oldOwner, newOwner) {
+        for (const sub of [...this.subscriptions.values()]) {
+            if (sub.signal === 'NameOwnerChanged')
+                sub.callback(this, 'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', sub.signal,
+                    new GLib.Variant('(sss)', [busName, oldOwner, newOwner]));
+        }
+    }
+
+    emitPropertiesChanged(busName, iface, changed, invalidated = []) {
+        for (const sub of [...this.subscriptions.values()]) {
+            if (sub.signal === 'PropertiesChanged' && sub.sender === busName)
+                sub.callback(this, busName, '/org/mpris/MediaPlayer2', 'org.freedesktop.DBus.Properties', sub.signal,
+                    new GLib.Variant('(sa{sv}as)', [iface, changed, invalidated]));
+        }
+    }
+}
+
+function mprisPlayer(title, artists, status) {
+    const metadata = {};
+    if (title !== null)
+        metadata['xesam:title'] = new GLib.Variant('s', title);
+    if (artists)
+        metadata['xesam:artist'] = new GLib.Variant('as', artists);
+    return {
+        Metadata: new GLib.Variant('a{sv}', metadata),
+        PlaybackStatus: new GLib.Variant('s', status),
+        CanControl: new GLib.Variant('b', true),
+        CanGoPrevious: new GLib.Variant('b', true),
+        CanGoNext: new GLib.Variant('b', false),
+        CanPlay: new GLib.Variant('b', true),
+        CanPause: new GLib.Variant('b', true),
+    };
+}
+
+function testMediaPlayers() {
+    const MediaPlayers = load('./mediaPlayers');
+    errors = [];
+    const bus = new FakeMprisBus();
+    bus.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC media player') },
+        mprisPlayer('Song title', ['Artist'], 'Playing'));
+    bus.addPlayer('org.mpris.MediaPlayer2.firefox.instance_1_2', ':1.20', { Identity: new GLib.Variant('s', 'Firefox') },
+        mprisPlayer('Video title', ['Channel'], 'Paused'));
+    let changes = 0;
+    const players = new MediaPlayers.MediaPlayers(() => changes++, bus);
+    const view = () => players.blocks.map(b => `${b.text.title} | ${b.text.subtitle} | ${b.buttons.playPause.label}`).join(' / ');
+    check(`media players: found at start, one block each, by name (${view()})`,
+        view() === 'Video title | Channel · Firefox | Play / Song title | Artist · VLC media player | Pause');
+    check('media players: one PropertiesChanged subscription per player',
+        bus.subscribedTo('org.mpris.MediaPlayer2.vlc') === 1 && bus.subscribedTo('org.mpris.MediaPlayer2.firefox.instance_1_2') === 1);
+    const vlc = players.blocks[1];
+    check('media players: capabilities read (next off, previous on)', vlc.buttons.previous.working && !vlc.buttons.next.working);
+
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
+        { PlaybackStatus: new GLib.Variant('s', 'Paused') });
+    check('media players: a status change updates the play button live', players.blocks[1].buttons.playPause.label === 'Play');
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
+        { Metadata: new GLib.Variant('a{sv}', { 'xesam:title': new GLib.Variant('s', 'Next song') }) });
+    check(`media players: a new track updates the block live (${players.blocks[1].text.subtitle})`,
+        players.blocks[1].text.title === 'Next song' && players.blocks[1].text.subtitle === 'VLC media player');
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
+        { Metadata: new GLib.Variant('a{sv}', {}) });
+    check('media players: a player that loses its track loses its block', players.blocks.length === 1);
+
+    bus.properties.get('org.mpris.MediaPlayer2.vlc')['org.mpris.MediaPlayer2.Player'] = mprisPlayer('Back', null, 'Playing');
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', {}, ['Metadata']);
+    check('media players: an invalidated property is read again', players.blocks.some(b => b.text.title === 'Back'));
+
+    bus.addPlayer('org.mpris.MediaPlayer2.spotify', ':1.30', { Identity: new GLib.Variant('s', 'Music') },
+        mprisPlayer('Track', ['Band'], 'Playing'));
+    bus.emitOwnerChanged('org.mpris.MediaPlayer2.spotify', '', ':1.30');
+    check(`media players: a player that appears gets a block (${players.blocks.map(b => b.name)})`,
+        players.blocks.some(b => b.name === 'Music'));
+    bus.emitOwnerChanged('org.mpris.MediaPlayer2.spotify', ':1.30', '');
+    check('media players: a player that leaves loses its block and its subscription at once',
+        !players.blocks.some(b => b.name === 'Music') && bus.subscribedTo('org.mpris.MediaPlayer2.spotify') === 0);
+    bus.emitOwnerChanged('org.freedesktop.Notifications', '', ':1.40');
+    check('media players: other bus names are ignored', bus.subscribedTo('org.freedesktop.Notifications') === 0);
+
+    players.call('org.mpris.MediaPlayer2.vlc', 'PlayPause');
+    check(`media players: a button calls the player (${bus.calls[bus.calls.length - 1]})`,
+        bus.calls[bus.calls.length - 1] === 'org.mpris.MediaPlayer2.vlc PlayPause');
+    bus.failing.add('Next');
+    players.call('org.mpris.MediaPlayer2.vlc', 'Next');
+    check(`media players: a failed call is logged with the player name (${errors})`,
+        errors.length === 1 && errors[0].includes('Next on the media player VLC media player failed'));
+    errors = [];
+
+    const before = changes;
+    players.destroy();
+    check(`media players: destroy releases every subscription (${bus.subscriptions.size} left)`, bus.subscriptions.size === 0);
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { PlaybackStatus: new GLib.Variant('s', 'Playing') });
+    check('media players: nothing runs after destroy', changes === before && players.blocks.length === 0);
+
+    // Replies that arrive after the player left, or after destroy, change nothing.
+    const slow = new FakeMprisBus();
+    slow.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
+    slow.held = [];
+    let slowChanges = 0;
+    const late = new MediaPlayers.MediaPlayers(() => slowChanges++, slow);
+    slow.held.shift()();
+    slow.held.shift()();
+    slow.emitOwnerChanged('org.mpris.MediaPlayer2.vlc', ':1.10', '');
+    while (slow.held.length > 0)
+        slow.held.shift()();
+    check('media players: a GetAll reply for a player that left is dropped', late.blocks.length === 0 && slow.subscriptions.size === 1);
+    late.destroy();
+    const afterDestroy = new FakeMprisBus();
+    afterDestroy.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
+    afterDestroy.held = [];
+    let destroyedChanges = 0;
+    const gone = new MediaPlayers.MediaPlayers(() => destroyedChanges++, afterDestroy);
+    gone.destroy();
+    while (afterDestroy.held.length > 0)
+        afterDestroy.held.shift()();
+    check(`media players: replies after destroy add nothing and log nothing (${errors})`,
+        destroyedChanges === 0 && afterDestroy.subscriptions.size === 0 && errors.length === 0);
+    errors = [];
 }
 
 function testBatteryModel() {
@@ -1809,6 +1984,7 @@ async function main() {
     testAirplaneMode();
     await testTopProcess();
     testMediaModel();
+    testMediaPlayers();
     testBatteryModel();
     testMicMute();
     testSchemaMatchesDeclarations();

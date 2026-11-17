@@ -286,7 +286,7 @@ const MEDIA_MAX_PLAYERS = 3;
 // Cut lengths, in characters; the labels also ellipsize at their width.
 const MEDIA_TITLE_MAX = 44;
 const MEDIA_ARTIST_MAX = 20;
-const MEDIA_PLAYER_NAME_MAX = 14;
+const MEDIA_PLAYER_NAME_MAX = 16;
 const MEDIA_ARTIST_SEPARATOR = ', ';
 const MEDIA_PLAYER_SEPARATOR = ' · ';
 // The buttons, left to right: icon, accessible name and tooltip, MPRIS method.

@@ -65,6 +65,7 @@ the other screens, a setting, the calendar applet, new dependencies.
 | File | Change |
 |---|---|
 | `clockText.js` | New. Pure formatter of the row's text, with its English tables |
+| `clockFont.js` | New. Pure: the row's inline style from the panel clock's resolved font |
 | `overviewClock.js` | New. The band, its label and its minute timer |
 | `appSearch.js` | The search bar takes a top offset |
 | `extension.js` | Clock band first on `showing`, torn down on `hidden` and in `disable()` |
@@ -83,6 +84,47 @@ Findings worth keeping:
 - The timer is a main loop timeout aligned to the next minute, created at opening and removed
   at closing, rather than a `CinnamonDesktop.WallClock`, which would keep ticking until it is
   garbage collected.
+
+## Follow-up: the panel clock's look
+
+Owner's words: "dernier changement, je veux que en mode overivew, la font de la date et du
+jour soit la meme que en mode normal (taskbar)"
+
+Answer chosen: "Identique à la barre": the row takes the exact size, weight and colour of the
+panel clock, read from the panel at each opening, so it follows a change of the panel's text
+size. The row's text does not change. Look:
+
+```
+Barre des tâches :
+
+   Tue 17 Nov · 11:30 · VN 17:30        16,7 px gras
+
+Overview aujourd'hui :
+
+   Tue 17 Nov. 2026   ·   11:30         24 px gras
+
+Overview après :
+
+   Tue 17 Nov. 2026   ·   11:30         16,7 px gras
+```
+
+Decisions:
+
+1. Source: the label of the running panel clock (`calendar@bgi`, else the stock
+   `calendar@cinnamon.org`), through `Main.AppletManager`. The panel gives no public text size:
+   it writes `font-size: <n>pt` inline on each zone box from `panel-zone-text-sizes`, where `0`
+   means the theme's size, and the theme can set the font, weight and colour on
+   `.applet-label` or on the panel. Only the label's resolved style holds all four.
+2. The row gets an inline style built from that style (`clockFont.js`): family, size in px
+   clamped to 8 to 48, weight rounded to St's 100 steps, colour. Reading the colour this way,
+   rather than adding the stock `applet-label` class to the row, follows themes that colour
+   the panel text on the panel rather than on `.applet-label`.
+3. No clock, no label style yet, any missing part or a failure: no inline style, the
+   `.scale-clock` rule (18pt bold white) applies whole, and the fallback is logged once per
+   session. That rule therefore stays in `stylesheet.css`.
+4. The style is set in the constructor, before the band is put on stage, and `extension.js`
+   reads `clock.getHeight()` after the constructor: the layout gets the height at the panel's
+   size.
 
 ## Known limitations
 

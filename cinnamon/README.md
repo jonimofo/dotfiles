@@ -56,7 +56,10 @@ only; every other screen has its own strip at its very top.
 
 - The date and time read like `Tue 17 Nov. 2026   ·   09:22`: the date as the header of the
   calendar applet, in English, and the time after the desktop's 12 or 24-hour clock setting.
-  They change at each minute while Scale is open.
+  They take the font, size, weight and colour of the panel clock, read at each opening, so a
+  change of the panel's text size shows at the next one. Without a running calendar applet
+  on the panel, they keep the extension's own 18pt bold white. They change at each minute
+  while Scale is open.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
@@ -201,6 +204,8 @@ Private fields and methods read, called or written:
 | `imports.ui.dnd` | a monitor's `dragDrop(event)` with `event.targetActor`, returning `DragDropResult.CONTINUE` | clearing the highlights of the targets that do not take a drop |
 | `Main` | `modalCount` | is Scale the only modal |
 | `Main.AppletManager` | `getRunningInstancesForUuid('grouped-window-list@cinnamon.org')` | the panel's window list applet |
+| `Main.AppletManager` | `getRunningInstancesForUuid('calendar@bgi')`, then `('calendar@cinnamon.org')` | the panel clock |
+| panel clock applet (`TextIconApplet`) | `_applet_label`, its `peek_theme_node()` font and foreground colour | the clock row's look |
 | grouped window list applet | `settings` (its `AppletSettings`), key `pinned-apps` | the pinned apps of the dock |
 
 Assumptions about behaviour:

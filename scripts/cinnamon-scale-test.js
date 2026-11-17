@@ -82,6 +82,14 @@ class FakeActor extends FakeSignals {
         this.text = text;
     }
 
+    set_style(style) {
+        this.style = style;
+    }
+
+    peek_theme_node() {
+        return this.themeNode || null;
+    }
+
     add_actor(child) {
         child.parent = this;
         this.children.push(child);
@@ -289,6 +297,8 @@ function makeImports(monitorCount, primaryIndex) {
         overview,
         modalCount: 0,
         getWorkspaceName: index => `Workspace ${index + 1}`,
+        // Running applets by uuid: the panel clock the clock row copies its look from.
+        AppletManager: { instances: {}, getRunningInstancesForUuid: uuid => Main.AppletManager.instances[uuid] || [] },
     };
     // Scale closing: counted, and visible drops as Cinnamon's hide() does.
     overview.hideCalls = 0;
@@ -941,6 +951,108 @@ function testWheelKeepsScaleOpen() {
     extension.disable();
 }
 
+// A panel clock label whose resolved style is @font: {family, size (Pango units), isAbsolute,
+// weight, color}.
+function panelClockApplet(font) {
+    const label = new FakeActor();
+    label.themeNode = {
+        get_font: () => ({
+            get_family: () => font.family,
+            get_size: () => font.size,
+            get_size_is_absolute: () => font.isAbsolute,
+            get_weight: () => font.weight,
+        }),
+        get_foreground_color: () => font.color,
+    };
+    return { _applet_label: label };
+}
+
+const PANEL_COLOR = { red: 248, green: 248, blue: 242, alpha: 255 };
+// The panel clock measured on the owner's desktop: Sans 16.7px, weight 700.
+const PANEL_FONT = { family: 'Sans', size: Math.round(16.67 * 1024), isAbsolute: true, weight: 700, color: PANEL_COLOR };
+
+// Owner's choice "Identique à la barre": the row copies the panel clock's font and colour.
+function testClockFont() {
+    const clockFont = makeRequire({})('./clockFont');
+    const style = clockFont.panelClockStyle(PANEL_FONT);
+    print(`  style from the panel clock: ${style}`);
+    check('font: the panel clock\'s family, size, weight and colour',
+        style === 'font-family: "Sans"; font-size: 16.7px; font-weight: 700; color: rgba(248, 248, 242, 1);');
+    check('font: a size in points is converted to pixels (12.5pt = 16.7px)',
+        clockFont.fontSizePx(12.5 * 1024, false).toFixed(1) === '16.7');
+    check('font: a tiny size is clamped to 8px', clockFont.fontSizePx(2 * 1024, true) === 8);
+    check('font: a huge size is clamped to 48px', clockFont.fontSizePx(200 * 1024, true) === 48);
+    check('font: a missing, zero, negative or non-numeric size gives no size',
+        [undefined, null, 0, -5, NaN, '16'].every(size => clockFont.fontSizePx(size, true) === null));
+    check('font: weights round to St\'s CSS steps and stay in 100 to 900',
+        clockFont.cssFontWeight(700) === 700 && clockFont.cssFontWeight(380) === 400 &&
+        clockFont.cssFontWeight(1000) === 900 && clockFont.cssFontWeight(undefined) === null);
+    check('font: a family list is quoted name by name, unsafe characters dropped',
+        clockFont.cssFontFamily('Noto Sans,Sans') === '"Noto Sans", "Sans"' &&
+        clockFont.cssFontFamily('Evil"; color: red') === '"Evil color: red"' &&
+        clockFont.cssFontFamily(' , ') === null && clockFont.cssFontFamily(null) === null);
+    check('font: a half-transparent colour keeps its alpha',
+        clockFont.cssColor({ red: 0, green: 10, blue: 20, alpha: 128 }) === 'rgba(0, 10, 20, 0.502)');
+    check('font: an invalid colour gives no colour',
+        clockFont.cssColor(null) === null && clockFont.cssColor({ red: 300, green: 0, blue: 0, alpha: 255 }) === null);
+    check('font: no font, or any part missing, gives no style (the stylesheet rule applies whole)',
+        clockFont.panelClockStyle(null) === null &&
+        clockFont.panelClockStyle({ ...PANEL_FONT, size: 0 }) === null &&
+        clockFont.panelClockStyle({ ...PANEL_FONT, family: '' }) === null &&
+        clockFont.panelClockStyle({ ...PANEL_FONT, color: undefined }) === null);
+}
+
+// At each opening, the row reads the panel clock; without one it keeps the stylesheet rule
+// and logs once.
+function testClockRowFollowsPanel() {
+    const env = setUp();
+    const errors = [];
+    global.logError = message => errors.push(message);
+    const extension = env.loadExtension();
+    extension.enable();
+    env.Main.AppletManager.instances['calendar@bgi'] = [panelClockApplet(PANEL_FONT)];
+    openScale(env);
+    let label = clockBarsOf(env)[0].child;
+    check('font: the row opens with the panel clock\'s look', label.style.includes('font-size: 16.7px') &&
+        label.style.includes('font-weight: 700') && label.style.includes('rgba(248, 248, 242, 1)'));
+    closeScale(env);
+
+    env.Main.AppletManager.instances['calendar@bgi'] = [panelClockApplet({ ...PANEL_FONT, size: 20 * 1024 })];
+    openScale(env);
+    label = clockBarsOf(env)[0].child;
+    check('font: a panel text size changed between two openings shows at the next one',
+        label.style.includes('font-size: 20.0px'));
+    closeScale(env);
+
+    env.Main.AppletManager.instances = { 'calendar@cinnamon.org': [panelClockApplet({ ...PANEL_FONT, size: 15 * 1024 })] };
+    openScale(env);
+    check('font: the stock calendar applet is used when calendar@bgi is not running',
+        clockBarsOf(env)[0].child.style.includes('font-size: 15.0px'));
+    closeScale(env);
+
+    env.Main.AppletManager.instances = { 'calendar@bgi': [{ _applet_label: new FakeActor() }] };
+    openScale(env);
+    label = clockBarsOf(env)[0].child;
+    check('font: a label with no style yet keeps the stylesheet rule', label.style === undefined);
+    closeScale(env);
+
+    env.Main.AppletManager.instances = {};
+    openScale(env);
+    check('font: no panel clock keeps the stylesheet rule', clockBarsOf(env)[0].child.style === undefined);
+    closeScale(env);
+    env.Main.AppletManager.getRunningInstancesForUuid = () => {
+        throw new Error('applet manager gone');
+    };
+    openScale(env);
+    check('font: a failing read keeps the stylesheet rule and the row', clockBarsOf(env).length === 1 &&
+        clockBarsOf(env)[0].child.style === undefined);
+    check('font: the fallback is logged once, not at each opening',
+        errors.filter(message => message.includes('clock row')).length === 1);
+    extension.disable();
+}
+
+testClockFont();
+testClockRowFollowsPanel();
 testThumbnailClickEntersWorkspace();
 testWheelKeepsScaleOpen();
 testClockText();

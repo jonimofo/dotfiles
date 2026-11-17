@@ -73,7 +73,8 @@ Findings worth keeping:
 - The band shares the search bar's padding (12px on top, none below), so the gap between the
   time and the field equals the gap between the field and the strip (the strip's 12px top
   padding).
-- The size is `24pt`, the unit of the extension's other texts: 32px at the default 96 dpi,
+- The size is `18pt` (24px at the default 96 dpi), reduced from the mockup's 32px after the
+  live check: the owner found 32px too big. `pt` is the unit of the extension's other texts,
   and it follows the desktop's text scaling like them.
 - The time uses its own English AM and PM in 12-hour form, as the date is English. The
   calendar applet formats its times with GLib's `%p`, which follows the locale.

@@ -1,4 +1,5 @@
 .scale-strip,
+.scale-clock-bar,
 .scale-search-bar,
 .scale-dock {
     background-color: rgba(0, 0, 0, 0.45);
@@ -46,8 +47,15 @@
     background-color: rgba(0, 0, 0, 0.8);
 }
 
+.scale-clock-bar,
 .scale-search-bar {
     padding: 12px 12px 0 12px;
+}
+
+.scale-clock {
+    font-size: 18pt;
+    font-weight: bold;
+    color: #ffffff;
 }
 
 .scale-search-entry {

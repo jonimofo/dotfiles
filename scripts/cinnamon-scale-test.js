@@ -1,11 +1,11 @@
 // Logic tests of scale-wheel-switch@bgi (Scale overview), run by cinnamon-scale-test.sh.
 // Cinnamon's actors, Scale's overview and its window clones are fakes: no running Cinnamon
 // is touched. Each block is a regression test of a fixed bug.
-// Usage: gjs cinnamon-scale-test.js <extension folder>
+// Usage: gjs cinnamon-scale-test.js <extension folder> <calendar@bgi applet folder>
 const GLib = imports.gi.GLib;
 const ByteArray = imports.byteArray;
 
-const [extensionDir] = ARGV;
+const [extensionDir, calendarDir] = ARGV;
 let failures = 0;
 
 function check(label, condition) {
@@ -63,6 +63,9 @@ class FakeSignals {
     }
 }
 
+// Natural heights of the fake bands, by style class: the clock row is above the search.
+const NATURAL_HEIGHTS = { 'scale-clock-bar': 52, 'scale-search-bar': 50 };
+
 class FakeActor extends FakeSignals {
     constructor(props = {}) {
         super();
@@ -71,8 +74,12 @@ class FakeActor extends FakeSignals {
         this.parent = null;
         this.destroyed = false;
         this.themeLengths = {};
-        this.naturalHeight = 0;
+        this.naturalHeight = NATURAL_HEIGHTS[props.style_class] || 0;
         this.naturalWidth = 0;
+    }
+
+    set_text(text) {
+        this.text = text;
     }
 
     add_actor(child) {
@@ -213,6 +220,50 @@ function makeImports(monitorCount, primaryIndex) {
         get_event_state: () => 0,
     };
 
+    // The clock's time source and timers: the time is set by the test, timers fire on demand.
+    const clockState = {
+        now: GLib.DateTime.new_local(2026, 11, 17, 9, 22, 5),
+        use24h: true,
+        timers: new Map(),
+        nextTimerId: 1,
+        // System bus signal subscriptions: id -> {member, callback}.
+        subscriptions: new Map(),
+        nextSubscriptionId: 1,
+    };
+    const FakeGLib = { DateTime: { new_now_local: () => clockState.now } };
+    const Gio = {
+        Settings: class {
+            get_boolean(key) {
+                return key === 'clock-use-24h' && clockState.use24h;
+            }
+        },
+        DBusSignalFlags: { NONE: 0 },
+        DBus: {
+            system: {
+                signal_subscribe(sender, iface, member, path, arg0, flags, callback) {
+                    const id = clockState.nextSubscriptionId++;
+                    clockState.subscriptions.set(id, { sender, iface, member, path, callback });
+                    return id;
+                },
+                signal_unsubscribe(id) {
+                    if (!clockState.subscriptions.delete(id))
+                        throw new Error(`No subscription ${id}`);
+                },
+            },
+        },
+    };
+    const Mainloop = {
+        timeout_add(delay, callback) {
+            const id = clockState.nextTimerId++;
+            clockState.timers.set(id, { delay, callback });
+            return id;
+        },
+        source_remove(id) {
+            if (!clockState.timers.delete(id))
+                throw new Error(`No source ${id}`);
+        },
+    };
+
     const monitors = [];
     for (let i = 0; i < monitorCount; i++)
         monitors.push({ x: i * 1920, y: 0, width: 1920, height: 1080 });
@@ -253,23 +304,24 @@ function makeImports(monitorCount, primaryIndex) {
 
     return {
         imports: {
-            gi: { Clutter, St, CMenu, Cinnamon, Meta: { MotionDirection: {} } },
+            gi: { Clutter, St, CMenu, Cinnamon, Gio, GLib: FakeGLib, Meta: { MotionDirection: {} } },
             ui: { main: Main, workspace: { Workspace, WindowClone }, workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 } },
+            mainloop: Mainloop,
         },
-        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases,
+        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, clockState, strips: [],
     };
 }
 
 // Cinnamon's require(): every top-level declaration of the file is exported. @stubs replaces
-// the sibling modules a test does not exercise.
-function makeRequire(moduleImports, stubs = {}) {
+// the sibling modules a test does not exercise. @dir is the extension's folder by default.
+function makeRequire(moduleImports, stubs = {}, dir = extensionDir) {
     const modules = {};
     const require = path => {
         const name = path.replace('./', '');
         if (stubs[name])
             return stubs[name];
         if (!modules[name]) {
-            const source = readText(`${extensionDir}/${name}.js`);
+            const source = readText(`${dir}/${name}.js`);
             const names = [...source.matchAll(/^(?:function|const|let|var|class) ([A-Za-z0-9_]+)/gm)].map(m => m[1]);
             modules[name] = new Function('require', 'imports', '_',
                 `${source}\nreturn { ${names.join(', ')} };`)(require, moduleImports, text => text);
@@ -295,6 +347,9 @@ function makeSiblingStubs(env) {
     class WorkspaceStrip {
         constructor(index, topOffset, bottomInset) {
             const monitor = env.monitors[index];
+            this.index = index;
+            this.topOffset = topOffset;
+            env.strips.push(this);
             this.area = {
                 x: monitor.x,
                 y: monitor.y + topOffset + STRIP_HEIGHT,
@@ -558,6 +613,210 @@ function testFittingItemWidth() {
     check('#29 fit: a row with no room left keeps items of the minimum width', getFittingItemWidth(1000, 10, 4, 200) === 1);
 }
 
+const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+// Four years, one of them leap.
+const DAYS_2024_TO_2027 = 4 * 365 + 1;
+// Months whose full name is no longer than its abbreviation.
+const SHORT_MONTH_NAMES = [5];
+
+// The clock row: date as the calendar applet's header, local time after the 24h setting.
+function testClockText() {
+    const clockText = makeRequire({})('./clockText');
+    const at = (year, month, day, hour = 0, minute = 0) =>
+        clockText.clockPartsOf(GLib.DateTime.new_local(year, month, day, hour, minute, 0));
+
+    const owner = clockText.formatClock(at(2026, 11, 17, 9, 22), true);
+    print(`  2026-11-17 09:22 gives "${owner}"`);
+    check('clock: 2026-11-17 09:22 in 24h reads "Tue 17 Nov. 2026   ·   09:22"',
+        owner === 'Tue 17 Nov. 2026   ·   09:22');
+
+    const dotted = ALL_MONTHS.every(month => {
+        const date = clockText.formatDate(at(2026, month, 1));
+        const shortName = SHORT_MONTH_NAMES.includes(month);
+        return date.split(' ')[2].endsWith('.') === !shortName;
+    });
+    check('clock: a dot after every month but May, whose name has three letters', dotted);
+    check('clock: "May" keeps its name without a dot', clockText.formatDate(at(2026, 5, 4)) === 'Mon 4 May 2026');
+    check('clock: "Jun" and "Jul" take a dot (June, July are longer)',
+        clockText.formatDate(at(2026, 6, 1)) === 'Mon 1 Jun. 2026' && clockText.formatDate(at(2026, 7, 1)) === 'Wed 1 Jul. 2026');
+    check('clock: a single-digit day is not padded', clockText.formatDate(at(2026, 11, 3)) === 'Tue 3 Nov. 2026');
+    check('clock: the year changes at midnight on 31 December',
+        clockText.formatDate(at(2026, 12, 31, 23, 59)) === 'Thu 31 Dec. 2026' &&
+        clockText.formatDate(at(2027, 1, 1, 0, 0)) === 'Fri 1 Jan. 2027');
+    const week = [15, 16, 17, 18, 19, 20, 21].map(day => clockText.formatDate(at(2026, 11, day)).split(' ')[0]);
+    check('clock: each weekday, Sunday 15 to Saturday 21 Nov. 2026', week.join() === 'Sun,Mon,Tue,Wed,Thu,Fri,Sat');
+
+    check('clock: 24h pads the hour', clockText.formatTime(at(2026, 11, 17, 9, 5), true) === '09:05');
+    check('clock: 24h at midnight and 23:59',
+        clockText.formatTime(at(2026, 11, 17, 0, 0), true) === '00:00' &&
+        clockText.formatTime(at(2026, 11, 17, 23, 59), true) === '23:59');
+    check('clock: 12h morning', clockText.formatTime(at(2026, 11, 17, 9, 22), false) === '9:22 AM');
+    check('clock: 12h midnight is 12 AM, noon is 12 PM',
+        clockText.formatTime(at(2026, 11, 17, 0, 7), false) === '12:07 AM' &&
+        clockText.formatTime(at(2026, 11, 17, 12, 7), false) === '12:07 PM');
+    check('clock: 12h afternoon', clockText.formatTime(at(2026, 11, 17, 21, 40), false) === '9:40 PM');
+    check('clock: 12h row text', clockText.formatClock(at(2026, 11, 17, 21, 40), false) === 'Tue 17 Nov. 2026   ·   9:40 PM');
+
+    check('clock: next minute from 0 s is 60 s away', clockText.msUntilNextMinute(0, 0) === 60000);
+    check('clock: next minute from 59.5 s is 500 ms away', clockText.msUntilNextMinute(59, 500000) === 500);
+    check('clock: next minute from the last microsecond is 1 ms away, never 0', clockText.msUntilNextMinute(59, 999999) === 1);
+}
+
+// The row's date must stay the calendar@bgi header date: compared over every day of 2024
+// (leap year) to 2027.
+function testClockMatchesCalendar() {
+    const clockText = makeRequire({})('./clockText');
+    const dateText = makeRequire({}, {}, calendarDir)('./dateText');
+    const mismatches = [];
+    let day = GLib.DateTime.new_local(2024, 1, 1, 12, 0, 0);
+    const end = GLib.DateTime.new_local(2028, 1, 1, 12, 0, 0);
+    let count = 0;
+    while (day.compare(end) < 0) {
+        const ours = clockText.formatDate(clockText.clockPartsOf(day));
+        const calendar = dateText.headerDateOf(day);
+        if (ours !== calendar)
+            mismatches.push(`${ours} != ${calendar}`);
+        count++;
+        day = day.add_days(1);
+    }
+    print(`  ${count} days compared, first: "${dateText.headerDateOf(GLib.DateTime.new_local(2026, 11, 17, 9, 22, 0))}"`);
+    for (const mismatch of mismatches.slice(0, 3))
+        print(`  mismatch: ${mismatch}`);
+    check('clock: same date as the calendar applet\'s header on every day of 2024 to 2027',
+        count === DAYS_2024_TO_2027 && mismatches.length === 0);
+}
+
+function clockBarsOf(env) {
+    return env.Main.overview._group.children.filter(actor => actor.style_class === 'scale-clock-bar');
+}
+
+function searchBarOf(env) {
+    return env.Main.overview._group.children.find(actor => actor.style_class === 'scale-search-bar');
+}
+
+// logind's PrepareForSleep(@isSuspending) on the system bus.
+function sendPrepareForSleep(env, isSuspending) {
+    const parameters = { deep_unpack: () => [isSuspending] };
+    for (const { callback } of [...env.clockState.subscriptions.values()])
+        callback(null, ':1.1', '/org/freedesktop/login1', 'org.freedesktop.login1.Manager', 'PrepareForSleep', parameters);
+}
+
+function closeScale(env) {
+    env.Main.overview.visible = false;
+    env.Main.overview.emit('hidden');
+}
+
+// Fires the only pending clock timer at @now, as the main loop would.
+function fireClockTimer(env, now) {
+    const [[id, timer]] = [...env.clockState.timers];
+    env.clockState.timers.delete(id);
+    env.clockState.now = now;
+    return timer.callback();
+}
+
+// The clock row: above the search on the primary screen, right at opening, updated at each
+// minute change, no timer left once Scale is closed or the extension disabled.
+function testClockRow() {
+    // Two screens, the second one primary.
+    const env = setUp(2, 1);
+    const extension = env.loadExtension();
+    extension.enable();
+    check('clock: no row and no timer before Scale opens', clockBarsOf(env).length === 0 && env.clockState.timers.size === 0);
+
+    openScale(env);
+    const bars = clockBarsOf(env);
+    const bar = bars[0];
+    const label = bar && bar.child;
+    const primary = env.monitors[1];
+    print(`  row text at 2026-11-17 09:22:05: "${label && label.text}"`);
+    check('clock: one row, on the primary screen only', bars.length === 1 && bar.x === primary.x && bar.y === primary.y &&
+        bar.width === primary.width);
+    check('clock: the row reads "Tue 17 Nov. 2026   ·   09:22" at opening', label.text === 'Tue 17 Nov. 2026   ·   09:22');
+    check('clock: the row is below the cover pane, like the search field',
+        env.Main.overview._group.children.indexOf(bar) < env.Main.overview._group.children.indexOf(env.Main.overview._coverPane));
+    const search = searchBarOf(env);
+    check('clock: the search field starts under the row', search.y === primary.y + NATURAL_HEIGHTS['scale-clock-bar']);
+    const primaryStrip = env.strips.find(strip => strip.index === 1);
+    const otherStrip = env.strips.find(strip => strip.index === 0);
+    check('clock: the primary strip starts under the row and the search field',
+        primaryStrip.topOffset === NATURAL_HEIGHTS['scale-clock-bar'] + NATURAL_HEIGHTS['scale-search-bar']);
+    check('clock: the other screen keeps its strip at the very top', otherStrip.topOffset === 0);
+    check('clock: a click on the row is swallowed and does nothing',
+        bar.emit('button-press-event', buttonEvent(BUTTON.PRIMARY)) === true &&
+        bar.emit('button-release-event', buttonEvent(BUTTON.PRIMARY)) === true);
+    check('clock: no key focus on the row', !bar.can_focus && !label.can_focus);
+
+    typeKey(env, keyEvent('f'));
+    check('clock: typing still goes to the search', search.child.get_text() === 'f');
+    typeKey(env, keyEvent(null, ESCAPE_KEY));
+
+    const [timer] = [...env.clockState.timers.values()];
+    check('clock: one timer, due at the next minute (55 s after 09:22:05)',
+        env.clockState.timers.size === 1 && timer.delay === 55000);
+    const keepsGoing = fireClockTimer(env, GLib.DateTime.new_local(2026, 11, 17, 9, 23, 0));
+    check('clock: the minute change updates the row', label.text === 'Tue 17 Nov. 2026   ·   09:23');
+    check('clock: the fired timer ends and a new one waits for the next minute',
+        keepsGoing === false && env.clockState.timers.size === 1 && [...env.clockState.timers.values()][0].delay === 60000);
+    fireClockTimer(env, GLib.DateTime.new_local(2027, 1, 1, 0, 0, 0));
+    check('clock: midnight on 31 December changes the date and the year', label.text === 'Fri 1 Jan. 2027   ·   00:00');
+
+    const [subscription] = [...env.clockState.subscriptions.values()];
+    check('clock: one subscription to logind\'s PrepareForSleep while Scale is open',
+        env.clockState.subscriptions.size === 1 && subscription.sender === 'org.freedesktop.login1' &&
+        subscription.iface === 'org.freedesktop.login1.Manager' && subscription.member === 'PrepareForSleep' &&
+        subscription.path === '/org/freedesktop/login1');
+    const timerBeforeSleep = [...env.clockState.timers.keys()][0];
+    sendPrepareForSleep(env, true);
+    check('clock: going to sleep changes nothing', label.text === 'Fri 1 Jan. 2027   ·   00:00' &&
+        [...env.clockState.timers.keys()].join() === `${timerBeforeSleep}`);
+    env.clockState.now = GLib.DateTime.new_local(2027, 1, 1, 7, 45, 30);
+    sendPrepareForSleep(env, false);
+    check('clock: the resume shows the current minute at once', label.text === 'Fri 1 Jan. 2027   ·   07:45');
+    check('clock: the resume replaces the timer by one due at the next minute',
+        env.clockState.timers.size === 1 && !env.clockState.timers.has(timerBeforeSleep) &&
+        [...env.clockState.timers.values()][0].delay === 30000);
+
+    closeScale(env);
+    check('clock: closing Scale removes the row, its timer and its subscription', bar.destroyed &&
+        clockBarsOf(env).length === 0 && env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
+
+    env.clockState.use24h = false;
+    env.clockState.now = GLib.DateTime.new_local(2026, 11, 17, 21, 40, 0);
+    openScale(env);
+    check('clock: the 12-hour setting is read at opening', clockBarsOf(env)[0].child.text === 'Tue 17 Nov. 2026   ·   9:40 PM');
+    const reopened = clockBarsOf(env)[0];
+    extension.disable();
+    check('clock: disable() with Scale open removes the row, its timer and its subscription', reopened.destroyed &&
+        env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
+}
+
+// Audit L5: a clock that fails while being put on screen leaves no row, no timer and no
+// subscription.
+function testClockConstructorFailure() {
+    const env = setUp();
+    const overviewClock = env.require('./overviewClock');
+    env.Main.overview._group.insert_child_below = () => {
+        throw new Error('build failed');
+    };
+    const created = [];
+    const OriginalBin = env.imports.gi.St.Bin;
+    env.imports.gi.St.Bin = class extends OriginalBin {
+        constructor(props) {
+            super(props);
+            created.push(this);
+        }
+    };
+    check('clock L5: a failing clock constructor throws', throws(() => new overviewClock.OverviewClock()));
+    check('clock L5: it leaves no row', created.length === 1 && created[0].destroyed);
+    check('clock L5: it leaves no timer and no subscription',
+        env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
+    env.imports.gi.St.Bin = OriginalBin;
+}
+
+testClockText();
+testClockMatchesCalendar();
+testClockRow();
+testClockConstructorFailure();
 testSearchBlocksOtherScreens();
 testMiddleClickDoesNothing();
 testDragHighlightsClearedOnDrop();

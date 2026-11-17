@@ -479,6 +479,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this._zoneIdTimeoutId = 0;
         }
         this._eventsManagerIds.forEach(id => this.events_manager.disconnect(id));
+        this.events_manager.destroy();
         this._desktopSettingsIds.forEach(id => this.desktop_settings.disconnect(id));
         this._upClient.disconnect(this._upClientId);
         this.settings.finalize();

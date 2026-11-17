@@ -49,10 +49,14 @@ bindings (`media-keys`, `wm`).
 
 ## What scale-wheel-switch does
 
-In Scale (hot corner or Super), from top to bottom: a search field, a strip with one
-thumbnail per workspace, both centered, then Scale's windows, then a dock of applications.
-The search field and the dock are on the primary screen only; every other screen has its
-own strip at its very top.
+In Scale (hot corner or Super), from top to bottom: the date and time, a search field, a
+strip with one thumbnail per workspace, all centered, then Scale's windows, then a dock of
+applications. The date and time, the search field and the dock are on the primary screen
+only; every other screen has its own strip at its very top.
+
+- The date and time read like `Tue 17 Nov. 2026   ·   09:22`: the date as the header of the
+  calendar applet, in English, and the time after the desktop's 12 or 24-hour clock setting.
+  They change at each minute while Scale is open.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
@@ -157,12 +161,16 @@ Then give Super back to the Menu (see above).
   With none, or none of its pinned apps installed, and no other app running, no dock is
   drawn until the next opening of Scale.
 - Many apps make the dock icons smaller to fit the screen's width. Untested.
+- The clock reads the 12 or 24-hour setting when Scale opens: a change while it is open, or
+  of the time zone, shows at the next opening. After a suspend with Scale open, the time can
+  lag for up to a minute: its timer does not count the time spent suspended.
 
 ## How it is built
 
 Design records: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../documentation/plans/2026-11-11-cinnamon-scale-overview.md),
 then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../documentation/plans/2026-11-12-cinnamon-scale-second-screen.md) for several screens,
-then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/plans/2026-11-12-cinnamon-scale-dock.md) for the dock.
+then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/plans/2026-11-12-cinnamon-scale-dock.md) for the dock,
+then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time.
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
@@ -179,7 +187,7 @@ Private fields and methods read, called or written:
 
 | Object | Members | Used for |
 |---|---|---|
-| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the header and the dock are inserted, close animation in progress |
+| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the clock, the header and the dock are inserted, close animation in progress |
 | `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written) | reach each workspace, hide the windows during a search |
 | `Workspace` | `_monitors` | the per-monitor objects, one per screen |
 | `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
@@ -386,7 +394,7 @@ scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
-scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, on fakes
+scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, clock row, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, tick clock, day marker, stylesheet rules
 ```

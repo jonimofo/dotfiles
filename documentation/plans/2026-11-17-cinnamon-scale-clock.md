@@ -1,4 +1,4 @@
-Status: VALIDATED
+Status: DONE
 
 # Cinnamon Scale clock
 
@@ -67,3 +67,20 @@ the other screens, a setting, the calendar applet, new dependencies.
 | `appSearch.js` | The search bar takes a top offset |
 | `extension.js` | Clock band first on `showing`, torn down on `hidden` and in `disable()` |
 | `stylesheet.css` | `.scale-clock-bar`, `.scale-clock` |
+
+Findings worth keeping:
+
+- The band shares the search bar's padding (12px on top, none below), so the gap between the
+  time and the field equals the gap between the field and the strip (the strip's 12px top
+  padding).
+- The size is `24pt`, the unit of the extension's other texts: 32px at the default 96 dpi,
+  and it follows the desktop's text scaling like them.
+- The time uses its own English AM and PM in 12-hour form, as the date is English. The
+  calendar applet formats its times with GLib's `%p`, which follows the locale.
+- The timer is a main loop timeout aligned to the next minute, created at opening and removed
+  at closing, rather than a `CinnamonDesktop.WallClock`, which would keep ticking until it is
+  garbage collected.
+
+## Known limitations
+
+Listed in [`cinnamon/README.md`](../../cinnamon/README.md#known-limitations).

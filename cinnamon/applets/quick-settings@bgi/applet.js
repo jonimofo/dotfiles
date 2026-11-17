@@ -64,7 +64,8 @@ class QuickSettingsApplet extends Applet.Applet {
                     this._brightness.refresh();
                 if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'nordvpn'))
                     this._nordvpn.refresh();
-                this._chargeLimit.refresh();
+                if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'charge-limit'))
+                    this._chargeLimit.refresh();
             } else {
                 this._content.lists.close();
             }
@@ -354,7 +355,8 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setAvailable(false);
     }
 
-    // Read at start, when the menu opens, after each click and on each battery change.
+    // Read when the tile shows, when the menu opens, after each click and on each battery
+    // change. A hidden tile does nothing at all: no read, no automatic return.
     _setUpChargeLimit() {
         const tile = this._content.tiles['charge-limit'];
         this._chargeLimit = new ChargeLimit.ChargeLimit(Subprocess.runCommand, () => {
@@ -365,7 +367,8 @@ class QuickSettingsApplet extends Applet.Applet {
         });
         tile.setOnToggle(() => this._chargeLimit.toggle());
         tile.setAvailable(false);
-        this._chargeLimit.refresh();
+        // The first read comes from _applyLayout(), only when the tile shows.
+        this._chargeShown = false;
     }
 
     // Wi-Fi and Bluetooth through their own tiles' code; checked while airplane mode is on.
@@ -425,7 +428,8 @@ class QuickSettingsApplet extends Applet.Applet {
         this._battery = new Battery.Battery(battery => {
             header.setBattery(battery);
             this._panelIcons.setBattery(battery);
-            this._chargeLimit.onBattery(battery);
+            if (this._chargeShown)
+                this._chargeLimit.onBattery(battery);
         });
         header.setOnButton('screenshot', () => this._closeThen(() => Util.spawn(Constants.SCREENSHOT_COMMAND)));
         header.setOnButton('settings', () => this._closeThen(() => Util.spawn(Constants.SYSTEM_SETTINGS_COMMAND)));
@@ -493,6 +497,10 @@ class QuickSettingsApplet extends Applet.Applet {
         if (nordvpnShown && !this._nordvpnShown)
             this._nordvpn.refresh();
         this._nordvpnShown = nordvpnShown;
+        const chargeShown = tiles.includes('charge-limit');
+        if (chargeShown && !this._chargeShown)
+            this._chargeLimit.refresh();
+        this._chargeShown = chargeShown;
         if (tiles.includes(Constants.MEDIA_ITEM.id))
             this._startMedia();
         else

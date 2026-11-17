@@ -1596,8 +1596,12 @@ async function testChargeLimit() {
         && JSON.stringify(Model.tileView('full')) === '{"checked":true,"label":"Charge 100%"}');
     check(`charge: a click asks for the other state, through sudo -n and the helper (${Model.helperArgv('full')})`,
         Model.toggledState('limit') === 'full' && Model.toggledState('full') === 'limit'
-        && `${Model.helperArgv('limit')}` === 'sudo,-n,/usr/local/sbin/battery-charge-limit,limit'
-        && `${Model.helperArgv('full')}` === 'sudo,-n,/usr/local/sbin/battery-charge-limit,full');
+        && `${Model.helperArgv('limit')}` === '/usr/bin/sudo,-n,/usr/local/sbin/battery-charge-limit,limit'
+        && `${Model.helperArgv('full')}` === '/usr/bin/sudo,-n,/usr/local/sbin/battery-charge-limit,full');
+    check(`charge: both labels are built from the constants (${Constants.CHARGE_LABELS.limit}, ${Constants.CHARGE_LABELS.full})`,
+        Constants.CHARGE_LABELS.full === `${Constants.CHARGE_LABEL_PREFIX} ${Constants.CHARGE_FULL_PERCENT}${Constants.PERCENT_SUFFIX}`
+        && Constants.CHARGE_LABELS.full === 'Charge 100%' && Constants.CHARGE_LABELS.limit === 'Charge 80%');
+    check('charge: sudo is called by its absolute path', Constants.CHARGE_SUDO[0] === '/usr/bin/sudo');
     check('charge: the labels follow the thresholds', Constants.CHARGE_LABELS.limit === `Charge ${Constants.CHARGE_LIMIT_END}${Constants.PERCENT_SUFFIX}`
         && Constants.TILES.find(tile => tile.id === 'charge-limit').label === Constants.CHARGE_LABELS.limit);
 
@@ -1645,7 +1649,7 @@ async function testChargeLimit() {
     check('charge tile: Adaptive today reads as full, available', charge.state === 'full' && charge.available && changes === 1);
     await charge.toggle();
     check(`charge tile: a click runs the helper for the limit, then reads again (${runs})`,
-        `${runs}` === 'sudo -n /usr/local/sbin/battery-charge-limit limit' && charge.state === 'limit');
+        `${runs}` === '/usr/bin/sudo -n /usr/local/sbin/battery-charge-limit limit' && charge.state === 'limit');
     errors = [];
     failNext = true;
     await charge.toggle();
@@ -1660,7 +1664,7 @@ async function testChargeLimit() {
     check('charge tile: full on AC is remembered, nothing run yet', runs.length === 0 && charge.state === 'full');
     await charge.onBattery({ onAc: false, full: true });
     check(`charge tile: unplugged after full, the limit comes back once (${runs})`,
-        `${runs}` === 'sudo -n /usr/local/sbin/battery-charge-limit limit' && charge.state === 'limit');
+        `${runs}` === '/usr/bin/sudo -n /usr/local/sbin/battery-charge-limit limit' && charge.state === 'limit');
     await charge.onBattery({ onAc: false, full: false });
     await charge.onBattery({ onAc: true, full: true });
     await charge.onBattery({ onAc: false, full: true });
@@ -1683,6 +1687,48 @@ async function testChargeLimit() {
     charge.destroy();
     await charge.refresh();
     check('charge tile: nothing shown after destroy', changes === before);
+
+    // Full chosen while the battery is already full on AC: seen full at once, so the first
+    // reading on battery brings the limit back.
+    files.set(Constants.CHARGE_END_FILE, '80\n');
+    files.set(Constants.CHARGE_TYPES_FILE, 'Trickle Fast Standard Adaptive [Custom]');
+    runs.length = 0;
+    const atOnce = new ChargeLimit.ChargeLimit(run, () => {}, fakeFiles);
+    await atOnce.onBattery({ onAc: true, full: true });
+    await atOnce.toggle();
+    check('charge tile: full chosen with the battery already full on AC', atOnce.state === 'full' && runs.length === 1);
+    await atOnce.onBattery({ onAc: false, full: true });
+    check(`charge tile: it counts as seen full at once, unplugging brings the limit back (${runs})`,
+        runs.length === 2 && runs[1].endsWith(' limit') && atOnce.state === 'limit');
+    atOnce.destroy();
+
+    // A click while a write runs is ignored; a run that never ends is given up on.
+    files.set(Constants.CHARGE_TYPES_FILE, 'Trickle Fast Standard Adaptive [Custom]');
+    const hanging = [];
+    const never = argv => {
+        hanging.push(argv.join(' '));
+        return new Promise(() => {});
+    };
+    const stuck = new ChargeLimit.ChargeLimit(never, () => {}, fakeFiles, 50);
+    await stuck.refresh();
+    errors = [];
+    const first = stuck.toggle();
+    await stuck.toggle();
+    check(`charge tile: a click during a running write is ignored (${hanging.length} run)`, hanging.length === 1);
+    await first;
+    check(`charge tile: a run that never ends is given up on and logged (${errors})`,
+        errors.length === 1 && errors[0].includes('setting the battery charge to full failed: no answer within 50 ms, given up'));
+    await stuck.toggle();
+    check('charge tile: usable again after the timeout', hanging.length === 2);
+    errors = [];
+    const longError = new ChargeLimit.ChargeLimit(() => Promise.reject(new Error(`refused ${'x'.repeat(500)}`)), () => {}, fakeFiles, 50);
+    await longError.refresh();
+    await longError.toggle();
+    check(`charge tile: the error text is cut in the log (${errors[0] && errors[0].length} characters)`,
+        errors.length === 1 && errors[0].length < 300);
+    errors = [];
+    stuck.destroy();
+    longError.destroy();
 }
 
 // The applet's charge values are the helper's: read from the helper's constants.

@@ -1,4 +1,5 @@
 const Gio = imports.gi.Gio;
+const GLib = imports.gi.GLib;
 const ByteArray = imports.byteArray;
 const Constants = require('./constants');
 const ChargeModel = require('./chargeModel');
@@ -25,22 +26,28 @@ function exists(path) {
     return Gio.File.new_for_path(path).query_exists(null);
 }
 
-// The battery charge mode: read from sysfs (never on a timer: at start, when the menu opens,
-// after each change and on each battery change), switched with the root helper through
-// sudo -n. A click asks for the other state; while a write runs, clicks are ignored. In the
-// full state, the battery seen full on AC and then unplugged brings back the limit once
-// (ChargeModel.autoReturn). @onChange runs after every read; nothing runs after destroy().
+// The battery charge mode: read from sysfs (never on a timer: when the tile shows, when the
+// menu opens, after each change and on each battery change), switched with the root helper
+// through sudo -n. A click asks for the other state; while a write runs, clicks and battery
+// changes are ignored, and a run that does not end within Constants.CHARGE_HELPER_TIMEOUT_MS
+// is given up on. In the full state, the battery seen full on AC and then on battery power
+// brings back the limit once (ChargeModel.autoReturn); the last battery reading is applied
+// again right after each write, so a battery already full on AC when full is chosen counts
+// as seen full at once. @onChange runs after every read; nothing runs after destroy().
 // @runCommand(argv): Subprocess.runCommand, or a fake in the tests. @files: the existence
-// check and the reader, replaced by fakes in the tests.
+// check and the reader, replaced by fakes in the tests. @timeoutMs: shorter in the tests.
 class ChargeLimit {
-    constructor(runCommand, onChange, files = { exists, readText }) {
+    constructor(runCommand, onChange, files = { exists, readText }, timeoutMs = Constants.CHARGE_HELPER_TIMEOUT_MS) {
         this._run = runCommand;
         this._onChange = onChange;
         this._files = files;
+        this._timeoutMs = timeoutMs;
         this._cancellable = new Gio.Cancellable();
         this._destroyed = false;
         this._busy = false;
         this._seenFull = false;
+        this._battery = null;
+        this._timeoutId = 0;
         this.available = false;
         this.state = null;
     }
@@ -67,8 +74,22 @@ class ChargeLimit {
 
     // @battery: from BatteryModel.pickBattery(), null without a battery.
     async onBattery(battery) {
+        this._battery = battery;
+        if (this._busy)
+            return;
         await this.refresh();
-        if (this._destroyed || !battery || battery.onAc === null || this._busy || !this.available)
+        await this._decide();
+    }
+
+    destroy() {
+        this._destroyed = true;
+        this._cancellable.cancel();
+        this._clearTimeout();
+    }
+
+    async _decide() {
+        const battery = this._battery;
+        if (this._destroyed || this._busy || !this.available || !battery || battery.onAc === null)
             return;
         const decision = ChargeModel.autoReturn(this.state, this._seenFull, battery.onAc, battery.full);
         this._seenFull = decision.seenFull;
@@ -76,21 +97,33 @@ class ChargeLimit {
             await this._apply(ChargeModel.LIMIT);
     }
 
-    destroy() {
-        this._destroyed = true;
-        this._cancellable.cancel();
-    }
-
     async _apply(state) {
         this._busy = true;
-        const argv = ChargeModel.helperArgv(state);
         try {
-            await this._run(argv);
+            await Promise.race([this._run(ChargeModel.helperArgv(state)), this._timeout()]);
         } catch (e) {
-            global.logError(`${Constants.LOG_PREFIX}: setting the battery charge to ${state} failed: ${e.message}`);
+            AsyncHelpers.logBounded(e, `setting the battery charge to ${state}`, Constants.CHARGE_ERROR_TEXT_MAX);
         }
-        this._busy = false;
+        this._clearTimeout();
         if (!this._destroyed)
             await this.refresh();
+        this._busy = false;
+        await this._decide();
+    }
+
+    _timeout() {
+        return new Promise((resolve, reject) => {
+            this._timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._timeoutMs, () => {
+                this._timeoutId = 0;
+                reject(new Error(`no answer within ${this._timeoutMs} ms, given up`));
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+    }
+
+    _clearTimeout() {
+        if (this._timeoutId)
+            GLib.source_remove(this._timeoutId);
+        this._timeoutId = 0;
     }
 }

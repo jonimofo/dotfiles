@@ -51,6 +51,7 @@ const DayMarker = load('./dayMarker');
 const DayCell = load('./dayCell');
 const TickClock = load('./tickClock');
 const Countdown = load('./countdown');
+const Refresh = load('./refresh');
 const EventCount = load('./eventCount');
 const Appearance = load('./appearance');
 const EventsHeight = load('./eventsHeight');
@@ -307,6 +308,22 @@ function testGrid() {
     checkEqual('grid: last cell position', JSON.stringify(DayCell.cellPosition(41)), '[7,6]');
     checkEqual('grid: cell column follows the week start', DayCell.cellPosition(13)[1],
         DayCell.weekdayColumn(monday[13].getDay(), 1));
+}
+
+function testRefresh() {
+    const scheduled = [];
+    let runs = 0;
+    const coalescer = new Refresh.Coalescer(run => scheduled.push(run), () => scheduled.pop(), () => runs++);
+    const requests = [];
+    for (let i = 0; i < 500; i++)
+        requests.push(coalescer.request());
+    checkEqual('coalescer: 500 requests schedule one run', `${requests.filter(Boolean).length} ${scheduled.length}`, '1 1');
+    scheduled.shift()();
+    checkEqual('coalescer: it runs once', runs, 1);
+    check('coalescer: a request after the run schedules again', coalescer.request() && scheduled.length === 1);
+    coalescer.cancel();
+    checkEqual('coalescer: cancel removes the pending run', scheduled.length, 0);
+    check('coalescer: a request after cancel schedules again', coalescer.request());
 }
 
 function testEventsHeight() {
@@ -571,6 +588,7 @@ testSecondZone();
 testDayMarker();
 testEventsHeight();
 testGrid();
+testRefresh();
 testWording();
 testTickClock();
 testDayCell();

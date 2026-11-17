@@ -18,6 +18,7 @@ const SecondZone = require('./secondZone');
 const EventCount = require('./eventCount');
 const Appearance = require('./appearance');
 const TickClock = require('./tickClock');
+const Refresh = require('./refresh');
 
 
 class CinnamonCalendarApplet extends Applet.TextApplet {
@@ -47,8 +48,16 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this._eventsManagerIds = [
                 this.events_manager.connect("events-manager-ready", this._events_manager_ready.bind(this)),
                 this.events_manager.connect("has-calendars-changed", this._has_calendars_changed.bind(this)),
-                this.events_manager.connect("events-updated", () => this._updateHeaderCount())
+                this.events_manager.connect("events-updated", () => this._headerCountUpdate.request())
             ];
+            // One header count update per burst of events-updated, after the burst
+            this._headerCountUpdate = new Refresh.Coalescer(
+                run => GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                    run();
+                    return GLib.SOURCE_REMOVE;
+                }),
+                id => GLib.source_remove(id),
+                () => this._updateHeaderCount());
             this._zoneIdTimeoutId = 0;
 
             // One table: the header band across both columns, then the events and calendar
@@ -478,6 +487,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             GLib.source_remove(this._zoneIdTimeoutId);
             this._zoneIdTimeoutId = 0;
         }
+        this._headerCountUpdate.cancel();
         this._eventsManagerIds.forEach(id => this.events_manager.disconnect(id));
         this.events_manager.destroy();
         this._desktopSettingsIds.forEach(id => this.desktop_settings.disconnect(id));

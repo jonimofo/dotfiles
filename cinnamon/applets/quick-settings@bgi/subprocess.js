@@ -2,18 +2,12 @@ const Gio = imports.gi.Gio;
 
 // Runs @argv without blocking the main loop. Resolves with its standard output; rejects
 // with an error naming the command, its exit status and its standard error.
-// @env: variables set for this command only, on top of the applet's environment
-// (e.g. { LC_ALL: 'C' } for output that is parsed).
-function runCommand(argv, { env = {} } = {}) {
+function runCommand(argv) {
     return new Promise((resolve, reject) => {
         let process;
         try {
-            const launcher = new Gio.SubprocessLauncher({
-                flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
-            });
-            for (const [name, value] of Object.entries(env))
-                launcher.setenv(name, value, true);
-            process = launcher.spawnv(argv);
+            process = Gio.Subprocess.new(argv,
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
         } catch (e) {
             reject(new Error(`${argv.join(' ')}: ${e.message}`));
             return;

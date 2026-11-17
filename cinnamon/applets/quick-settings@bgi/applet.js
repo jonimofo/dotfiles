@@ -36,7 +36,9 @@ const PowerProfiles = require('./powerProfiles');
 const PowerProfileModel = require('./powerProfileModel');
 const Settings = imports.ui.settings;
 const LayoutModel = require('./layoutModel');
-const TopProcess = require('./topProcess');
+const MediaPlayers = require('./mediaPlayers');
+const MediaFocus = require('./mediaFocus');
+const MediaWindows = require('./mediaWindows');
 
 class QuickSettingsApplet extends Applet.Applet {
     constructor(metadata, orientation, panelHeight, instanceId) {
@@ -60,8 +62,6 @@ class QuickSettingsApplet extends Applet.Applet {
                     this._brightness.refresh();
                 if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'nordvpn'))
                     this._nordvpn.refresh();
-                if (this._isShown(Constants.LAYOUT_KEYS.tiles, Constants.CPU_LINE_ID))
-                    this._topProcess.refresh();
             } else {
                 this._content.lists.close();
             }
@@ -84,8 +84,9 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpKeepAwake();
         this._setUpKeyboardLight();
         this._setUpMicMute();
-        this._topProcess = new TopProcess.TopProcess(Subprocess.runCommand,
-            () => this._content.setTopProcess(this._topProcess.process));
+        this._media = null;
+        this._content.setOnMediaButton((busName, method) => this._media && this._media.call(busName, method),
+            busName => this._focusMediaPlayer(busName));
         this._setUpHeader();
         this._setUpLayoutSettings(metadata.uuid, instanceId);
     }
@@ -119,7 +120,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._nmClient.destroy();
         this._darkStyle.destroy();
         this._keyboardLight.destroy();
-        this._topProcess.destroy();
+        this._stopMedia();
         this._content.destroy();
         this.menu.destroy();
     }
@@ -455,7 +456,8 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     // A hidden Brightness row runs no ddcutil and a hidden NordVPN tile no nordvpn call:
-    // each reads once when it shows (at start, or when the dialog shows it again).
+    // each reads once when it shows (at start, or when the dialog shows it again). Hidden
+    // media controls follow no player.
     _applyLayout() {
         const sliders = this._visible(Constants.LAYOUT_KEYS.sliders);
         const tiles = this._visible(Constants.LAYOUT_KEYS.tiles);
@@ -471,6 +473,35 @@ class QuickSettingsApplet extends Applet.Applet {
         if (nordvpnShown && !this._nordvpnShown)
             this._nordvpn.refresh();
         this._nordvpnShown = nordvpnShown;
+        if (tiles.includes(Constants.MEDIA_ITEM.id))
+            this._startMedia();
+        else
+            this._stopMedia();
+    }
+
+    // Hidden media controls watch no player: the players are followed only while they show.
+    _startMedia() {
+        if (this._media)
+            return;
+        this._media = new MediaPlayers.MediaPlayers(() => this._content.setMediaBlocks(this._media.blocks));
+    }
+
+    // The player's window comes forward once the menu is closed.
+    _focusMediaPlayer(busName) {
+        if (!this._media)
+            return;
+        // Read now, during the click: a window found after the process id reply is activated
+        // with the click's time, not a later one.
+        const time = global.get_current_time();
+        this._closeThen(() => MediaFocus.focusPlayer(busName, this._media, MediaWindows.CINNAMON_WINDOWS, time));
+    }
+
+    _stopMedia() {
+        if (!this._media)
+            return;
+        this._media.destroy();
+        this._media = null;
+        this._content.setMediaBlocks([]);
     }
 
     _closeThen(action) {

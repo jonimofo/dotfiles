@@ -5,8 +5,7 @@
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
 // models run on plain data; Night Light (the Warmth row) and Do Not Disturb run on the
 // memory GSettings backend; the keyboard light runs on a fake UPower bus; Airplane mode on
-// fake radios and on the Wi-Fi and Bluetooth fakes; the CPU line parser on captured top
-// output.
+// fake radios and on the Wi-Fi and Bluetooth fakes; media players on a fake session bus.
 // No real setting is changed.
 // Usage: GSETTINGS_BACKEND=memory gjs cinnamon-quick-settings-test.js <applet folder> <fixtures folder>
 const GLib = imports.gi.GLib;
@@ -25,7 +24,6 @@ const [appletDir, fixturesRoot] = ARGV;
 const fixturesDir = `${fixturesRoot}/ddcutil`;
 const nordvpnFixtures = `${fixturesRoot}/nordvpn`;
 const powerFixtures = `${fixturesRoot}/power`;
-const topFixtures = `${fixturesRoot}/top`;
 const SCROLL_DELAY_MS = 30;
 const VOLUME_NORM = 65536;
 let failures = 0;
@@ -66,6 +64,14 @@ function thrownBy(call) {
     } catch (e) {
         return e.message;
     }
+}
+
+// Resolves after the idle callbacks already queued (IdleCoalescer) have run.
+function nextIdle() {
+    return new Promise(resolve => GLib.idle_add(GLib.PRIORITY_LOW, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
 }
 
 function check(label, condition) {
@@ -955,81 +961,618 @@ function testAirplaneMode() {
     check(`airplane: Bluetooth goes through Adapter1.Powered (${calls})`, `${calls}` === 'Set false');
 }
 
-async function testTopProcess() {
-    const Parser = load('./topParser');
-    const text = readText(`${topFixtures}/top-two-frames.txt`);
-    const busiest = Parser.busiestProcess(text);
-    check(`cpu: the last frame's busiest process, top itself skipped, decimal comma read (${JSON.stringify(busiest)})`,
-        busiest !== null && busiest.name === 'php' && Math.abs(busiest.percent - 211.8) < 1e-9);
-    check(`cpu: label (${Parser.label(busiest)})`, Parser.label(busiest) === 'php 212%');
-    const spaced = text.replace('211,8   0,6   1:03.17 php', '  1,0   0,6   1:03.17 php');
-    check(`cpu: a command name with spaces is kept whole (${Parser.label(Parser.busiestProcess(spaced))})`,
-        Parser.label(Parser.busiestProcess(spaced)) === 'Isolated Web Co 16%');
-    check('cpu: empty output is an error, not a process', thrownBy(() => Parser.busiestProcess('')) === 'no PID header line in the top output');
-    check('cpu: a line whose %CPU is not a number is skipped',
-        Parser.label(Parser.busiestProcess(text.replace('211,8   0,6   1:03.17 php', 'n/a   0,6   1:03.17 php'))) === 'Isolated Web Co 16%');
-    check('cpu: decimal points read too', Parser.busiestProcess(text.replace(/(\d),(\d)/g, '$1.$2')).percent === busiest.percent);
-    const headerOnly = text.slice(0, text.lastIndexOf('COMMAND') + 'COMMAND'.length);
-    check('cpu: a header without process lines, no process', Parser.busiestProcess(headerOnly) === null && Parser.label(null) === '');
-    const thrown = input => {
-        try {
-            Parser.busiestProcess(input);
-            return null;
-        } catch (e) {
-            return e.message;
-        }
-    };
-    check(`cpu: no header line is an error (${thrown(text.split('    PID')[0])})`, thrown(text.split('    PID')[0]) === 'no PID header line in the top output');
-    check(`cpu: COMMAND not last (a reordering toprc) is an error, no guess (${thrown('  PID COMMAND %CPU\n 1 php 50,0\n')})`,
-        (thrown('  PID COMMAND %CPU\n 1 php 50,0\n') || '').includes('"PID COMMAND %CPU"'));
-    const french = readText(`${topFixtures}/top-french-headers.txt`);
-    check(`cpu: translated headers are an error naming the header (${thrown(french)})`,
-        (thrown(french) || '').includes('"PID UTIL. PR NI VIRT RES SHR S %CPU %MEM TEMPS+ COM."'));
+// Line 2 of a media block as shown: the artist part, then the player name.
+function line2(text) {
+    return `${text.artist}${text.player}`;
+}
 
-    const Constants = load('./constants');
-    check('cpu: top runs from an argv array, never a shell',
-        Array.isArray(Constants.CPU_TOP_COMMAND) && Constants.CPU_TOP_COMMAND[0] === 'top'
-        && Constants.CPU_TOP_COMMAND.every(part => typeof part === 'string') && !Constants.CPU_TOP_COMMAND.includes('-c'));
-    const TopProcess = load('./topProcess');
-    const runs = [];
-    const envs = [];
-    let pending = deferred();
+function testMediaModel() {
+    const Model = load('./mediaModel');
+    check('media: MPRIS names only', Model.isPlayerName('org.mpris.MediaPlayer2.vlc')
+        && !Model.isPlayerName('org.mpris.MediaPlayer2.') && !Model.isPlayerName('org.freedesktop.Notifications') && !Model.isPlayerName(null));
+    check(`media: player name from Identity, else the bus name (${Model.playerName('', 'org.mpris.MediaPlayer2.firefox.instance_1_2')})`,
+        Model.playerName('VLC media player', 'org.mpris.MediaPlayer2.vlc') === 'VLC media player'
+        && Model.playerName('', 'org.mpris.MediaPlayer2.firefox.instance_1_2') === 'Firefox'
+        && Model.playerName(null, 'org.mpris.MediaPlayer2.vlc-4242') === 'Vlc'
+        && Model.playerName(42, 'org.mpris.MediaPlayer2.player') === 'Player');
+    const text = Model.blockText({ 'xesam:title': 'Song title', 'xesam:artist': ['Artist'] }, 'VLC');
+    check(`media: title, then artist · player (${JSON.stringify(text)})`,
+        text.title === 'Song title' && line2(text) === 'Artist · VLC');
+    check('media: several artists joined with a comma',
+        line2(Model.blockText({ 'xesam:title': 'Duet', 'xesam:artist': ['First', 'Second'] }, 'VLC')) === 'First, Second · VLC');
+    check('media: no artist, the player name alone',
+        line2(Model.blockText({ 'xesam:title': 'Video title' }, 'Firefox')) === 'Firefox'
+        && line2(Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': [] }, 'Firefox')) === 'Firefox'
+        && line2(Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': ['', '  '] }, 'Firefox')) === 'Firefox');
+    check('media: an artist given as a string works too',
+        line2(Model.blockText({ 'xesam:title': 'T', 'xesam:artist': 'Channel' }, 'Firefox')) === 'Channel · Firefox');
+    check('media: no title, empty title or a non-text title gives no block',
+        Model.blockText({}, 'VLC') === null && Model.blockText({ 'xesam:title': '  ' }, 'VLC') === null
+        && Model.blockText({ 'xesam:title': 7 }, 'VLC') === null && Model.blockText(null, 'VLC') === null);
+    const odd = Model.blockText({ 'xesam:title': 'Line one\nline two\t<b>x</b>', 'xesam:artist': ['A & B'] }, 'VLC');
+    const hidden = Model.blockText({ 'xesam:title': 'Song\u202Eeltit\u202C\u0007 one\u2066x\u2069\u200E', 'xesam:artist': ['\u200FArtist\u001B'] }, Model.playerName('VLC\u0000', 'org.mpris.MediaPlayer2.vlc'));
+    check(`media: control and bidi characters are removed from every text (${JSON.stringify(hidden)})`,
+        hidden.title === 'Songeltit onex' && hidden.artist === 'Artist · ' && hidden.player === 'VLC');
+    check(`media: newlines and tabs become spaces, markup characters stay as text (${odd.title})`,
+        odd.title === 'Line one line two <b>x</b>' && line2(odd) === 'A & B · VLC');
+    check('media: line 2 in two parts, the separator with the artist, the player alone',
+        JSON.stringify(text) === '{"title":"Song title","artist":"Artist · ","player":"VLC"}'
+        && JSON.stringify(Model.blockText({ 'xesam:title': 'Video title' }, 'Firefox')) === '{"title":"Video title","artist":"","player":"Firefox"}');
+    const longArtist = Model.blockText({ 'xesam:title': 'T', 'xesam:artist': ['B'.repeat(30)] }, 'VLC media player');
+    check(`media: a long artist is cut, the player name stays whole (${line2(longArtist)})`,
+        longArtist.artist === `${'B'.repeat(19)}… · ` && longArtist.player === 'VLC media player');
+    const longPlayer = Model.blockText({ 'xesam:title': 'T', 'xesam:artist': ['Band'] }, 'A player with a long name');
+    check(`media: a long player name is cut at 16 characters (${longPlayer.player})`,
+        longPlayer.player === 'A player with a…' && [...longPlayer.player].length === 16 && longPlayer.artist === 'Band · ');
+    const long = Model.blockText({ 'xesam:title': 'T'.repeat(60), 'xesam:artist': ['A'.repeat(30)] }, 'A very long player');
+    check(`media: long texts are cut with an ellipsis (${line2(long)})`,
+        [...long.title].length === 44 && long.title.endsWith('…')
+        && line2(long) === `${'A'.repeat(19)}… · A very long pla…`);
+
+    const states = props => Model.buttonStates(props);
+    const all = { CanControl: true, CanGoPrevious: true, CanGoNext: true, CanPlay: true, CanPause: true };
+    const playing = states({ ...all, PlaybackStatus: 'Playing' });
+    check('media: playing shows pause, every button works',
+        playing.playPause.icon === 'media-playback-pause-symbolic' && playing.playPause.label === 'Pause'
+        && playing.previous.working && playing.playPause.working && playing.next.working
+        && playing.previous.method === 'Previous' && playing.playPause.method === 'PlayPause' && playing.next.method === 'Next');
+    const paused = states({ ...all, PlaybackStatus: 'Paused' });
+    check('media: paused or stopped shows play',
+        paused.playPause.icon === 'media-playback-start-symbolic' && states({ ...all, PlaybackStatus: 'Stopped' }).playPause.label === 'Play');
+    check('media: CanGoPrevious and CanGoNext false make those buttons inactive',
+        !states({ ...all, CanGoPrevious: false, CanGoNext: false }).previous.working
+        && !states({ ...all, CanGoPrevious: false, CanGoNext: false }).next.working);
+    check('media: play needs CanPlay, pause needs CanPause',
+        !states({ ...all, CanPlay: false, PlaybackStatus: 'Paused' }).playPause.working
+        && !states({ ...all, CanPause: false, PlaybackStatus: 'Playing' }).playPause.working
+        && states({ ...all, CanPause: false, PlaybackStatus: 'Paused' }).playPause.working);
+    const noControl = states({ ...all, CanControl: false, PlaybackStatus: 'Playing' });
+    check('media: CanControl false makes every button inactive',
+        !noControl.previous.working && !noControl.playPause.working && !noControl.next.working);
+    check('media: capabilities not read yet count as false', !states({}).previous.working && !states({}).playPause.working);
+
+    const player = (busName, owner, identity, title) => ({
+        busName, owner, identity, metadata: title ? { 'xesam:title': title } : {}, properties: all,
+    });
+    const blocks = Model.visibleBlocks([
+        player('org.mpris.MediaPlayer2.vlc', ':1.10', 'VLC media player', 'Song title'),
+        player('org.mpris.MediaPlayer2.firefox.instance_1_2', ':1.20', 'Firefox', 'Video title'),
+        player('org.mpris.MediaPlayer2.firefox', ':1.20', 'Firefox', 'Video title'),
+        player('org.mpris.MediaPlayer2.idle', ':1.30', 'Idle', null),
+    ], 3);
+    check(`media: one block per player with a title, by name, a player's two names once (${blocks.map(b => b.busName)})`,
+        `${blocks.map(b => b.busName)}` === 'org.mpris.MediaPlayer2.firefox.instance_1_2,org.mpris.MediaPlayer2.vlc');
+    const same = Model.visibleBlocks([
+        player('org.mpris.MediaPlayer2.b', ':1.2', 'Same', 'x'), player('org.mpris.MediaPlayer2.a', ':1.1', 'Same', 'x'),
+    ], 3);
+    check('media: same display name, ordered by bus name', `${same.map(b => b.busName)}` === 'org.mpris.MediaPlayer2.a,org.mpris.MediaPlayer2.b');
+    const many = Model.visibleBlocks(['d', 'a', 'c', 'b'].map((n, i) => player(`org.mpris.MediaPlayer2.${n}`, `:1.${i}`, n.toUpperCase(), 't')), 3);
+    check(`media: at most three blocks, the first three by name (${many.map(b => b.name)})`, `${many.map(b => b.name)}` === 'A,B,C');
+    const moves = (before, after) => JSON.stringify(Model.blockMoves(before, after));
+    check('media moves: nothing changes, nothing moves', moves(['a', 'b'], ['a', 'b']) === '{"remove":[],"steps":[]}');
+    check(`media moves: a new player is added, the others stay (${moves(['a', 'c'], ['a', 'b', 'c'])})`,
+        moves(['a', 'c'], ['a', 'b', 'c']) === '{"remove":[],"steps":[{"kind":"add","busName":"b","index":1}]}');
+    check(`media moves: a gone player is removed only (${moves(['a', 'b', 'c'], ['a', 'c'])})`,
+        moves(['a', 'b', 'c'], ['a', 'c']) === '{"remove":["b"],"steps":[]}');
+    check(`media moves: a reorder moves one block (${moves(['a', 'b', 'c'], ['c', 'a', 'b'])})`,
+        moves(['a', 'b', 'c'], ['c', 'a', 'b']) === '{"remove":[],"steps":[{"kind":"move","busName":"c","index":0}]}');
+    check('media moves: from nothing, every block added in order',
+        moves([], ['a', 'b']) === '{"remove":[],"steps":[{"kind":"add","busName":"a","index":0},{"kind":"add","busName":"b","index":1}]}');
+    check('media moves: to nothing, every block removed', moves(['a', 'b'], []) === '{"remove":["a","b"],"steps":[]}');
+    // Applying the moves to any old order gives the new order.
+    const apply = (before, after) => {
+        const { remove, steps } = Model.blockMoves(before, after);
+        const list = before.filter(id => !remove.includes(id));
+        for (const step of steps) {
+            if (step.kind === 'move')
+                list.splice(list.indexOf(step.busName), 1);
+            list.splice(step.index, 0, step.busName);
+        }
+        return `${list}`;
+    };
+    const tints = order => order.map((busName, index) => `${busName}${Model.isTinted(index) ? '*' : ''}`).join(',');
+    check(`media tint: one block plain, three blocks with the second tinted (${tints(['a', 'b', 'c'])})`,
+        tints(['a']) === 'a' && tints(['a', 'b', 'c']) === 'a,b*,c');
+    check(`media tint: follows the place on screen after a reorder, an add and a remove (${tints(['c', 'a', 'b'])})`,
+        tints(['c', 'a', 'b']) === 'c,a*,b' && tints(['a', 'd', 'b', 'c']) === 'a,d*,b,c*' && tints(['a', 'c']) === 'a,c*');
+    // The views get their tint from the order the moves produce.
+    const tintAfter = (before, after) => {
+        const { remove, steps } = Model.blockMoves(before, after);
+        const list = before.filter(id => !remove.includes(id));
+        for (const step of steps) {
+            if (step.kind === 'move')
+                list.splice(list.indexOf(step.busName), 1);
+            list.splice(step.index, 0, step.busName);
+        }
+        return tints(list);
+    };
+    check('media tint: re-applied after the moves (b removed: c takes the tint; reorder swaps it)',
+        tintAfter(['a', 'b', 'c'], ['a', 'c']) === 'a,c*' && tintAfter(['a', 'b'], ['b', 'a']) === 'b,a*');
+    // The views as menuContent drives them: moves, then update and tint for the new place.
+    const fakeViews = new Map();
+    const screen = [];
+    const actions = {
+        create: busName => ({
+            busName, tinted: null, updates: 0, destroyed: false,
+            update() {
+                this.updates++;
+            },
+            setTinted(tinted) {
+                this.tinted = tinted;
+            },
+            destroy() {
+                this.destroyed = true;
+                screen.splice(screen.indexOf(this), 1);
+            },
+        }),
+        insert: (view, index) => screen.splice(index, 0, view),
+        move: (view, index) => {
+            screen.splice(screen.indexOf(view), 1);
+            screen.splice(index, 0, view);
+        },
+    };
+    const sync = order => {
+        Model.syncBlockViews(fakeViews, screen.map(view => view.busName), order.map(busName => ({ busName })), actions);
+        return screen.map(view => `${view.busName}${view.tinted ? '*' : ''}`).join(',');
+    };
+    check(`media views: three players, the second tinted (${sync(['a', 'b', 'c'])})`, `${screen.map(v => v.busName + (v.tinted ? '*' : ''))}` === 'a,b*,c');
+    const kept = fakeViews.get('a');
+    check(`media views: b leaves, c takes the tint, a is the same view (${sync(['a', 'c'])})`,
+        `${screen.map(v => v.busName + (v.tinted ? '*' : ''))}` === 'a,c*' && fakeViews.get('a') === kept && !fakeViews.has('b'));
+    check(`media views: a reorder moves the tint with the place (${sync(['c', 'a'])})`,
+        `${screen.map(v => v.busName + (v.tinted ? '*' : ''))}` === 'c,a*' && fakeViews.get('a') === kept);
+    check(`media views: one player left, plain (${sync(['a'])})`, `${screen.map(v => v.busName + (v.tinted ? '*' : ''))}` === 'a');
+    check('media views: every view shown is updated on each pass', kept.updates === 4);
+    check('media moves: applied, they always give the new order',
+        [[['a', 'b', 'c'], ['b', 'd', 'a']], [['x'], ['y', 'x']], [['a', 'b', 'c'], ['c', 'b', 'a']], [['a'], ['a']]]
+            .every(([before, after]) => apply(before, after) === `${after}`));
+    check('media: no player with a title, no block', Model.visibleBlocks([player('org.mpris.MediaPlayer2.idle', ':1.3', 'Idle', null)], 3).length === 0
+        && Model.visibleBlocks([], 3).length === 0);
+    check('media: unknown owners are not merged',
+        Model.visibleBlocks([player('org.mpris.MediaPlayer2.a', null, 'A', 't'), player('org.mpris.MediaPlayer2.b', null, 'B', 't')], 3).length === 2);
+}
+
+// The session bus with MPRIS players: names, owners and properties, answered at once
+// (or held, with hold), signals delivered by emit helpers. Records calls and subscriptions.
+class FakeMprisBus {
+    constructor() {
+        this.owners = new Map();
+        this.properties = new Map();
+        this.calls = [];
+        this.failing = new Set();
+        this.subscriptions = new Map();
+        this.nextSubscription = 1;
+        this.held = null;
+        // Bus names whose GetAll answers with a wrong type; the text of every refusal.
+        this.badGetAll = new Set();
+        this.errorText = 'refused';
+    }
+
+    addPlayer(busName, owner, root, player) {
+        this.owners.set(busName, owner);
+        this.properties.set(busName, { 'org.mpris.MediaPlayer2': root, 'org.mpris.MediaPlayer2.Player': player });
+    }
+
+    signal_subscribe(sender, iface, signal, path, arg0, flags, callback) {
+        const id = this.nextSubscription++;
+        this.subscriptions.set(id, { sender, signal, callback });
+        return id;
+    }
+
+    signal_unsubscribe(id) {
+        this.subscriptions.delete(id);
+    }
+
+    call(name, path, iface, method, parameters, replyType, flags, timeout, cancellable, callback) {
+        const call = { name, method, args: parameters ? parameters.deepUnpack() : [], cancellable, replyType };
+        this.calls.push(`${name} ${method}${call.args.length ? ` ${call.args}` : ''}`);
+        const answer = () => callback(this, call);
+        if (this.held)
+            this.held.push(answer);
+        else
+            answer();
+    }
+
+    call_finish(call) {
+        if (call.cancellable && call.cancellable.is_cancelled())
+            throw new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED, 'Operation was cancelled');
+        if (this.failing.has(call.method))
+            throw new GLib.Error(Gio.DBusError, Gio.DBusError.FAILED, `${call.method} ${this.errorText}`);
+        const reply = this._reply(call);
+        // As GDBus does with a reply type: a reply of another type is an error.
+        if (reply && call.replyType && reply.get_type_string() !== call.replyType.dup_string())
+            throw new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.INVALID_ARGUMENT, `wrong reply type ${reply.get_type_string()}`);
+        return reply;
+    }
+
+    _reply(call) {
+        if (call.method === 'GetAll' && this.badGetAll.has(call.name))
+            return new GLib.Variant('(s)', ['not properties']);
+        if (call.method === 'ListNames')
+            return new GLib.Variant('(as)', [['org.freedesktop.DBus', ...this.owners.keys()]]);
+        if (call.method === 'GetConnectionUnixProcessID') {
+            // As the bus daemon: an unknown connection is an error, never an empty reply.
+            if (!this.pids || !this.pids.has(call.args[0]))
+                throw new GLib.Error(Gio.DBusError, Gio.DBusError.NAME_HAS_NO_OWNER, `Could not get PID of name '${call.args[0]}'`);
+            const pid = this.pids.get(call.args[0]);
+            return typeof pid === 'number' ? new GLib.Variant('(u)', [pid]) : new GLib.Variant('(s)', [String(pid)]);
+        }
+        if (call.method === 'GetNameOwner')
+            return new GLib.Variant('(s)', [this.owners.get(call.args[0])]);
+        if (call.method === 'GetAll')
+            return new GLib.Variant('(a{sv})', [this.properties.get(call.name)[call.args[0]]]);
+        return null;
+    }
+
+    subscribedTo(sender) {
+        return [...this.subscriptions.values()].filter(sub => sub.sender === sender).length;
+    }
+
+    emitOwnerChanged(busName, oldOwner, newOwner) {
+        for (const sub of [...this.subscriptions.values()]) {
+            if (sub.signal === 'NameOwnerChanged')
+                sub.callback(this, 'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', sub.signal,
+                    new GLib.Variant('(sss)', [busName, oldOwner, newOwner]));
+        }
+    }
+
+    emitRaw(busName, signal, variant) {
+        for (const sub of [...this.subscriptions.values()]) {
+            if (sub.signal === signal && (signal === 'NameOwnerChanged' || sub.sender === busName))
+                sub.callback(this, busName, '/org/mpris/MediaPlayer2', 'org.freedesktop.DBus.Properties', signal, variant);
+        }
+    }
+
+    emitPropertiesChanged(busName, iface, changed, invalidated = []) {
+        for (const sub of [...this.subscriptions.values()]) {
+            if (sub.signal === 'PropertiesChanged' && sub.sender === busName)
+                sub.callback(this, busName, '/org/mpris/MediaPlayer2', 'org.freedesktop.DBus.Properties', sub.signal,
+                    new GLib.Variant('(sa{sv}as)', [iface, changed, invalidated]));
+        }
+    }
+}
+
+function mprisPlayer(title, artists, status) {
+    const metadata = {};
+    if (title !== null)
+        metadata['xesam:title'] = new GLib.Variant('s', title);
+    if (artists)
+        metadata['xesam:artist'] = new GLib.Variant('as', artists);
+    return {
+        Metadata: new GLib.Variant('a{sv}', metadata),
+        PlaybackStatus: new GLib.Variant('s', status),
+        CanControl: new GLib.Variant('b', true),
+        CanGoPrevious: new GLib.Variant('b', true),
+        CanGoNext: new GLib.Variant('b', false),
+        CanPlay: new GLib.Variant('b', true),
+        CanPause: new GLib.Variant('b', true),
+    };
+}
+
+async function testMediaPlayers() {
+    const MediaPlayers = load('./mediaPlayers');
+    errors = [];
+    const bus = new FakeMprisBus();
+    bus.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC media player') },
+        mprisPlayer('Song title', ['Artist'], 'Playing'));
+    bus.addPlayer('org.mpris.MediaPlayer2.firefox.instance_1_2', ':1.20', { Identity: new GLib.Variant('s', 'Firefox') },
+        mprisPlayer('Video title', ['Channel'], 'Paused'));
     let changes = 0;
-    const top = new TopProcess.TopProcess((argv, options) => {
-        runs.push(argv);
-        envs.push(options && options.env);
-        return pending.promise;
-    }, () => changes++);
-    const first = top.refresh();
-    top.refresh();
-    check('cpu: a request while a read runs starts no second top', runs.length === 1 && changes === 0);
-    pending.resolve(text);
-    await first;
-    check('cpu: the read shows the busiest process', changes === 1 && top.process.name === 'php');
-    check(`cpu: top runs with LC_ALL=C, so its headers are not translated (${JSON.stringify(envs[0])})`,
-        JSON.stringify(envs[0]) === '{"LC_ALL":"C"}' && runs[0] === Constants.CPU_TOP_COMMAND);
+    const players = new MediaPlayers.MediaPlayers(() => changes++, bus);
+    const view = () => players.blocks.map(b => `${b.text.title} | ${line2(b.text)} | ${b.buttons.playPause.label}`).join(' / ');
+    check(`media players: found at start, one block each, by name (${view()})`,
+        view() === 'Video title | Channel · Firefox | Play / Song title | Artist · VLC media player | Pause');
+    check('media players: one PropertiesChanged subscription per player',
+        bus.subscribedTo('org.mpris.MediaPlayer2.vlc') === 1 && bus.subscribedTo('org.mpris.MediaPlayer2.firefox.instance_1_2') === 1);
+    const vlc = players.blocks[1];
+    check('media players: capabilities read (next off, previous on)', vlc.buttons.previous.working && !vlc.buttons.next.working);
+
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
+        { PlaybackStatus: new GLib.Variant('s', 'Paused') });
+    check('media players: a status change updates the play button live', players.blocks[1].buttons.playPause.label === 'Play');
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
+        { Metadata: new GLib.Variant('a{sv}', { 'xesam:title': new GLib.Variant('s', 'Next song') }) });
+    check(`media players: a new track updates the block live (${line2(players.blocks[1].text)})`,
+        players.blocks[1].text.title === 'Next song' && line2(players.blocks[1].text) === 'VLC media player');
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
+        { Metadata: new GLib.Variant('a{sv}', {}) });
+    check('media players: a player that loses its track loses its block', players.blocks.length === 1);
+
+    bus.properties.get('org.mpris.MediaPlayer2.vlc')['org.mpris.MediaPlayer2.Player'] = mprisPlayer('Back', null, 'Playing');
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', {}, ['Metadata']);
+    check('media players: an invalidated property is read again', players.blocks.some(b => b.text.title === 'Back'));
+
+    bus.addPlayer('org.mpris.MediaPlayer2.spotify', ':1.30', { Identity: new GLib.Variant('s', 'Music') },
+        mprisPlayer('Track', ['Band'], 'Playing'));
+    bus.emitOwnerChanged('org.mpris.MediaPlayer2.spotify', '', ':1.30');
+    check(`media players: a player that appears gets a block (${players.blocks.map(b => b.name)})`,
+        players.blocks.some(b => b.name === 'Music'));
+    bus.emitOwnerChanged('org.mpris.MediaPlayer2.spotify', ':1.30', '');
+    check('media players: a player that leaves loses its block and its subscription at once',
+        !players.blocks.some(b => b.name === 'Music') && bus.subscribedTo('org.mpris.MediaPlayer2.spotify') === 0);
+    bus.emitOwnerChanged('org.freedesktop.Notifications', '', ':1.40');
+    check('media players: other bus names are ignored', bus.subscribedTo('org.freedesktop.Notifications') === 0);
+
+    players.call('org.mpris.MediaPlayer2.vlc', 'PlayPause');
+    check(`media players: a button calls the player (${bus.calls[bus.calls.length - 1]})`,
+        bus.calls[bus.calls.length - 1] === 'org.mpris.MediaPlayer2.vlc PlayPause');
+    bus.failing.add('Next');
+    players.call('org.mpris.MediaPlayer2.vlc', 'Next');
+    check(`media players: a failed call is logged with the player name (${errors})`,
+        errors.length === 1 && errors[0].includes('Next on the media player VLC media player failed'));
     errors = [];
-    pending = deferred();
-    const translated = top.refresh();
-    pending.resolve(french);
-    await translated;
-    check(`cpu: an unreadable header is logged with the header, the title shows alone (${errors})`,
-        top.process === null && errors.length === 1 && errors[0].includes('reading the busiest process failed')
-        && errors[0].includes('COM.'));
+
+    // One update per burst of changes.
+    await nextIdle();
+    const burst = changes;
+    for (const status of ['Playing', 'Paused', 'Playing'])
+        bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { PlaybackStatus: new GLib.Variant('s', status) });
+    check('media players: no update before the next idle', changes === burst);
+    await nextIdle();
+    check(`media players: three changes in a row give one update (${changes - burst})`, changes === burst + 1);
+
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2', { Identity: new GLib.Variant('s', 'Renamed') });
+    check(`media players: an Identity change renames the block (${players.blocks.map(b => b.name)})`,
+        players.blocks.some(b => b.name === 'Renamed'));
+
     errors = [];
-    pending = deferred();
-    const failing = top.refresh();
-    pending.reject(new Error('top exited with 1'));
-    await failing;
-    check(`cpu: a failed read is logged and shows the title alone (${errors})`,
-        top.process === null && changes === 3 && errors.length === 1 && errors[0].includes('top exited with 1'));
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { Metadata: new GLib.Variant('s', 'not a map') });
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { CanGoNext: new GLib.Variant('s', 'yes') });
+    check(`media players: a wrongly typed Metadata is ignored, the block kept, logged once (${errors})`,
+        players.blocks.some(b => b.text.title === 'Back') && errors.length === 1 && errors[0].includes('sent Metadata of type s, ignored'));
     errors = [];
-    pending = deferred();
-    const late = top.refresh();
-    top.destroy();
-    pending.resolve(text);
-    await late;
-    check('cpu: nothing shows after destroy', changes === 3);
+    bus.emitRaw('org.mpris.MediaPlayer2.firefox.instance_1_2', 'PropertiesChanged', new GLib.Variant('(s)', ['odd']));
+    bus.emitRaw('org.mpris.MediaPlayer2.firefox.instance_1_2', 'PropertiesChanged', new GLib.Variant('(s)', ['odd']));
+    bus.emitRaw('', 'NameOwnerChanged', new GLib.Variant('(s)', ['odd']));
+    check(`media players: wrongly typed signals are ignored, logged once per player, no stack (${errors})`,
+        errors.length === 1 && errors[0].includes('Firefox sent PropertiesChanged of type (s), ignored') && players.blocks.length === 2);
+    errors = [];
+
+    bus.properties.set('org.mpris.MediaPlayer2.vlc', {
+        'org.mpris.MediaPlayer2': { Identity: new GLib.Variant('s', 'Other player') },
+        'org.mpris.MediaPlayer2.Player': mprisPlayer('Other song', null, 'Paused'),
+    });
+    bus.emitOwnerChanged('org.mpris.MediaPlayer2.vlc', ':1.10', ':1.99');
+    check(`media players: a name taken over by another process is read again (${players.blocks.map(b => b.name)})`,
+        players.blocks.some(b => b.name === 'Other player' && b.text.title === 'Other song') && bus.subscribedTo('org.mpris.MediaPlayer2.vlc') === 1);
+
+    bus.errorText = `refused ${'x'.repeat(500)}`;
+    players.call('org.mpris.MediaPlayer2.vlc', 'Next');
+    check(`media players: a player's error text is cut in the log (${errors[0] && errors[0].length} characters)`,
+        errors.length === 1 && errors[0].includes('Next on the media player Other player failed: Next refused xxx') && errors[0].length < 250);
+    errors = [];
+
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2',
+        { CanRaise: new GLib.Variant('b', true), DesktopEntry: new GLib.Variant('s', 'vlc') });
+    check(`media players: CanRaise and DesktopEntry are read for the focus (${JSON.stringify(players.focusInfo('org.mpris.MediaPlayer2.vlc'))})`,
+        JSON.stringify(players.focusInfo('org.mpris.MediaPlayer2.vlc')) === '{"desktopEntry":"vlc","canRaise":true,"title":"Other song"}'
+        && players.focusInfo('org.mpris.MediaPlayer2.gone') === null);
+    errors = [];
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.firefox.instance_1_2', 'org.mpris.MediaPlayer2',
+        { CanRaise: new GLib.Variant('s', 'yes'), DesktopEntry: new GLib.Variant('as', ['firefox']) });
+    check(`media players: wrongly typed CanRaise and DesktopEntry are ignored (${JSON.stringify(players.focusInfo('org.mpris.MediaPlayer2.firefox.instance_1_2'))})`,
+        JSON.stringify(players.focusInfo('org.mpris.MediaPlayer2.firefox.instance_1_2')) === '{"desktopEntry":null,"canRaise":false,"title":"Video title"}');
+    errors = [];
+    bus.pids = new Map([[':1.99', 4242]]);
+    let pid = null;
+    let noPid = 0;
+    players.processId('org.mpris.MediaPlayer2.vlc', id => {
+        pid = id;
+    }, () => noPid++);
+    players.processId('org.mpris.MediaPlayer2.gone', () => {}, () => noPid++);
+    check(`media players: the owner's process id comes from GetConnectionUnixProcessID (${pid}, ${bus.calls.filter(c => c.includes('GetConnectionUnixProcessID'))})`,
+        pid === 4242 && noPid === 1 && bus.calls.includes('org.freedesktop.DBus GetConnectionUnixProcessID :1.99'));
+    errors = [];
+    let failedPid = 0;
+    bus.pids = new Map();
+    players.processId('org.mpris.MediaPlayer2.vlc', () => {}, () => failedPid++);
+    check(`media players: a failing process id call reaches onNone, logged once (${errors})`,
+        failedPid === 1 && errors.length === 1 && errors[0].includes('finding the process of Other player failed'));
+    errors = [];
+    bus.pids = new Map([[':1.99', 'not a number']]);
+    players.processId('org.mpris.MediaPlayer2.vlc', () => {}, () => failedPid++);
+    check(`media players: a process id of another type reaches onNone, logged once (${errors})`,
+        failedPid === 2 && errors.length === 1 && errors[0].includes('wrong reply type (s)'));
+    errors = [];
+    bus.pids = new Map([[':1.99', 4242]]);
+    players.raise('org.mpris.MediaPlayer2.vlc');
+    check('media players: Raise calls the root interface', bus.calls[bus.calls.length - 1] === 'org.mpris.MediaPlayer2.vlc Raise');
+    const logged = [];
+    globalThis.global.log = line => logged.push(line);
+    players.noWindow('org.mpris.MediaPlayer2.vlc');
+    players.noWindow('org.mpris.MediaPlayer2.vlc');
+    globalThis.global.log = () => {};
+    check(`media players: no window found is logged once per player (${logged})`,
+        logged.length === 1 && logged[0].includes('no window found for the media player Other player'));
+
+    await nextIdle();
+    const before = changes;
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { PlaybackStatus: new GLib.Variant('s', 'Paused') });
+    players.destroy();
+    check(`media players: destroy releases every subscription (${bus.subscriptions.size} left)`, bus.subscriptions.size === 0);
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { PlaybackStatus: new GLib.Variant('s', 'Playing') });
+    await nextIdle();
+    check('media players: nothing runs after destroy, a pending update included', changes === before && players.blocks.length === 0);
+
+    // Replies that arrive after the player left, or after destroy, change nothing.
+    const slow = new FakeMprisBus();
+    slow.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
+    slow.held = [];
+    let slowChanges = 0;
+    const late = new MediaPlayers.MediaPlayers(() => slowChanges++, slow);
+    slow.held.shift()();
+    slow.held.shift()();
+    slow.emitOwnerChanged('org.mpris.MediaPlayer2.vlc', ':1.10', '');
+    await nextIdle();
+    const beforeLate = slowChanges;
+    while (slow.held.length > 0)
+        slow.held.shift()();
+    await nextIdle();
+    check(`media players: a GetAll reply for a player that left is dropped, no update (${slowChanges - beforeLate})`,
+        late.blocks.length === 0 && slow.subscriptions.size === 1 && slowChanges === beforeLate);
+    late.destroy();
+    const typed = new FakeMprisBus();
+    typed.addPlayer('org.mpris.MediaPlayer2.odd', ':1.50', { Identity: new GLib.Variant('s', 'Odd') }, mprisPlayer('Song', null, 'Playing'));
+    typed.badGetAll.add('org.mpris.MediaPlayer2.odd');
+    errors = [];
+    const oddPlayers = new MediaPlayers.MediaPlayers(() => {}, typed);
+    check(`media players: a GetAll reply of another type is refused by its reply type, logged without stack (${errors.length})`,
+        oddPlayers.blocks.length === 0 && errors.length === 2 && errors.every(line => line.includes('wrong reply type (s)'))
+        && typed.calls.some(call => call.includes('GetAll')));
+    oddPlayers.destroy();
+    errors = [];
+
+    const caps = new FakeMprisBus();
+    const noControl = mprisPlayer('Song', null, 'Playing');
+    noControl.CanControl = new GLib.Variant('b', false);
+    caps.addPlayer('org.mpris.MediaPlayer2.radio', ':1.60', { Identity: new GLib.Variant('s', 'Radio') }, noControl);
+    caps.addPlayer('org.mpris.MediaPlayer2.browser', ':1.70', { Identity: new GLib.Variant('s', 'Browser') }, mprisPlayer('Video', null, 'Playing'));
+    caps.addPlayer('org.mpris.MediaPlayer2.browser.instance_1_9', ':1.70', { Identity: new GLib.Variant('s', 'Browser') }, mprisPlayer('Video', null, 'Playing'));
+    const capPlayers = new MediaPlayers.MediaPlayers(() => {}, caps);
+    const radio = capPlayers.blocks.find(b => b.name === 'Radio');
+    check('media players: CanControl false over the bus makes every button inactive',
+        radio && !radio.buttons.previous.working && !radio.buttons.playPause.working && !radio.buttons.next.working);
+    check(`media players: two names of one owner give one block (${capPlayers.blocks.map(b => b.busName)})`,
+        `${capPlayers.blocks.filter(b => b.name === 'Browser').map(b => b.busName)}` === 'org.mpris.MediaPlayer2.browser.instance_1_9');
+    capPlayers.destroy();
+
+    // A player that leaves before its GetAll fails is no error.
+    const leaving = new FakeMprisBus();
+    leaving.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
+    leaving.failing.add('GetAll');
+    leaving.held = [];
+    const left = new MediaPlayers.MediaPlayers(() => {}, leaving);
+    leaving.held.shift()();
+    leaving.held.shift()();
+    leaving.emitOwnerChanged('org.mpris.MediaPlayer2.vlc', ':1.10', '');
+    errors = [];
+    while (leaving.held.length > 0)
+        leaving.held.shift()();
+    check(`media players: a player gone before its GetAll failed is not logged (${errors})`, errors.length === 0);
+    left.destroy();
+    const afterDestroy = new FakeMprisBus();
+    afterDestroy.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
+    afterDestroy.held = [];
+    let destroyedChanges = 0;
+    const gone = new MediaPlayers.MediaPlayers(() => destroyedChanges++, afterDestroy);
+    gone.destroy();
+    while (afterDestroy.held.length > 0)
+        afterDestroy.held.shift()();
+    // A process id reply after destroy activates nothing and logs nothing.
+    const afterPid = new FakeMprisBus();
+    afterPid.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
+    afterPid.pids = new Map([[':1.10', 42]]);
+    const pidPlayers = new MediaPlayers.MediaPlayers(() => {}, afterPid);
+    afterPid.held = [];
+    let pidOutcome = 'nothing';
+    pidPlayers.processId('org.mpris.MediaPlayer2.vlc', () => {
+        pidOutcome = 'pid';
+    }, () => {
+        pidOutcome = 'none';
+    });
+    pidPlayers.destroy();
+    afterPid.held.shift()();
+    check(`media players: a process id reply after destroy changes nothing (${pidOutcome}, ${errors})`, pidOutcome === 'nothing' && errors.length === 0);
+    check(`media players: replies after destroy add nothing and log nothing (${errors})`,
+        destroyedChanges === 0 && afterDestroy.subscriptions.size === 0 && errors.length === 0);
+    errors = [];
+}
+
+function testMediaFocus() {
+    const Model = load('./mediaModel');
+    const windows = [{ title: 'Inbox - Browser', userTime: 30 }, { title: 'Video title - Site - Browser', userTime: 10 },
+        { title: 'Docs - Browser', userTime: 50 }];
+    check('media focus: the window whose title holds the track title wins', Model.chooseWindow(windows, 'Video title') === 1);
+    check('media focus: no title match, the window used last', Model.chooseWindow(windows, 'Other') === 2);
+    check('media focus: an empty track title, the window used last', Model.chooseWindow(windows, '') === 2 && Model.chooseWindow(windows, null) === 2);
+    check('media focus: several browser windows playing it, the most recent of them',
+        Model.chooseWindow([{ title: 'Song - A', userTime: 5 }, { title: 'Song - B', userTime: 9 }, { title: 'Mail', userTime: 99 }], 'Song') === 1);
+    check('media focus: no window, none', Model.chooseWindow([], 'Song') === -1);
+
+    const Focus = load('./mediaFocus');
+    const run = ({ info, appWindows = {}, pidWindows = {}, pid = null }) => {
+        const done = [];
+        const players = {
+            focusInfo: () => info,
+            processId: (busName, onPid, onNone) => (pid === null ? onNone() : onPid(pid)),
+            raise: busName => done.push(`raise ${busName}`),
+            noWindow: busName => done.push(`none ${busName}`),
+        };
+        const windowApi = {
+            ofApp: entry => {
+                done.push(`app ${entry}`);
+                return appWindows[entry] || [];
+            },
+            ofPid: id => {
+                done.push(`pid ${id}`);
+                return pidWindows[id] || [];
+            },
+            describe: window => window,
+            activate: window => done.push(`activate ${window.title}`),
+        };
+        Focus.focusPlayer('org.mpris.MediaPlayer2.vlc', players, windowApi, 1234);
+        return `${done}`;
+    };
+    const vlcWindow = { title: 'Song - VLC media player', userTime: 1, pid: 42 };
+    const vlc = { desktopEntry: 'vlc', canRaise: false, title: 'Song' };
+    check(`media focus: VLC-like, the DesktopEntry window of the player's process (${run({ info: vlc, appWindows: { vlc: [vlcWindow] }, pid: 42 })})`,
+        run({ info: vlc, appWindows: { vlc: [vlcWindow] }, pid: 42 }) === 'app vlc,activate Song - VLC media player');
+    const browserWindows = [
+        { title: 'Mail - Browser', userTime: 90, pid: 50 },
+        { title: 'Video title - Site - Browser', userTime: 10, pid: 50 },
+        { title: 'Other profile - Browser', userTime: 99, pid: 51 },
+    ];
+    check('media focus: Firefox-like, among the process windows the one playing the track',
+        run({ info: { desktopEntry: 'firefox-esr', canRaise: true, title: 'Video title' }, appWindows: { 'firefox-esr': browserWindows }, pid: 50 })
+            === 'app firefox-esr,activate Video title - Site - Browser');
+    check('media focus: no title match, the process window used last, whatever the order given',
+        run({ info: { desktopEntry: 'firefox-esr', canRaise: true, title: 'Nothing' }, appWindows: { 'firefox-esr': browserWindows }, pid: 50 })
+            === 'app firefox-esr,activate Mail - Browser');
+    const otherApp = [{ title: 'Passwords', userTime: 5, pid: 99 }];
+    check(`media focus: a player naming another application's DesktopEntry raises nothing of it (${run({ info: { desktopEntry: 'org.example.Passwords', canRaise: false, title: 'Song' }, appWindows: { 'org.example.Passwords': otherApp }, pid: 42 })})`,
+        run({ info: { desktopEntry: 'org.example.Passwords', canRaise: false, title: 'Song' }, appWindows: { 'org.example.Passwords': otherApp }, pid: 42 })
+            === 'app org.example.Passwords,pid 42,none org.mpris.MediaPlayer2.vlc');
+    check('media focus: no application window of the process, a window of the process',
+        run({ info: { desktopEntry: 'vlc', canRaise: true, title: 'Song' }, pidWindows: { 42: [vlcWindow] }, pid: 42 }) === 'app vlc,pid 42,activate Song - VLC media player');
+    check('media focus: no DesktopEntry, straight to the process',
+        run({ info: { desktopEntry: null, canRaise: false, title: 'Song' }, pidWindows: { 42: [vlcWindow] }, pid: 42 }) === 'pid 42,activate Song - VLC media player');
+    check('media focus: no window at all, MPRIS Raise when the player offers it',
+        run({ info: { desktopEntry: 'vlc', canRaise: true, title: 'Song' }, pid: 42 }) === 'app vlc,pid 42,raise org.mpris.MediaPlayer2.vlc');
+    check('media focus: process id unknown, no unverified application window, Raise',
+        run({ info: { desktopEntry: 'vlc', canRaise: true, title: 'Song' }, appWindows: { vlc: [vlcWindow] } }) === 'raise org.mpris.MediaPlayer2.vlc');
+    check('media focus: process id unknown and no Raise, only the log',
+        run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, appWindows: { vlc: [vlcWindow] } }) === 'none org.mpris.MediaPlayer2.vlc');
+    check('media focus: nothing found and no Raise, only the log',
+        run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, pid: 42 }) === 'app vlc,pid 42,none org.mpris.MediaPlayer2.vlc');
+    check('media focus: a player no longer listed does nothing', run({ info: null }) === '');
+
+    // The click's time reaches every activation, also after the asynchronous pid reply.
+    const times = [];
+    let answerPid = null;
+    const slowPlayers = {
+        focusInfo: () => ({ desktopEntry: 'vlc', canRaise: false, title: 'Song' }),
+        processId: (busName, onPid) => {
+            answerPid = () => onPid(42);
+        },
+        raise: () => {},
+        noWindow: () => {},
+    };
+    const timedWindows = {
+        ofApp: entry => (entry === 'app' ? [{ title: 'App', userTime: 1, pid: 42 }] : []),
+        ofPid: () => [{ title: 'Process window', userTime: 1, pid: 42 }],
+        describe: window => window,
+        activate: (window, time) => times.push(`${window.title}@${time}`),
+    };
+    Focus.focusPlayer('org.mpris.MediaPlayer2.vlc', slowPlayers, timedWindows, 777);
+    check('media focus: nothing activated before the pid reply', times.length === 0);
+    answerPid();
+    Focus.focusPlayer('org.mpris.MediaPlayer2.app', {
+        ...slowPlayers,
+        focusInfo: () => ({ desktopEntry: 'app', canRaise: false, title: '' }),
+        processId: (busName, onPid) => onPid(42),
+    }, timedWindows, 888);
+    check(`media focus: the click's time is used after the asynchronous pid reply and for application windows (${times})`,
+        `${times}` === 'Process window@777,App@888');
 }
 
 function testBatteryModel() {
@@ -1087,7 +1630,7 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Airplane mode,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,CPU line'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Airplane mode,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,Media controls'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
         && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,VPN,Bluetooth,Volume,Battery');
@@ -1126,10 +1669,17 @@ function testLayoutModel() {
     ];
     const ownerTiles = Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS);
     check(`layout: the owner's saved Tiles list drops night-light and places the new tiles by the defaults (${ownerTiles})`,
-        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,cpu-line');
-    const ownerSplit = Model.splitTileLayout(ownerTiles, Constants.CPU_LINE_ID);
-    check('layout: the CPU line is split off the tiles and shows', ownerSplit.cpuLine && !ownerSplit.tileIds.includes(Constants.CPU_LINE_ID));
-    check('layout: a hidden CPU line does not show', !Model.splitTileLayout(['wifi', 'vpn'], Constants.CPU_LINE_ID).cpuLine);
+        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,media');
+    const ownerSplit = Model.splitTileLayout(ownerTiles, Constants.MEDIA_ITEM.id);
+    check('layout: the media controls are split off the tiles and show', ownerSplit.media && !ownerSplit.tileIds.includes('media'));
+    check('layout: hidden media controls do not show', !Model.splitTileLayout(['wifi', 'vpn'], Constants.MEDIA_ITEM.id).media);
+    // A list saved while the CPU line existed: cpu-line dropped, Media controls added, shown.
+    const withCpu = [...Model.defaults(Constants.TILES), { show: false, id: 'cpu-line' }];
+    const cpuUpdate = Model.storedUpdate(withCpu, Constants.TILE_LAYOUT_ITEMS);
+    check(`layout: a saved list with cpu-line and no media loads cleanly (${cpuUpdate.slice(-2).map(row => `${row.id}:${row.show}`)})`,
+        !cpuUpdate.some(row => row.id === 'cpu-line') && cpuUpdate[cpuUpdate.length - 1].id === 'media' && cpuUpdate[cpuUpdate.length - 1].show
+        && Model.visibleIds(withCpu, Constants.TILE_LAYOUT_ITEMS).includes('media'));
+    check('layout: no cpu-line is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'cpu-line'));
     const ownerRows = Model.rows(ownerSplit.tileIds, Constants.TILES_PER_ROW);
     check(`layout: the owner's tile rows (${JSON.stringify(ownerRows)})`,
         JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["power-profile","airplane-mode"],["keyboard-light"]]');
@@ -1182,7 +1732,7 @@ function testLayoutModel() {
     check('layout write-back: a second pass writes nothing (no loop)', second.length === 0 && store.writes.length === 3);
     const rowsText = key => store.values[key].map(row => `${row.id}${row.show ? '' : ' (hidden)'}`).join(', ');
     check(`layout write-back: tiles keep their order and show flags (${rowsText('tiles')})`,
-        rowsText('tiles') === 'wifi, bluetooth, nordvpn, vpn, power-profile, airplane-mode, keyboard-light, dark-style (hidden), do-not-disturb (hidden), keep-awake (hidden), mic-mute (hidden), cpu-line');
+        rowsText('tiles') === 'wifi, bluetooth, nordvpn, vpn, power-profile, airplane-mode, keyboard-light, dark-style (hidden), do-not-disturb (hidden), keep-awake (hidden), mic-mute (hidden), media');
     check(`layout write-back: panel-icons (${rowsText('panel-icons')})`, rowsText('panel-icons') === 'bluetooth, vpn, volume, wifi, battery');
     check(`layout write-back: sliders (${rowsText('sliders')})`, rowsText('sliders') === 'output, input, monitors, warmth');
     check('layout write-back: rows keep the dialog shape { show, id }',
@@ -1630,14 +2180,6 @@ async function testSubprocess() {
         failed !== null && failed.includes('exited with 3') && failed.includes('boom'));
     const missing = await Subprocess.runCommand(['/nonexistent/quick-settings-test']).then(() => null, e => e.message);
     check(`subprocess: a missing command rejects and names it (${missing})`, missing !== null && missing.includes('/nonexistent/quick-settings-test'));
-    const forced = await Subprocess.runCommand(['/usr/bin/env'], { env: { LC_ALL: 'C', QUICK_SETTINGS_TEST: 'set' } });
-    check('subprocess: env sets the variables for that command only',
-        forced.split('\n').includes('LC_ALL=C') && forced.split('\n').includes('QUICK_SETTINGS_TEST=set')
-        && GLib.getenv('QUICK_SETTINGS_TEST') === null);
-    const LIVE = load('./constants');
-    const live = await Subprocess.runCommand(LIVE.CPU_TOP_COMMAND, { env: LIVE.CPU_TOP_ENV });
-    const busiest = load('./topParser').busiestProcess(live);
-    check(`subprocess: the real top under LC_ALL=C parses (${busiest && busiest.name})`, busiest !== null);
 }
 
 const FakeObjectManager = GObject.registerClass({
@@ -1731,7 +2273,9 @@ async function main() {
     await testNightLight();
     testKeyboardLight();
     testAirplaneMode();
-    await testTopProcess();
+    testMediaModel();
+    testMediaFocus();
+    await testMediaPlayers();
     testBatteryModel();
     testMicMute();
     testSchemaMatchesDeclarations();

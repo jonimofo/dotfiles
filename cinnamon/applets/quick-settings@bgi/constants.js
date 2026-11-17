@@ -100,7 +100,7 @@ const DARK_STYLE_OFF = 'default';
 
 // Battery, from cinnamon-settings-daemon like the stock power applet.
 const POWER_PROXY = 'org.cinnamon.SettingsDaemon.Power';
-// After the battery level and the CPU line's figure.
+// After the battery level.
 const PERCENT_SUFFIX = '%';
 
 // Brightness of the external monitors, through DDC/CI. Buses are detected at runtime: they
@@ -258,19 +258,63 @@ const SESSION_MANAGER_INTERFACE = 'org.gnome.SessionManager';
 const INHIBIT_IDLE_FLAG = 8;
 const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming';
 
-// The CPU line under the tiles: the process using the most CPU, read with top when the menu
-// opens. Two frames half a second apart: the first covers the time since each process
-// started, the second measures that half second. Per-core percent (212% is a bit over two
-// cores); wide lines so no command name is cut.
-const CPU_LINE_ID = 'cpu-line';
-const CPU_LINE_ITEM = { id: CPU_LINE_ID, name: 'CPU line' };
-const CPU_LINE_TITLE = 'CPU';
-// The column top sorts by and the parser reads.
-const CPU_TOP_CPU_COLUMN = '%CPU';
-const CPU_TOP_COMMAND = ['top', '-b', '-n', '2', '-d', '0.5', '-o', CPU_TOP_CPU_COLUMN, '-w', '512'];
-// top translates its column names (COMMAND is COM. in French): run it untranslated.
-const CPU_TOP_ENV = { LC_ALL: 'C' };
-const CPU_IGNORED_COMMANDS = ['top'];
+// Media controls under the tiles: one block per MPRIS player with a track, through the
+// session bus like the stock sound applet. Listed at the end of the Tiles tab.
+const MEDIA_ITEM = { id: 'media', name: 'Media controls' };
+const MPRIS_NAME_PREFIX = 'org.mpris.MediaPlayer2.';
+const MPRIS_PATH = '/org/mpris/MediaPlayer2';
+const MPRIS_ROOT_INTERFACE = 'org.mpris.MediaPlayer2';
+const MPRIS_PLAYER_INTERFACE = 'org.mpris.MediaPlayer2.Player';
+const MPRIS_PLAYING = 'Playing';
+const DBUS_DAEMON = { name: 'org.freedesktop.DBus', path: '/org/freedesktop/DBus', iface: 'org.freedesktop.DBus' };
+// The D-Bus types the media code reads; anything else from a player is ignored.
+const MPRIS_TYPES = {
+    nameOwnerChanged: '(sss)',
+    propertiesChanged: '(sa{sv}as)',
+    listNames: '(as)',
+    nameOwner: '(s)',
+    processId: '(u)',
+    getAll: '(a{sv})',
+    properties: {
+        Identity: 's',
+        Metadata: 'a{sv}',
+        PlaybackStatus: 's',
+        CanControl: 'b',
+        CanGoPrevious: 'b',
+        CanGoNext: 'b',
+        CanPlay: 'b',
+        CanPause: 'b',
+        CanRaise: 'b',
+        DesktopEntry: 's',
+    },
+};
+// A click on a block's text brings the player's window to the front: the window of the
+// application named by DesktopEntry (this suffix makes its desktop file id), else a window
+// of the player's process, else MPRIS Raise. The text's accessible name: this, then the
+// player name.
+const MEDIA_DESKTOP_FILE_SUFFIX = '.desktop';
+const MEDIA_RAISE_METHOD = 'Raise';
+const MEDIA_FOCUS_LABEL = 'Show';
+// A player's error text in the log is cut to this many characters.
+const MEDIA_ERROR_TEXT_MAX = 120;
+// The menu does not grow without bound: the first blocks in display-name order.
+const MEDIA_MAX_PLAYERS = 3;
+// Cut lengths, in characters; the labels also ellipsize at their width.
+const MEDIA_TITLE_MAX = 44;
+const MEDIA_ARTIST_MAX = 20;
+const MEDIA_PLAYER_NAME_MAX = 16;
+const MEDIA_ARTIST_SEPARATOR = ', ';
+const MEDIA_PLAYER_SEPARATOR = ' · ';
+// The buttons, left to right: the keys of MediaModel.buttonStates().
+const MEDIA_BUTTON_ORDER = ['previous', 'playPause', 'next'];
+// Each button's icon, accessible name and tooltip, MPRIS method (play and pause share the
+// middle place).
+const MEDIA_BUTTONS = {
+    previous: { icon: 'media-skip-backward-symbolic', label: 'Previous', method: 'Previous' },
+    play: { icon: 'media-playback-start-symbolic', label: 'Play', method: 'PlayPause' },
+    pause: { icon: 'media-playback-pause-symbolic', label: 'Pause', method: 'PlayPause' },
+    next: { icon: 'media-skip-forward-symbolic', label: 'Next', method: 'Next' },
+};
 
 // Settings dialog (settings-schema.json): one list per group, rows { show, id }.
 const LAYOUT_KEYS = {
@@ -283,6 +327,6 @@ const LAYOUT_KEYS = {
 // The header as the settings dialog lists it.
 const HEADER_ITEMS = [HEADER_BATTERY_ITEM, ...HEADER_BUTTONS];
 
-// The Tiles tab: the tiles, then the CPU line. The line stays under the tiles whatever its
-// place in the list, as the battery stays on the left of the header.
-const TILE_LAYOUT_ITEMS = [...TILES, CPU_LINE_ITEM];
+// The Tiles tab: the tiles, then the media controls. They stay under the tiles whatever
+// their place in the list, as the battery stays on the left of the header.
+const TILE_LAYOUT_ITEMS = [...TILES, MEDIA_ITEM];

@@ -45,7 +45,9 @@
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-.quick-settings-header-button:hover {
+/* The media buttons are bare icons: only their hover shares the header buttons' tint. */
+.quick-settings-header-button:hover,
+.quick-settings-media-button:hover {
     background-color: rgba(255, 255, 255, 0.18);
 }
 
@@ -142,15 +144,55 @@
     font-weight: bold;
 }
 
-/* CPU line, under the tiles */
+/* Media controls, under the tiles: one block per player */
 
-.quick-settings-cpu-line {
-    padding: 0 8px;
-    spacing: 12px;
+.quick-settings-media-section {
+    spacing: 8px;
 }
 
-.quick-settings-cpu-title {
+.quick-settings-media {
+    spacing: 4px;
+}
+
+/* Every block has the same padding and corners, so the text lines up whether its
+   background is tinted (every second block) or not. */
+.quick-settings-media-block {
+    padding: 6px 4px;
+    border-radius: 12px;
+}
+
+/* The title and the artist and player line: one clickable area, 4 px in from the block's
+   edge so the text sits where it did. */
+.quick-settings-media-text {
+    padding: 2px 4px;
+    border-radius: 10px;
+}
+
+.quick-settings-media-lines {
+    spacing: 8px;
+}
+
+.quick-settings-media-title {
     font-weight: bold;
+}
+
+.quick-settings-media-player {
+    font-style: italic;
+}
+
+.quick-settings-media-buttons {
+    padding: 0 4px 0 12px;
+    spacing: 6px;
+}
+
+/* Bare icons on the player name's line, centred on it; only the hover tints them. */
+.quick-settings-media-button {
+    padding: 4px;
+    border-radius: 6px;
+}
+
+.quick-settings-media-icon {
+    icon-size: 16px;
 }
 
 /* In-place list, under the row whose arrow opened it */
@@ -159,6 +201,11 @@
     padding: 10px;
     spacing: 6px;
     border-radius: 16px;
+}
+
+/* The in-place lists' veil, also on every second media block. */
+.quick-settings-list,
+.quick-settings-media-block-tinted {
     background-color: rgba(255, 255, 255, 0.06);
 }
 
@@ -181,7 +228,9 @@
 }
 
 .quick-settings-list-entry:hover,
-.quick-settings-list-entry:focus {
+.quick-settings-list-entry:focus,
+.quick-settings-media-text:hover,
+.quick-settings-media-text:focus {
     background-color: rgba(255, 255, 255, 0.12);
 }
 

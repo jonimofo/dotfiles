@@ -57,9 +57,9 @@ every other screen has its own strip at its very top.
 - The top panel of the primary screen stays as it is: Scale hides the panels, and shows a
   live copy of that one at its pixels, icons and clock included, which takes no click. Nothing
   changes at the top of the screen when Scale opens or closes.
-- Without a top panel on the primary screen (panel at the bottom or on another screen), the
-  panel clock is copied, centred in a band at the top. Without a running calendar applet
-  either, nothing is shown above the search field.
+- Without a top panel on the primary screen (panel at the bottom, on another screen, or set
+  to autohide), the panel clock is copied, centred in a band at the top. Without a running
+  calendar applet either, nothing is shown above the search field.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
@@ -165,6 +165,8 @@ Then give Super back to the Menu (see above).
   With none, or none of its pinned apps installed, and no other app running, no dock is
   drawn until the next opening of Scale.
 - Many apps make the dock icons smaller to fit the screen's width. Untested.
+- A top panel set to autohide or intellihide is not copied: Scale shows the clock band
+  instead, since Cinnamon may hide that panel and the copy would be an empty band.
 - The panel's place is read when Scale opens: a panel moved or resized while it is open
   keeps the old place until the next opening. The copy shows the panel as it was drawn, a
   hover highlight included if the pointer was on an applet when Scale opened; the applets'
@@ -205,7 +207,7 @@ Private fields and methods read, called or written:
 | `imports.ui.dnd` | a monitor's `dragDrop(event)` with `event.targetActor`, returning `DragDropResult.CONTINUE` | clearing the highlights of the targets that do not take a drop |
 | `Main` | `modalCount` | is Scale the only modal |
 | `Main.AppletManager` | `getRunningInstancesForUuid('grouped-window-list@cinnamon.org')` | the panel's window list applet |
-| `Main.panelManager` | `getPanelsInMonitor(primaryIndex)`, each panel's `actor` | the top panel copied in Scale |
+| `Main.panelManager` | `getPanelsInMonitor(primaryIndex)`, each panel's `actor` and `isHideable()` | the top panel copied in Scale, never an autohide one |
 | `Main.AppletManager` | `getRunningInstancesForUuid('calendar@bgi')`, then `('calendar@cinnamon.org')`, the applet's `actor` | the clock of the fallback band |
 | grouped window list applet | `settings` (its `AppletSettings`), key `pinned-apps` | the pinned apps of the dock |
 

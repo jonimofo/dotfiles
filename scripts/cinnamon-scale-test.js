@@ -181,7 +181,7 @@ class FakeActor extends FakeSignals {
 // Only Clutter.Actor makes this kind: the search's click blockers.
 class FakeClutterActor extends FakeActor {}
 
-// Clutter.Clone: the overview's copy of the panel clock.
+// Clutter.Clone: the overview's copy of the top panel, or of the panel clock in the band.
 class FakeClone extends FakeActor {}
 
 class FakeEntry extends FakeActor {
@@ -654,9 +654,9 @@ function closeScale(env) {
 const TOP_PANEL = { x: 0, y: 0, width: 1920, height: 40 };
 const BOTTOM_PANEL = { x: 0, y: 1040, width: 1920, height: 40 };
 
-// A panel of Main.panelManager, its actor at @box.
-function fakePanel(box, monitorIndex = 0) {
-    return { monitorIndex, actor: new FakeActor(box) };
+// A panel of Main.panelManager, its actor at @box; @isHideable for autohide or intellihide.
+function fakePanel(box, monitorIndex = 0, isHideable = false) {
+    return { monitorIndex, actor: new FakeActor(box), isHideable: () => isHideable };
 }
 
 // The copy of the panel above Scale's group, if any.
@@ -675,7 +675,7 @@ function fadePanelIn(panel, steps) {
 // Which panel is copied: the one on the primary screen's top edge, despite float noise.
 function testPanelChoice() {
     const env = setUp();
-    const { isOnTopEdge, findTopPanel, isPanelShown, boxOf } = env.require('./panelCopy');
+    const { isOnTopEdge, findTopPanel, isPanelShown, boxOf } = env.require('./topRow');
     const monitor = env.monitors[0];
 
     check('panel: a panel on the top edge is copied', isOnTopEdge(TOP_PANEL, monitor));
@@ -693,6 +693,8 @@ function testPanelChoice() {
     const top = { box: TOP_PANEL };
     check('panel: the top panel is chosen among the primary screen\'s panels', findTopPanel([bottom, top], monitor) === top);
     check('panel: no top panel, none chosen', findTopPanel([bottom], monitor) === null);
+    check('panel: an autohide top panel is not copied (it would turn into an empty band)',
+        findTopPanel([{ box: TOP_PANEL, isHideable: true }], monitor) === null);
 
     check('panel: shown only when visible at full opacity',
         isPanelShown({ visible: true, opacity: 255 }) && !isPanelShown({ visible: true, opacity: 254 }) &&
@@ -739,8 +741,8 @@ function testPanelCopy() {
     fadePanelIn(panel, [255]);
     check('copy: removed once the real panel is fully back, with its timer', copy.destroyed &&
         panelCopiesOf(env).length === 0 && env.timers.size === 0);
-    fadePanelIn(panel, [255]);
-    check('copy: a later opacity change does nothing (handler gone)', !throws(() => fadePanelIn(panel, [200, 255])));
+    check('copy: no opacity handler is left on the panel once the copy is gone',
+        ![...panel.actor._handlers.values()].some(handler => handler.name === 'notify::opacity'));
 
     openScale(env);
     copy = panelCopiesOf(env)[0];
@@ -795,6 +797,13 @@ function testPanelFallbacks() {
     check('fallback: the search field starts under the band', searchBarOf(env).y === NATURAL_HEIGHTS['scale-clock-bar']);
     closeScale(env);
     check('fallback: closing Scale removes the band and its copy at once', band.destroyed && env.timers.size === 0);
+
+    env.Main.panelManager.panels = [fakePanel(TOP_PANEL, 0, true)];
+    openScale(env);
+    const [autohideBand] = clockBarsOf(env);
+    check('fallback: an autohide top panel: the clock band, no panel copy',
+        autohideBand && autohideBand.child.source === clockActor && panelCopiesOf(env).length === 0);
+    closeScale(env);
 
     env.Main.AppletManager.instances = {};
     openScale(env);

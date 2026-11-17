@@ -35,9 +35,11 @@ function isOnTopEdge(box, monitor) {
     return box.y === monitor.y && box.x >= monitor.x && box.x + box.width <= monitor.x + monitor.width;
 }
 
-// The first of @panels ({actor, box}) on @monitor's top edge, or null.
+// The first of @panels ({actor, box, isHideable}) on @monitor's top edge that never hides,
+// or null. An autohide panel is copied neither: Cinnamon hides it while the pointer is away,
+// and the copy would become an empty band.
 function findTopPanel(panels, monitor) {
-    return panels.find(panel => isOnTopEdge(panel.box, monitor)) || null;
+    return panels.find(panel => !panel.isHideable && isOnTopEdge(panel.box, monitor)) || null;
 }
 
 // The real panel is back once it is shown at full opacity.
@@ -47,7 +49,7 @@ function isPanelShown(actor) {
 
 function primaryPanels() {
     return Main.panelManager.getPanelsInMonitor(Main.layoutManager.primaryIndex)
-        .map(panel => ({ actor: panel.actor, box: boxOf(panel.actor) }));
+        .map(panel => ({ actor: panel.actor, box: boxOf(panel.actor), isHideable: panel.isHideable() }));
 }
 
 // The running panel clock applets' actors.
@@ -62,10 +64,10 @@ function findPanelClockActors() {
     return actors;
 }
 
-// The top of the primary monitor in Scale, which hides the panels: a copy of the top panel at
-// its place, or, without a top panel there, a band with a copy of the panel clock centred.
-// Null with neither.
-function createPanelCopy() {
+// The top row of the primary monitor in Scale, which hides the panels: a PanelCopy of the top
+// panel at its place, or, without a top panel that stays shown, a ClockBand with a copy of
+// the panel clock centred. Null with neither. Both offer getHeight() and release().
+function createTopRow() {
     const monitor = Main.layoutManager.primaryMonitor;
     const topPanel = findTopPanel(primaryPanels(), monitor);
     if (topPanel)
@@ -154,7 +156,8 @@ var PanelCopy = class PanelCopy {
 };
 
 // Fallback without a top panel on the primary monitor: the panel clock, copied live and
-// centred in a band at the top. Not reactive: the band swallows the clicks.
+// centred in a band at the top. The copy takes no input; the band is reactive and swallows
+// the clicks.
 var ClockBand = class ClockBand {
     constructor(monitor, clockActor) {
         this._copy = new Clutter.Clone({ source: clockActor, x_align: Clutter.ActorAlign.CENTER });

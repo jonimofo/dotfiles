@@ -8,7 +8,7 @@ Earlier designs: [`2026-11-11-cinnamon-scale-overview.md`](2026-11-11-cinnamon-s
 [`2026-11-12-cinnamon-scale-dock.md`](2026-11-12-cinnamon-scale-dock.md).
 Install and usage: [`cinnamon/README.md`](../../cinnamon/README.md).
 
-**Current state.** In Scale, `panelCopy.js` shows a live, non-interactive clone of the primary
+**Current state.** In Scale, `topRow.js` shows a live, non-interactive clone of the primary
 screen's top panel at its exact place, so nothing changes at the top of the screen when Scale
 opens or closes; the copy stays until the real panel is back at full opacity. Without a top
 panel there, the panel clock is cloned, centred in a band; without a clock either, nothing.
@@ -76,7 +76,7 @@ _Superseded by "Follow-up: the whole top panel stays"._
 
 | File | Change |
 |---|---|
-| `panelCopy.js` | New. The live copy of the top panel, or the fallback clock band (see the last follow-up) |
+| `topRow.js` | New. The top row: the live copy of the top panel, or the fallback clock band (see the last follow-up) |
 | `appSearch.js` | The search bar takes a top offset |
 | `extension.js` | Panel copy first on `showing`, released on `hidden` (kept until the panel is fully back), removed in `disable()` |
 | `stylesheet.css` | `.scale-clock-bar` (fallback band) |
@@ -257,11 +257,13 @@ monitor's top edge), at the panel's stage box, in `global.overlay_group` above S
    a waiting copy at once.
 4. The copy takes no input. A transparent reactive actor as high as the panel, in Scale's
    group, swallows the clicks there; the search field and the strip start under it.
-5. Fallback without a top panel on the primary screen: the panel clock's copy centred in the
-   `scale-clock-bar` band, as before. Without a clock either: nothing.
+5. Fallback without a top panel on the primary screen, or with one set to autohide or
+   intellihide (`Panel.isHideable()`, added at the audit): the panel clock's copy centred in
+   the `scale-clock-bar` band, as before. Without a clock either: nothing.
 
-The module is renamed `panelCopy.js` (`PanelCopy`, and `ClockBand` for the fallback); the
-clock placement inside a panel (`placeAtPanel`, `chooseClock`) is removed.
+The module is renamed `topRow.js` (`createTopRow()`, `PanelCopy`, and `ClockBand` for the
+fallback, renamed from `panelCopy.js` at the audit); the clock placement inside a panel
+(`placeAtPanel`, `chooseClock`) is removed.
 
 ## Known limitations
 

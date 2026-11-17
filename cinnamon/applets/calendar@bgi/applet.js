@@ -219,7 +219,9 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             // Second zone and Appearance tab: a light refresh, no forced fetch of the events;
             // the zone id waits for the end of typing. The day marker switch is read by the
             // calendar grid itself.
-            this.settings.bind(Constants.SHOW_SECOND_ZONE_KEY, "show_second_zone", this._onSecondZoneChanged);
+            // Bound for their callback; their values are read by key in _secondZonePlaces().
+            this.settings.bind(Constants.SECOND_ZONE_SWITCHES.panel.key, "show_second_zone", this._onSecondZoneChanged);
+            this.settings.bind(Constants.SECOND_ZONE_SWITCHES.header.key, "show_second_zone_header", this._onSecondZoneChanged);
             this.settings.bind(Constants.SECOND_ZONE_ID_KEY, "second_zone_id", this._onZoneIdChanged);
             this.settings.bind(Constants.SECOND_ZONE_LABEL_KEY, "second_zone_label", this._onDisplayChanged);
             this.settings.bind(Constants.TEXT_SCALES.events.key, "events_text_scale", this._onDisplayChanged);
@@ -354,7 +356,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
 
     _updateClocks(now) {
         let city = DateText.cityFromZoneId(GLib.TimeZone.new_local().get_identifier());
-        let clocks = DateText.headerClocks(now.format(this._timeFormat()), city, this._secondTime(now));
+        let clocks = DateText.headerClocks(now.format(this._timeFormat()), city,
+                                           SecondZone.shownWhere(this._secondZonePlaces().header, this._secondTime(now)));
         this._clocks.forEach((clock, i) => {
             clock.actor.visible = i < clocks.length;
             if (clock.actor.visible) {
@@ -397,8 +400,13 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         });
     }
 
+    _secondZonePlaces() {
+        return SecondZone.secondZonePlaces(key => this.settings.getValue(key));
+    }
+
     _updateSecondZone() {
-        this._secondZone = this._secondZoneResolver.resolve(this.show_second_zone, this.second_zone_id);
+        this._secondZone = this._secondZoneResolver.resolve(
+            this._secondZonePlaces().resolve, this.second_zone_id);
     }
 
     _inVerticalPanel() {
@@ -432,7 +440,8 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
         let date_text = this.use_custom_format ?
             this.clock.get_clock() :
             DateText.panelDateOf(now);
-        return DateText.formatPanelText(date_text, now.format(this._timeFormat()), this._secondTime(now));
+        return DateText.formatPanelText(date_text, now.format(this._timeFormat()),
+                                        SecondZone.shownWhere(this._secondZonePlaces().panel, this._secondTime(now)));
     }
 
     _updateClockAndDate() {

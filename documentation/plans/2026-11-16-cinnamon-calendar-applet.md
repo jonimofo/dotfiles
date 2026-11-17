@@ -890,6 +890,29 @@ Wanted:    <          Nov. 2026          >       same centre line as the arrows,
 - `.calendar-bgi-month-label` gets `font-size: 125%` (the header date's size; 130% at first, changed at the owner's request), relative to the grid's font, so it
   follows the Days size; still bold.
 
+## Follow-up: second zone on the panel and in the header, separately
+
+Owner's words: "je veux aussi avoir la possibilite séparément de choisir d'afficher un
+deuxieme fuseau horaire DANS le panel ET sur la barre task" (screenshot marking the panel
+text and the popup header's clocks).
+
+```
+Second time zone
+    Show on the panel                 [ON ]
+    Show in the calendar header       [ON ]
+    Time zone          Asia/Ho_Chi_Minh
+    Label              VN
+```
+
+- `show-second-zone` keeps its key for the panel text, relabelled `Show on the panel`;
+  `show-second-zone-header` (`Show in the calendar header`, on) governs the header's second
+  clock and its divider, which also need `Clocks in the header`.
+- The zone is resolved when either switch is on (`SecondZone.zoneWanted`); an unknown id
+  hides it in both places and is logged once, as before. Both switches apply live.
+- Time zone and Label are always shown in the dialog: a schema `dependency` names one key
+  (Cinnamon's `JSONSettingsRevealer` takes a key, a negation or one comparison), so "either
+  switch" cannot be expressed; the dependency on the first switch is removed.
+
 ## Out of scope
 
 Any feature not in the mockups, the theme in `~/.themes`, enabling the applet on the live

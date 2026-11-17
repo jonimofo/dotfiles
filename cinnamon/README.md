@@ -517,7 +517,7 @@ reload.
 | Setting | Default | |
 |---|---|---|
 | Calendar events | on | stock switch: the event list, the dots and the event count |
-| Clocks in the header | on | both clocks; the second one also needs "Show a second time zone". Hidden, their click back to today goes too; the Today button stays |
+| Clocks in the header | on | both clocks; the second one also needs "Show in the calendar header". Hidden, their click back to today goes too; the Today button stays |
 | Metadata line | on | the second line of each event |
 | Now line and event states | on | on today: past events dimmed, the ongoing one outlined in violet, a violet line with the time between them and the upcoming ones |
 | Dot under days | on | the dot under a day with events; off, the digits are centred |
@@ -530,7 +530,8 @@ help), then the second time zone:
 
 | Setting | Default | |
 |---|---|---|
-| Show a second time zone | on | off hides it on the panel and in the popup |
+| Show on the panel | on | the second zone's time on the panel text (`· VN 21:52`); the key is still `show-second-zone` |
+| Show in the calendar header | on | the second clock in the popup's header band, with "Clocks in the header" on |
 | Time zone | `Asia/Ho_Chi_Minh` | an IANA id; an unknown one hides the second time and is logged once |
 | Label | `VN` | shown before the time on the panel, after it in the popup |
 

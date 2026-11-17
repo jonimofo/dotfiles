@@ -3,8 +3,15 @@
 const UUID = 'calendar@bgi';
 const LOG_PREFIX = UUID;
 
-// Settings keys of the second time zone (settings-schema.json holds their defaults).
-const SHOW_SECOND_ZONE_KEY = 'show-second-zone';
+// The second time zone, shown on the panel and in the calendar header independently; the
+// zone id and its label are shared. As for the Appearance settings below, label and default
+// repeat the hand-written settings-schema.json so the test can check the two agree.
+const SECOND_ZONE_SWITCHES = {
+    // The first key of the second zone, from when one switch governed both places: its saved
+    // value keeps its meaning on the panel.
+    panel: { key: 'show-second-zone', label: 'Show on the panel', default: true },
+    header: { key: 'show-second-zone-header', label: 'Show in the calendar header', default: true },
+};
 const SECOND_ZONE_ID_KEY = 'second-zone-id';
 const SECOND_ZONE_LABEL_KEY = 'second-zone-label';
 

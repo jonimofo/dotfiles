@@ -119,6 +119,10 @@ const NUMBER_PLACEHOLDER = '%d';
 // "This evening" when it starts after 18:00, else "Starting later today".
 const COUNTDOWN = { imminentMinutes: 10, soonMinutes: 60, laterHours: 6, eveningHour: 18 };
 
+// Month row arrows, symbolic icons found in Adwaita and in the Dracula icon theme; the -rtl
+// variants are not used, the two names swap for a right-to-left desktop.
+const MONTH_ARROW_ICONS = { previous: 'pan-start-symbolic', next: 'pan-end-symbolic' };
+
 // The month grid: always six weeks (stock), under the month row and the day headings.
 const DAYS_IN_WEEK = 7;
 const GRID_WEEKS = 6;
@@ -151,6 +155,8 @@ const STYLE = {
     settingsButton: 'calendar-bgi-settings-button',
     monthRow: 'calendar-bgi-month-row',
     monthLabel: 'calendar-bgi-month-label',
+    monthArrow: 'calendar-bgi-month-arrow',
+    monthArrowIcon: 'calendar-bgi-month-arrow-icon',
     dayHeading: 'calendar-bgi-day-heading',
     day: 'calendar-bgi-day',
     dayMarked: 'calendar-bgi-day-marked',

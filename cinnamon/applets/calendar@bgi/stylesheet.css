@@ -1,6 +1,5 @@
 /* calendar@bgi. The rules below use the applet's own classes (calendar-bgi-), so no other
-   menu or calendar changes. Stock classes the theme still styles: the month arrows'
-   images (calendar-change-month-back, -forward), the clocks button
+   menu or calendar changes. Stock classes the theme still styles: the clocks button
    (calendar-today-home-button, -enabled), the grid (calendar), the empty-day box and the
    scroll view (calendar-events-no-events-*, calendar-events-scrollbox).
 
@@ -39,9 +38,10 @@
     background-color: #29364D;
 }
 
-/* Hover: event row, day, Today and settings buttons */
+/* Hover: event row, day, month arrows, Today and settings buttons */
 .calendar-bgi-event-row:hover,
 .calendar-bgi-day:hover,
+.calendar-bgi-month-arrow:hover,
 .calendar-bgi-today-button:hover,
 .calendar-bgi-settings-button:hover {
     background-color: #2F405B;
@@ -57,8 +57,9 @@
 
 /* ---- Text ---- */
 
-/* Primary text: titles, times, dates, day numbers */
+/* Primary text: titles, times, dates, day numbers, month arrows */
 .menu.calendar-bgi-popup,
+.calendar-bgi-month-arrow,
 .calendar-bgi-header-date,
 .calendar-bgi-header-count,
 .calendar-bgi-clock-time,
@@ -79,6 +80,11 @@
 .calendar-bgi-event-meta,
 .calendar-bgi-event-countdown {
     color: #B5BED0;
+}
+
+/* Light violet: month arrows on hover (4.78:1 on the hover background) */
+.calendar-bgi-month-arrow:hover {
+    color: #BAA3F0;
 }
 
 /* Discreet text: days of the other months, week numbers */
@@ -260,15 +266,20 @@
     padding: 6px 8px 8px 8px;
 }
 
-/* One month row: '<  November 2026  >'. The arrows grow with the Days size: the theme's
-   16px images at 100% (12px font). */
+/* One month row: '<  November 2026  >'. The arrows are the applet's icons, 2em of the grid's
+   font (24px at 100%), so they grow with the Days size; the padding makes the button about
+   as high as a day cell (3.66em of the grid's font). */
 .calendar-bgi-month-row {
     padding: 0.3em 0;
 }
 
-.calendar-bgi-month-row StButton {
-    width: 1.33333em;
-    height: 1.33333em;
+.calendar-bgi-month-arrow {
+    padding: 0.8333em;
+    border-radius: 8px;
+}
+
+.calendar-bgi-month-arrow-icon {
+    icon-size: 2em;
 }
 
 .calendar-bgi-month-label {

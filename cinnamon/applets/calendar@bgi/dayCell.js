@@ -42,3 +42,10 @@ function gridDates(selected, weekStart) {
         dates.push(new Date(first.getTime() + i * Constants.MS_IN_DAY));
     return dates;
 }
+
+// [previous, next] icon names of the month arrows; swapped for a right-to-left desktop, where
+// the previous month is on the right.
+function monthArrowIcons(rtl) {
+    const icons = Constants.MONTH_ARROW_ICONS;
+    return rtl ? [icons.next, icons.previous] : [icons.previous, icons.next];
+}

@@ -230,16 +230,17 @@ class Calendar {
 
         this.actor.connect('style-changed', Lang.bind(this, this._onStyleChange));
 
-        let back = new St.Button({ style_class: 'calendar-change-month-back',
-                                   accessible_name: Constants.TEXT.previousMonth });
+        // The applet's own arrows: the theme's are 16px images that do not scale.
+        let [back_icon, forward_icon] = DayCell.monthArrowIcons(
+            Clutter.get_default_text_direction() == Clutter.TextDirection.RTL);
+        let back = this._monthArrow(back_icon, Constants.TEXT.previousMonth);
         this._topBoxMonth.add(back);
         back.connect('clicked', Lang.bind(this, this._onPrevMonthButtonClicked));
 
         this._monthLabel = new St.Label({style_class: Constants.STYLE.monthLabel});
         this._topBoxMonth.add(this._monthLabel, { expand: true, x_fill: false, x_align: St.Align.MIDDLE });
 
-        let forward = new St.Button({ style_class: 'calendar-change-month-forward',
-                                      accessible_name: Constants.TEXT.nextMonth });
+        let forward = this._monthArrow(forward_icon, Constants.TEXT.nextMonth);
         this._topBoxMonth.add(forward);
         forward.connect('clicked', Lang.bind(this, this._onNextMonthButtonClicked));
 
@@ -313,6 +314,24 @@ class Calendar {
                 this._weekNumbers.push(label);
             }
         }
+    }
+
+    _monthArrow(icon_name, accessible_name) {
+        return new St.Button(
+            {
+                style_class: Constants.STYLE.monthArrow,
+                accessible_name: accessible_name,
+                reactive: true,
+                track_hover: true,
+                child: new St.Icon(
+                    {
+                        style_class: Constants.STYLE.monthArrowIcon,
+                        icon_name: icon_name,
+                        icon_type: St.IconType.SYMBOLIC
+                    }
+                )
+            }
+        );
     }
 
     _onStyleChange(actor, event) {

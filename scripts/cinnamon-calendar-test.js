@@ -304,6 +304,16 @@ function testGrid() {
     const steps = march.slice(1).map((date, i) => Math.round((date - march[i]) / 3600000));
     const days = march.slice(1).every((date, i) => (date.getDay() + 6) % 7 === (march[i].getDay() + 1 + 6) % 7);
     check(`grid: one day per cell across the end of March DST change (${[...new Set(steps)].join(', ')} h)`, days);
+    checkEqual('month arrows: left to right', DayCell.monthArrowIcons(false).join(' '), 'pan-start-symbolic pan-end-symbolic');
+    checkEqual('month arrows: swapped right to left', DayCell.monthArrowIcons(true).join(' '), 'pan-end-symbolic pan-start-symbolic');
+    const css = readText(`${appletDir}/stylesheet.css`);
+    const iconSize = css.match(new RegExp(`\\.${Constants.STYLE.monthArrowIcon}\\s*\\{[^}]*icon-size:\\s*([0-9.]+)em`));
+    check(`month arrows: 2em icons, 24px at 100% of the grid's 12px font (${iconSize ? iconSize[1] + 'em' : '?'})`,
+        iconSize !== null && Number(iconSize[1]) * 12 === 24);
+    const arrowPadding = css.match(new RegExp(`\\.${Constants.STYLE.monthArrow}\\s*\\{[^}]*padding:\\s*([0-9.]+)em`));
+    const dayHeight = 2.75 * 1.33;
+    check(`month arrows: button about as high as a day cell (${arrowPadding ? (2 + 2 * Number(arrowPadding[1])).toFixed(2) : '?'}em against ${dayHeight.toFixed(2)}em)`,
+        arrowPadding !== null && Math.abs(2 + 2 * Number(arrowPadding[1]) - dayHeight) < 0.1);
     checkEqual('grid: first cell position', JSON.stringify(DayCell.cellPosition(0)), '[2,0]');
     checkEqual('grid: last cell position', JSON.stringify(DayCell.cellPosition(41)), '[7,6]');
     checkEqual('grid: cell column follows the week start', DayCell.cellPosition(13)[1],
@@ -444,7 +454,8 @@ function testSchema() {
 const SIZES_MARKER = '/* ---- Sizes ---- */';
 const HEX_COLOUR = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
 // Day cells grow with the theme's font: their sizes are in em or %, not px.
-const DAY_RULES = ['day', 'dayMarked', 'dayHeading', 'dayMarkerBox', 'weekNumber', 'monthRow', 'monthLabel'];
+const DAY_RULES = ['day', 'dayMarked', 'dayHeading', 'dayMarkerBox', 'weekNumber', 'monthRow', 'monthLabel',
+    'monthArrow', 'monthArrowIcon'];
 // Classes set by the code with no rule of their own: the day marker takes its parent's
 // colour and size.
 const UNSTYLED_CLASSES = ['dayMarker'];
@@ -489,6 +500,8 @@ const CONTRAST_PAIRS = [
     ['.calendar-bgi-event-countdown', 'color', '.calendar-bgi-event-row', 4.5],
     ['.calendar-bgi-month-label', 'color', '.calendar-bgi-calendar-panel', 4.5],
     ['.calendar-bgi-day-heading', 'color', '.calendar-bgi-calendar-panel', 4.5],
+    ['.calendar-bgi-month-arrow', 'color', '.calendar-bgi-calendar-panel', 3],
+    ['.calendar-bgi-month-arrow:hover', 'color', '.calendar-bgi-month-arrow:hover', 3],
     ['.calendar-bgi-day', 'color', '.calendar-bgi-calendar-panel', 4.5],
     ['.calendar-bgi-day', 'color', '.calendar-bgi-day:hover', 4.5],
     ['.calendar-bgi-day-selected', 'color', '.calendar-bgi-day-selected', 4.5],

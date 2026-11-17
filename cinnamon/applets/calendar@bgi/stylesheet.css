@@ -115,10 +115,12 @@
     border-color: transparent;
 }
 
-/* Thin borders: popup, event rows, the line between the two clocks */
+/* Thin borders: popup, event rows, the line between the two clocks, the line under the
+   day headings */
 .menu.calendar-bgi-popup,
 .calendar-bgi-event-row,
-.calendar-bgi-clock-divided {
+.calendar-bgi-clock-divided,
+.calendar-bgi-day-heading {
     border-color: #394761;
 }
 
@@ -293,10 +295,10 @@
     padding: 6px 8px 8px 8px;
 }
 
-/* One month row: '<  November 2026  >', with 1.1333em under it (13.6px at 100%) before the
-   day headings. The arrows are the applet's icons, 2em of the grid's
-   font (24px at 100%), so they grow with the Days size; the padding makes the button about
-   as high as a day cell (3.66em of the grid's font). */
+/* One month row: '<  Nov. 2026  >', the title at the header date's 125% and centred on the arrows' line,
+   with 1.1333em under it (13.6px at 100%) before the day headings. The arrows are the
+   applet's icons, 2em of the grid's font (24px at 100%), so they grow with the Days size;
+   the padding makes the button about as high as a day cell (3.66em of the grid's font). */
 .calendar-bgi-month-row {
     padding: 0.3em 0 1.1333em 0;
 }
@@ -311,14 +313,19 @@
 }
 
 .calendar-bgi-month-label {
+    font-size: 125%;
     font-weight: bold;
     text-align: center;
 }
 
+/* The headings fill their columns, so their bottom borders join into one thin line above
+   the days. */
 .calendar-bgi-day-heading {
     font-weight: 600;
     text-align: center;
     padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    border-bottom-width: 1px;
 }
 
 .calendar-bgi-week-number {

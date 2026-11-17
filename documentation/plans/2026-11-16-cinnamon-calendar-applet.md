@@ -873,6 +873,23 @@ Decisions:
    100%, growing with Days.
 9. No new colour: discreet text, light violet and violet were in the palette.
 
+## Follow-up: month title (after the merge of PR #56)
+
+Owner's words: "make the date aligned with the < >, use the abbrev form, make font a bit
+bigger" (screenshot: the month title sat higher than the two arrows).
+
+```
+Now:       <        November 2026        >       title above the arrows' centre line
+Wanted:    <          Nov. 2026          >       same centre line as the arrows, bigger text
+```
+
+- The title is added to the month row with `y_fill: false, y_align: St.Align.MIDDLE`: the
+  arrow buttons (3.67em high) are taller than the label, which was top-aligned.
+- `formatMonthHeading` reuses `monthWithDot`, the header date's rule: `Nov. 2026`,
+  `May 2026`. This replaces the full month name of the eighth round.
+- `.calendar-bgi-month-label` gets `font-size: 125%` (the header date's size; 130% at first, changed at the owner's request), relative to the grid's font, so it
+  follows the Days size; still bold.
+
 ## Out of scope
 
 Any feature not in the mockups, the theme in `~/.themes`, enabling the applet on the live

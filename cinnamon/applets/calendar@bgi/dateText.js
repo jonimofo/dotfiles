@@ -59,9 +59,9 @@ function weekdayNameOf(datetime) {
     return weekdayName(datePartsOf(datetime));
 }
 
-// Over the month: "November 2026". @month is 1 to 12.
+// Over the month: "Nov. 2026", "May 2026". @month is 1 to 12.
 function formatMonthHeading(month, year) {
-    return [Constants.MONTH_NAMES[month - 1], year].join(Constants.WORD_SEPARATOR);
+    return [monthWithDot(month), year].join(Constants.WORD_SEPARATOR);
 }
 
 // {title, meta} of an event summary, cut at its first SUMMARY_SEPARATOR. Without one, the

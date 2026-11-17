@@ -103,8 +103,13 @@ function testEnglishDates() {
     checkEqual('panel date: May', DateText.formatPanelDate(partsOf(2026, 5, 4)), 'Mon 4 May');
     checkEqual('event span date', DateText.formatDayMonthYear(partsOf(2026, 9, 7)), '7 Sep. 2026');
     checkEqual('event span weekday', DateText.weekdayName(partsOf(2026, 11, 18)), 'Wednesday');
-    checkEqual('month heading', DateText.formatMonthHeading(11, 2026), 'November 2026');
-    checkEqual('month heading: May', DateText.formatMonthHeading(5, 2026), 'May 2026');
+    const monthHeadings = [];
+    for (let month = 1; month <= 12; month++)
+        monthHeadings.push(DateText.formatMonthHeading(month, 2026));
+    checkEqual('month heading: every month, abbreviated', monthHeadings.join(' / '),
+        'Jan. 2026 / Feb. 2026 / Mar. 2026 / Apr. 2026 / May 2026 / Jun. 2026 / Jul. 2026 / Aug. 2026 / Sep. 2026 / Oct. 2026 / Nov. 2026 / Dec. 2026');
+    checkEqual('month heading: same month form as the header date', DateText.formatMonthHeading(11, 2026).split(' ')[0],
+        DateText.formatHeaderDate(partsOf(2026, 11, 16)).split(' ')[2]);
     // Headings as the grid places them: each weekday at DayCell.weekdayColumn().
     const headings = weekStart => {
         const row = [];
@@ -299,6 +304,9 @@ function testGrid() {
     checkEqual('month arrows: left to right', DayCell.monthArrowIcons(false).join(' '), 'pan-start-symbolic pan-end-symbolic');
     checkEqual('month arrows: swapped right to left', DayCell.monthArrowIcons(true).join(' '), 'pan-end-symbolic pan-start-symbolic');
     const css = readText(`${appletDir}/stylesheet.css`);
+    const titleRule = css.match(new RegExp(`\\.${Constants.STYLE.monthLabel}\\s*\\{([^}]*)\\}`));
+    check(`month title: 125% of the grid's font like the header date, bold (${titleRule ? titleRule[1].replace(/\\s+/g, ' ').trim() : '?'})`,
+        titleRule !== null && /font-size:\s*125%/.test(titleRule[1]) && /font-weight:\s*bold/.test(titleRule[1]));
     const iconSize = css.match(new RegExp(`\\.${Constants.STYLE.monthArrowIcon}\\s*\\{[^}]*icon-size:\\s*([0-9.]+)em`));
     check(`month arrows: 2em icons, 24px at 100% of the grid's 12px font (${iconSize ? iconSize[1] + 'em' : '?'})`,
         iconSize !== null && Number(iconSize[1]) * 12 === 24);

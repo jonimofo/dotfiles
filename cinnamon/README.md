@@ -442,7 +442,7 @@ Cinnamon 6.4) with a second time zone and its own look:
   with the current time (`09:22`) sits after the last event that has started. The states and
   the line follow the clock minute by minute while the popup is open, and the list scrolls to
   the line on opening. Another day shows no line and nothing dimmed.
-- Right column, the month: one row `<  November 2026  >` with a gap under it, headings `Mon Tue ...` (the arrows, 24px icons that
+- Right column, the month: one row `<  Nov. 2026  >` (the month abbreviated as in the header, `May 2026`, its title larger and centred on the arrows) with a gap under it, headings `Mon Tue ...` (the arrows, 24px icons that
   grow with the Days size, and the mouse wheel move one month), larger day cells, one dot under a day with events. The selected day is
   filled violet, today has a thin light outline, a selected today has both; days of the
   other months are greyed.

@@ -46,7 +46,7 @@ const PANEL_SEPARATOR = ' · ';
 const WORD_SEPARATOR = ' ';
 
 // Dates are worded in English whatever LC_TIME says: "Mon 16 Nov. 2026" in the header,
-// "Mon 16 Nov" on the panel, "November 2026" over the month. Sunday first, as Date.getDay().
+// "Mon 16 Nov" on the panel, "Nov. 2026" over the month. Sunday first, as Date.getDay().
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const WEEKDAY_ABBREVIATIONS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',

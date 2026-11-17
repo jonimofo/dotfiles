@@ -49,25 +49,29 @@ bindings (`media-keys`, `wm`).
 
 ## What scale-wheel-switch does
 
-In Scale (hot corner or Super), from top to bottom: the date and time, a search field, a
+In Scale (hot corner or Super), from top to bottom: the top panel, a search field, a
 strip with one thumbnail per workspace, all centered, then Scale's windows, then a dock of
-applications. The date and time, the search field and the dock are on the primary screen
-only; every other screen has its own strip at its very top.
+applications. The panel, the search field and the dock are on the primary screen only;
+every other screen has its own strip at its very top.
 
-- The date and time read like `Tue 17 Nov. 2026   ·   09:22`: the date as the header of the
-  calendar applet, in English, and the time after the desktop's 12 or 24-hour clock setting.
-  They change at each minute while Scale is open.
+- The top panel of the primary screen stays as it is: Scale hides the panels, and shows a
+  live copy of that one at its pixels, icons and clock included, which takes no click. Nothing
+  changes at the top of the screen when Scale opens or closes.
+- Without a top panel on the primary screen (panel at the bottom, on another screen, or set
+  to autohide), the panel clock is copied, centred in a band at the top. Without a running
+  calendar applet either, nothing is shown above the search field.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
   Escape clears the field, then closes Scale. While the field has text, a click on another
   screen's window area does nothing.
 - Each thumbnail shows the windows that workspace has on that strip's screen.
-- A click on a thumbnail switches workspace. Scale stays open.
+- A click on a thumbnail enters that workspace: Scale closes on its desktop. A click on
+  the current workspace's thumbnail closes Scale.
 - Dropping a window on a thumbnail moves it to that workspace and that screen.
 - Dropping a window anywhere on another screen's window area moves it to that screen,
   same workspace. The area is highlighted while the drop is possible.
-- The mouse wheel switches workspace.
+- The mouse wheel switches workspace. Scale stays open.
 - A middle click on a window does nothing (stock Scale closes the application).
 - A right click on a window opens it, like a left click (stock Scale shows the window menu).
 - The hot corners keep working over a fullscreen window, with Scale open or not, so the
@@ -161,16 +165,20 @@ Then give Super back to the Menu (see above).
   With none, or none of its pinned apps installed, and no other app running, no dock is
   drawn until the next opening of Scale.
 - Many apps make the dock icons smaller to fit the screen's width. Untested.
-- The clock reads the 12 or 24-hour setting when Scale opens: a change while it is open, or
-  of the time zone, shows at the next opening. After the system clock is set with Scale open,
-  the time can lag for up to a minute; after a suspend it is updated at the resume.
+- A top panel set to autohide or intellihide is not copied: Scale shows the clock band
+  instead, since Cinnamon may hide that panel and the copy would be an empty band.
+- The panel's place is read when Scale opens: a panel moved or resized while it is open
+  keeps the old place until the next opening. The copy shows the panel as it was drawn, a
+  hover highlight included if the pointer was on an applet when Scale opened; the applets'
+  menus cannot be opened from it.
 
 ## How it is built
 
 Design records: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../documentation/plans/2026-11-11-cinnamon-scale-overview.md),
 then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../documentation/plans/2026-11-12-cinnamon-scale-second-screen.md) for several screens,
 then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/plans/2026-11-12-cinnamon-scale-dock.md) for the dock,
-then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time.
+then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time, then the top panel,
+then [`documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md`](../documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md) for entering a workspace.
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
@@ -187,7 +195,7 @@ Private fields and methods read, called or written:
 
 | Object | Members | Used for |
 |---|---|---|
-| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the clock, the header and the dock are inserted, close animation in progress |
+| `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the panel's click blocker, the header and the dock are inserted, close animation in progress |
 | `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written) | reach each workspace, hide the windows during a search |
 | `Workspace` | `_monitors` | the per-monitor objects, one per screen |
 | `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
@@ -199,6 +207,8 @@ Private fields and methods read, called or written:
 | `imports.ui.dnd` | a monitor's `dragDrop(event)` with `event.targetActor`, returning `DragDropResult.CONTINUE` | clearing the highlights of the targets that do not take a drop |
 | `Main` | `modalCount` | is Scale the only modal |
 | `Main.AppletManager` | `getRunningInstancesForUuid('grouped-window-list@cinnamon.org')` | the panel's window list applet |
+| `Main.panelManager` | `getPanelsInMonitor(primaryIndex)`, each panel's `actor` and `isHideable()` | the top panel copied in Scale, never an autohide one |
+| `Main.AppletManager` | `getRunningInstancesForUuid('calendar@bgi')`, then `('calendar@cinnamon.org')`, the applet's `actor` | the clock of the fallback band |
 | grouped window list applet | `settings` (its `AppletSettings`), key `pinned-apps` | the pinned apps of the dock |
 
 Assumptions about behaviour:
@@ -221,8 +231,15 @@ Assumptions about behaviour:
 - `Main.activateWindow` does not close Scale when it has to switch workspace, so the dock
   switches to the window's workspace first, then activates it.
 - `Cinnamon.AppSystem`'s `app-state-changed` signal drives the dock's live update.
-- logind emits `org.freedesktop.login1.Manager.PrepareForSleep(false)` on the system bus at
-  each resume: the clock subscribes to it while Scale is open.
+- Scale hides the panels (`Main.panelManager.disablePanels()` in `Overview._animateVisible`:
+  each panel eases to opacity 0 in 0.2 s, then `actor.hide()`), and gives them back as it
+  starts to close (`enablePanels()`: `actor.show()`, then an ease to 255 in 0.2 s), while
+  Scale's group fades out in 0.2 s. The panels are stacked above `global.overlay_group`.
+- A `Clutter.Clone` paints its source with the clone's own opacity, whatever the source's
+  opacity, and still paints a hidden source: the panel's copy stays whole while the panel
+  fades. It is in `global.overlay_group` above Scale's group, so it does not fade with the
+  group. After Scale closes, it stays until the panel's `notify::opacity` reports 255, or
+  1 s at most.
 - `extension.sh reload` calls the D-Bus method `org.Cinnamon.ReloadXlet(uuid, "EXTENSION")`.
 
 ## Quick Settings: what it does
@@ -396,7 +413,7 @@ scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
-scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, clock row, on fakes
+scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, panel copy, thumbnail click, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, tick clock, day marker, stylesheet rules
 ```

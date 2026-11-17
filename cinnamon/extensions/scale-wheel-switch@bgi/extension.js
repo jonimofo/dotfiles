@@ -9,7 +9,7 @@ const WindowClick = require('./windowClick');
 const SuperKey = require('./superKey');
 const AppSearch = require('./appSearch');
 const AppDock = require('./appDock');
-const OverviewClock = require('./overviewClock');
+const TopRow = require('./topRow');
 const HotCornerFullscreen = require('./hotCornerFullscreen');
 const UiHelpers = require('./uiHelpers');
 
@@ -22,7 +22,7 @@ let scrollId = 0;
 let overviewSignalIds = [];
 // One workspace strip per monitor while Scale is open.
 let strips = [];
-let clock = null;
+let topRow = null;
 let search = null;
 let dock = null;
 let lastSwitchTime = 0;
@@ -78,22 +78,24 @@ function onCapturedEvent(actor, event) {
     return Clutter.EVENT_STOP;
 }
 
-// Primary monitor, top to bottom: clock, search field, workspace strip, Scale's windows, dock.
+// Primary monitor, top to bottom: the top row (panel copy or clock band), search field, workspace strip, Scale's windows, dock.
 // Every other monitor: its workspace strip, then Scale's windows, which take no click while
 // the search has text.
 // Built from the monitor list and the pinned apps at each opening: both may change while
 // Scale is closed.
 function showHeader() {
-    if (clock || search || dock || strips.length > 0)
+    if (topRow || search || dock || strips.length > 0)
         return;
 
     try {
-        clock = new OverviewClock.OverviewClock();
-        const clockHeight = clock.getHeight();
-        search = new AppSearch.AppSearch(clockHeight);
+        // Scale opened again while the last copy waits for the panel's fade-in.
+        TopRow.destroyReleasedCopies();
+        topRow = TopRow.createTopRow();
+        const topRowHeight = topRow ? topRow.getHeight() : 0;
+        search = new AppSearch.AppSearch(topRowHeight);
         showDock();
         const primaryIndex = Main.layoutManager.primaryIndex;
-        const primaryTopOffset = clockHeight + search.getHeight();
+        const primaryTopOffset = topRowHeight + search.getHeight();
         Main.layoutManager.monitors.forEach((monitor, index) => {
             const isPrimary = index === primaryIndex;
             const topOffset = isPrimary ? primaryTopOffset : 0;
@@ -120,9 +122,9 @@ function showDock() {
 
 // Each part is torn down on its own: some may exist without the others after a failure.
 function hideHeader() {
-    if (clock) {
-        clock.destroy();
-        clock = null;
+    if (topRow) {
+        topRow.release();
+        topRow = null;
     }
     if (search) {
         search.destroy();
@@ -182,6 +184,7 @@ function disable() {
         Main.overview.disconnect(id);
     overviewSignalIds = [];
     hideHeader();
+    TopRow.destroyReleasedCopies();
     AppSearch.disable();
     MonitorDrop.disable();
     WindowDrag.disable();

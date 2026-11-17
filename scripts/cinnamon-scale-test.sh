@@ -2,13 +2,12 @@
 # Logic tests of the scale-wheel-switch@bgi Scale overview: the search blocks clicks on the
 # other screens, a middle click on a window does nothing, drop highlights are cleared after
 # a fast drop, dock icon size at 2x display scaling, no bar left after a failing constructor,
-# the fit-to-width rule, and the clock row's text, compared with the calendar@bgi applet's
-# header date. Runs on fake actors and a fake overview, no running Cinnamon is touched.
+# the fit-to-width rule, the top panel's copy (its place, the fallbacks, its lifecycle),
+# and a thumbnail click that enters its workspace and closes Scale. Runs on fake actors and
+# a fake overview, no running Cinnamon is touched.
 # Usage: scripts/cinnamon-scale-test.sh (from any directory). Needs gjs.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 extension_dir="$script_dir/../cinnamon/extensions/scale-wheel-switch@bgi"
-calendar_dir="$script_dir/../cinnamon/applets/calendar@bgi"
-
-gjs "$script_dir/cinnamon-scale-test.js" "$extension_dir" "$calendar_dir"
+gjs "$script_dir/cinnamon-scale-test.js" "$extension_dir"

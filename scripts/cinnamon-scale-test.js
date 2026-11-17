@@ -1,11 +1,11 @@
 // Logic tests of scale-wheel-switch@bgi (Scale overview), run by cinnamon-scale-test.sh.
 // Cinnamon's actors, Scale's overview and its window clones are fakes: no running Cinnamon
 // is touched. Each block is a regression test of a fixed bug.
-// Usage: gjs cinnamon-scale-test.js <extension folder> <calendar@bgi applet folder>
+// Usage: gjs cinnamon-scale-test.js <extension folder>
 const GLib = imports.gi.GLib;
 const ByteArray = imports.byteArray;
 
-const [extensionDir, calendarDir] = ARGV;
+const [extensionDir] = ARGV;
 let failures = 0;
 
 function check(label, condition) {
@@ -80,6 +80,28 @@ class FakeActor extends FakeSignals {
 
     set_text(text) {
         this.text = text;
+    }
+
+    set_height(height) {
+        this.height = height;
+        this.naturalHeight = height;
+    }
+
+    set_child(child) {
+        this.child = child;
+        this.add_actor(child);
+    }
+
+    add_style_class_name(name) {
+        this.style_classes = [...(this.style_classes || []), name];
+    }
+
+    get_transformed_position() {
+        return [this.x, this.y];
+    }
+
+    get_transformed_size() {
+        return [this.width, this.height];
     }
 
     add_actor(child) {
@@ -159,6 +181,9 @@ class FakeActor extends FakeSignals {
 // Only Clutter.Actor makes this kind: the search's click blockers.
 class FakeClutterActor extends FakeActor {}
 
+// Clutter.Clone: the overview's copy of the top panel, or of the panel clock in the band.
+class FakeClone extends FakeActor {}
+
 class FakeEntry extends FakeActor {
     constructor(props) {
         super(props);
@@ -201,7 +226,10 @@ function makeImports(monitorCount, primaryIndex) {
         KEY_Down: 0xff54,
         ModifierType: { CONTROL_MASK: 1 << 2, MOD1_MASK: 1 << 3, MOD4_MASK: 1 << 6, SUPER_MASK: 1 << 26 },
         ActorAlign: { CENTER: 1, END: 2 },
-        ScrollDirection: {},
+        ScrollDirection: { UP: 0, DOWN: 1, LEFT: 2, RIGHT: 3, SMOOTH: 4 },
+        EventType: { SCROLL: 1 },
+        BinLayout: class {},
+        Clone: FakeClone,
     };
     const themeContext = { scale_factor: 1 };
     const St = {
@@ -220,46 +248,20 @@ function makeImports(monitorCount, primaryIndex) {
         get_event_state: () => 0,
     };
 
-    // The clock's time source and timers: the time is set by the test, timers fire on demand.
-    const clockState = {
-        now: GLib.DateTime.new_local(2026, 11, 17, 9, 22, 5),
-        use24h: true,
-        timers: new Map(),
-        nextTimerId: 1,
-        // System bus signal subscriptions: id -> {member, callback}.
-        subscriptions: new Map(),
-        nextSubscriptionId: 1,
-    };
-    const FakeGLib = { DateTime: { new_now_local: () => clockState.now } };
-    const Gio = {
-        Settings: class {
-            get_boolean(key) {
-                return key === 'clock-use-24h' && clockState.use24h;
-            }
-        },
-        DBusSignalFlags: { NONE: 0 },
-        DBus: {
-            system: {
-                signal_subscribe(sender, iface, member, path, arg0, flags, callback) {
-                    const id = clockState.nextSubscriptionId++;
-                    clockState.subscriptions.set(id, { sender, iface, member, path, callback });
-                    return id;
-                },
-                signal_unsubscribe(id) {
-                    if (!clockState.subscriptions.delete(id))
-                        throw new Error(`No subscription ${id}`);
-                },
-            },
-        },
-    };
+    // Main loop timeouts: recorded, fired by the test.
+    const timers = new Map();
+    let nextTimerId = 1;
     const Mainloop = {
         timeout_add(delay, callback) {
-            const id = clockState.nextTimerId++;
-            clockState.timers.set(id, { delay, callback });
+            const id = nextTimerId++;
+            timers.set(id, { delay, callback: () => {
+                timers.delete(id);
+                return callback();
+            } });
             return id;
         },
         source_remove(id) {
-            if (!clockState.timers.delete(id))
+            if (!timers.delete(id))
                 throw new Error(`No source ${id}`);
         },
     };
@@ -280,12 +282,24 @@ function makeImports(monitorCount, primaryIndex) {
     overview._group.add_actor(overview._coverPane);
     // Scale's view, multi-screen, in the group of its windows.
     globalThis.global.overlay_group = new FakeActor();
+    globalThis.global.overlay_group.add_actor(overview._group);
     globalThis.global.overlay_group.add_actor(overview.workspacesView.actor);
 
     const Main = {
         layoutManager: { monitors, primaryIndex, primaryMonitor: monitors[primaryIndex] },
         overview,
         modalCount: 0,
+        getWorkspaceName: index => `Workspace ${index + 1}`,
+        // The panels: the top one is copied in Scale.
+        panelManager: { panels: [], getPanelsInMonitor: index => Main.panelManager.panels.filter(panel => panel.monitorIndex === index) },
+        // Running applets by uuid: the panel clock of the fallback band.
+        AppletManager: { instances: {}, getRunningInstancesForUuid: uuid => Main.AppletManager.instances[uuid] || [] },
+    };
+    // Scale closing: counted, and visible drops as Cinnamon's hide() does.
+    overview.hideCalls = 0;
+    overview.hide = () => {
+        overview.hideCalls++;
+        overview.visible = false;
     };
 
     // Scale's own handlers, which the extension wraps; each records its calls.
@@ -304,11 +318,21 @@ function makeImports(monitorCount, primaryIndex) {
 
     return {
         imports: {
-            gi: { Clutter, St, CMenu, Cinnamon, Gio, GLib: FakeGLib, Meta: { MotionDirection: {} } },
-            ui: { main: Main, workspace: { Workspace, WindowClone }, workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 } },
+            gi: {
+                Clutter, St, CMenu, Cinnamon,
+                // Wayland: the thumbnails skip their X11 wallpaper.
+                Meta: { MotionDirection: { LEFT: 'left', RIGHT: 'right' }, is_wayland_compositor: () => true },
+            },
+            ui: {
+                main: Main,
+                workspace: { Workspace, WindowClone },
+                workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 },
+                dnd: { DragMotionResult: { CONTINUE: 0, MOVE_DROP: 1 } },
+            },
+            misc: { signalManager: { SignalManager: class {} }, windowUtils: {} },
             mainloop: Mainloop,
         },
-        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, clockState, strips: [],
+        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, strips: [], timers,
     };
 }
 
@@ -613,79 +637,6 @@ function testFittingItemWidth() {
     check('#29 fit: a row with no room left keeps items of the minimum width', getFittingItemWidth(1000, 10, 4, 200) === 1);
 }
 
-const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-// Four years, one of them leap.
-const DAYS_2024_TO_2027 = 4 * 365 + 1;
-// Months whose full name is no longer than its abbreviation.
-const SHORT_MONTH_NAMES = [5];
-
-// The clock row: date as the calendar applet's header, local time after the 24h setting.
-function testClockText() {
-    const clockText = makeRequire({})('./clockText');
-    const at = (year, month, day, hour = 0, minute = 0) =>
-        clockText.clockPartsOf(GLib.DateTime.new_local(year, month, day, hour, minute, 0));
-
-    const owner = clockText.formatClock(at(2026, 11, 17, 9, 22), true);
-    print(`  2026-11-17 09:22 gives "${owner}"`);
-    check('clock: 2026-11-17 09:22 in 24h reads "Tue 17 Nov. 2026   ·   09:22"',
-        owner === 'Tue 17 Nov. 2026   ·   09:22');
-
-    const dotted = ALL_MONTHS.every(month => {
-        const date = clockText.formatDate(at(2026, month, 1));
-        const shortName = SHORT_MONTH_NAMES.includes(month);
-        return date.split(' ')[2].endsWith('.') === !shortName;
-    });
-    check('clock: a dot after every month but May, whose name has three letters', dotted);
-    check('clock: "May" keeps its name without a dot', clockText.formatDate(at(2026, 5, 4)) === 'Mon 4 May 2026');
-    check('clock: "Jun" and "Jul" take a dot (June, July are longer)',
-        clockText.formatDate(at(2026, 6, 1)) === 'Mon 1 Jun. 2026' && clockText.formatDate(at(2026, 7, 1)) === 'Wed 1 Jul. 2026');
-    check('clock: a single-digit day is not padded', clockText.formatDate(at(2026, 11, 3)) === 'Tue 3 Nov. 2026');
-    check('clock: the year changes at midnight on 31 December',
-        clockText.formatDate(at(2026, 12, 31, 23, 59)) === 'Thu 31 Dec. 2026' &&
-        clockText.formatDate(at(2027, 1, 1, 0, 0)) === 'Fri 1 Jan. 2027');
-    const week = [15, 16, 17, 18, 19, 20, 21].map(day => clockText.formatDate(at(2026, 11, day)).split(' ')[0]);
-    check('clock: each weekday, Sunday 15 to Saturday 21 Nov. 2026', week.join() === 'Sun,Mon,Tue,Wed,Thu,Fri,Sat');
-
-    check('clock: 24h pads the hour', clockText.formatTime(at(2026, 11, 17, 9, 5), true) === '09:05');
-    check('clock: 24h at midnight and 23:59',
-        clockText.formatTime(at(2026, 11, 17, 0, 0), true) === '00:00' &&
-        clockText.formatTime(at(2026, 11, 17, 23, 59), true) === '23:59');
-    check('clock: 12h morning', clockText.formatTime(at(2026, 11, 17, 9, 22), false) === '9:22 AM');
-    check('clock: 12h midnight is 12 AM, noon is 12 PM',
-        clockText.formatTime(at(2026, 11, 17, 0, 7), false) === '12:07 AM' &&
-        clockText.formatTime(at(2026, 11, 17, 12, 7), false) === '12:07 PM');
-    check('clock: 12h afternoon', clockText.formatTime(at(2026, 11, 17, 21, 40), false) === '9:40 PM');
-    check('clock: 12h row text', clockText.formatClock(at(2026, 11, 17, 21, 40), false) === 'Tue 17 Nov. 2026   ·   9:40 PM');
-
-    check('clock: next minute from 0 s is 60 s away', clockText.msUntilNextMinute(0, 0) === 60000);
-    check('clock: next minute from 59.5 s is 500 ms away', clockText.msUntilNextMinute(59, 500000) === 500);
-    check('clock: next minute from the last microsecond is 1 ms away, never 0', clockText.msUntilNextMinute(59, 999999) === 1);
-}
-
-// The row's date must stay the calendar@bgi header date: compared over every day of 2024
-// (leap year) to 2027.
-function testClockMatchesCalendar() {
-    const clockText = makeRequire({})('./clockText');
-    const dateText = makeRequire({}, {}, calendarDir)('./dateText');
-    const mismatches = [];
-    let day = GLib.DateTime.new_local(2024, 1, 1, 12, 0, 0);
-    const end = GLib.DateTime.new_local(2028, 1, 1, 12, 0, 0);
-    let count = 0;
-    while (day.compare(end) < 0) {
-        const ours = clockText.formatDate(clockText.clockPartsOf(day));
-        const calendar = dateText.headerDateOf(day);
-        if (ours !== calendar)
-            mismatches.push(`${ours} != ${calendar}`);
-        count++;
-        day = day.add_days(1);
-    }
-    print(`  ${count} days compared, first: "${dateText.headerDateOf(GLib.DateTime.new_local(2026, 11, 17, 9, 22, 0))}"`);
-    for (const mismatch of mismatches.slice(0, 3))
-        print(`  mismatch: ${mismatch}`);
-    check('clock: same date as the calendar applet\'s header on every day of 2024 to 2027',
-        count === DAYS_2024_TO_2027 && mismatches.length === 0);
-}
-
 function clockBarsOf(env) {
     return env.Main.overview._group.children.filter(actor => actor.style_class === 'scale-clock-bar');
 }
@@ -694,129 +645,287 @@ function searchBarOf(env) {
     return env.Main.overview._group.children.find(actor => actor.style_class === 'scale-search-bar');
 }
 
-// logind's PrepareForSleep(@isSuspending) on the system bus.
-function sendPrepareForSleep(env, isSuspending) {
-    const parameters = { deep_unpack: () => [isSuspending] };
-    for (const { callback } of [...env.clockState.subscriptions.values()])
-        callback(null, ':1.1', '/org/freedesktop/login1', 'org.freedesktop.login1.Manager', 'PrepareForSleep', parameters);
-}
-
 function closeScale(env) {
     env.Main.overview.visible = false;
     env.Main.overview.emit('hidden');
 }
 
-// Fires the only pending clock timer at @now, as the main loop would.
-function fireClockTimer(env, now) {
-    const [[id, timer]] = [...env.clockState.timers];
-    env.clockState.timers.delete(id);
-    env.clockState.now = now;
-    return timer.callback();
+// The owner's top panel on a 1920x1080 primary screen, 40 px high.
+const TOP_PANEL = { x: 0, y: 0, width: 1920, height: 40 };
+const BOTTOM_PANEL = { x: 0, y: 1040, width: 1920, height: 40 };
+
+// A panel of Main.panelManager, its actor at @box; @isHideable for autohide or intellihide.
+function fakePanel(box, monitorIndex = 0, isHideable = false) {
+    return { monitorIndex, actor: new FakeActor(box), isHideable: () => isHideable };
 }
 
-// The clock row: above the search on the primary screen, right at opening, updated at each
-// minute change, no timer left once Scale is closed or the extension disabled.
-function testClockRow() {
-    // Two screens, the second one primary.
-    const env = setUp(2, 1);
+// The copy of the panel above Scale's group, if any.
+function panelCopiesOf(env) {
+    return global.overlay_group.children.filter(actor => actor instanceof env.Clutter.Clone);
+}
+
+// The real panel fading back in after Scale closed: @steps opacities, each notified.
+function fadePanelIn(panel, steps) {
+    for (const opacity of steps) {
+        panel.actor.opacity = opacity;
+        panel.actor.emit('notify::opacity');
+    }
+}
+
+// Which panel is copied: the one on the primary screen's top edge, despite float noise.
+function testPanelChoice() {
+    const env = setUp();
+    const { isOnTopEdge, findTopPanel, isPanelShown, boxOf } = env.require('./topRow');
+    const monitor = env.monitors[0];
+
+    check('panel: a panel on the top edge is copied', isOnTopEdge(TOP_PANEL, monitor));
+    const noisy = boxOf(new FakeActor({ x: 0.00011444091796875, y: 0.0001220703125, width: 1919.999755859375,
+        height: 29.9998779296875 }));
+    print(`  live panel box snapped: ${JSON.stringify(noisy)}`);
+    check('panel: float noise in the stage coordinates still counts as the top edge (live panel at y 0.000122)',
+        isOnTopEdge(noisy, monitor) && noisy.height === 30);
+    check('panel: a bottom panel is not on the top edge', !isOnTopEdge(BOTTOM_PANEL, monitor));
+    check('panel: a panel hidden by autohide (moved above the screen) is not on the top edge',
+        !isOnTopEdge({ ...TOP_PANEL, y: -40 }, monitor));
+    check('panel: a top panel of the screen right of the primary is not on its top edge',
+        !isOnTopEdge({ ...TOP_PANEL, x: 1920 }, monitor));
+    const bottom = { box: BOTTOM_PANEL };
+    const top = { box: TOP_PANEL };
+    check('panel: the top panel is chosen among the primary screen\'s panels', findTopPanel([bottom, top], monitor) === top);
+    check('panel: no top panel, none chosen', findTopPanel([bottom], monitor) === null);
+    check('panel: an autohide top panel is not copied (it would turn into an empty band)',
+        findTopPanel([{ box: TOP_PANEL, isHideable: true }], monitor) === null);
+
+    check('panel: shown only when visible at full opacity',
+        isPanelShown({ visible: true, opacity: 255 }) && !isPanelShown({ visible: true, opacity: 254 }) &&
+        !isPanelShown({ visible: false, opacity: 255 }));
+}
+
+// The copy of the top panel: at its pixels from the opening; after closing, kept until the
+// real panel is fully back; removed in every other exit path.
+function testPanelCopy() {
+    const env = setUp(2, 0);
     const extension = env.loadExtension();
     extension.enable();
-    check('clock: no row and no timer before Scale opens', clockBarsOf(env).length === 0 && env.clockState.timers.size === 0);
+    const panel = fakePanel(TOP_PANEL);
+    const otherScreenPanel = fakePanel({ ...TOP_PANEL, x: 1920 }, 1);
+    env.Main.panelManager.panels = [panel, otherScreenPanel];
 
     openScale(env);
-    const bars = clockBarsOf(env);
-    const bar = bars[0];
-    const label = bar && bar.child;
-    const primary = env.monitors[1];
-    print(`  row text at 2026-11-17 09:22:05: "${label && label.text}"`);
-    check('clock: one row, on the primary screen only', bars.length === 1 && bar.x === primary.x && bar.y === primary.y &&
-        bar.width === primary.width);
-    check('clock: the row reads "Tue 17 Nov. 2026   ·   09:22" at opening', label.text === 'Tue 17 Nov. 2026   ·   09:22');
-    check('clock: the row is below the cover pane, like the search field',
-        env.Main.overview._group.children.indexOf(bar) < env.Main.overview._group.children.indexOf(env.Main.overview._coverPane));
-    const search = searchBarOf(env);
-    check('clock: the search field starts under the row', search.y === primary.y + NATURAL_HEIGHTS['scale-clock-bar']);
-    const primaryStrip = env.strips.find(strip => strip.index === 1);
-    const otherStrip = env.strips.find(strip => strip.index === 0);
-    check('clock: the primary strip starts under the row and the search field',
-        primaryStrip.topOffset === NATURAL_HEIGHTS['scale-clock-bar'] + NATURAL_HEIGHTS['scale-search-bar']);
-    check('clock: the other screen keeps its strip at the very top', otherStrip.topOffset === 0);
-    check('clock: a click on the row is swallowed and does nothing',
-        bar.emit('button-press-event', buttonEvent(BUTTON.PRIMARY)) === true &&
-        bar.emit('button-release-event', buttonEvent(BUTTON.PRIMARY)) === true);
-    check('clock: no key focus on the row', !bar.can_focus && !label.can_focus);
-
+    let [copy] = panelCopiesOf(env);
+    check('copy: one live clone of the primary screen\'s top panel', panelCopiesOf(env).length === 1 && copy.source === panel.actor);
+    check('copy: at the panel\'s place and size', copy.x === 0 && copy.y === 0 && copy.width === 1920 && copy.height === 40);
+    check('copy: above Scale\'s group, at its own full opacity',
+        global.overlay_group.children.indexOf(copy) > global.overlay_group.children.indexOf(env.Main.overview._group) &&
+        copy.opacity === 255);
+    check('copy: no clock band', clockBarsOf(env).length === 0);
+    const blocker = env.Main.overview._group.children.find(actor => actor.reactive && actor.height === 40);
+    check('copy: the copy takes no click; a blocker as high as the panel swallows them',
+        !copy.reactive && blocker && blocker.emit('button-press-event', buttonEvent(BUTTON.PRIMARY)) === true &&
+        blocker.emit('button-release-event', buttonEvent(BUTTON.PRIMARY)) === true);
+    check('copy: the search field starts under the panel', searchBarOf(env).y === 40);
+    check('copy: the primary strip follows the panel and the search',
+        env.strips.find(strip => strip.index === 0).topOffset === 40 + NATURAL_HEIGHTS['scale-search-bar']);
     typeKey(env, keyEvent('f'));
-    check('clock: typing still goes to the search', search.child.get_text() === 'f');
+    check('copy: typing still searches', searchBarOf(env).child.get_text() === 'f');
     typeKey(env, keyEvent(null, ESCAPE_KEY));
 
-    const [timer] = [...env.clockState.timers.values()];
-    check('clock: one timer, due at the next minute (55 s after 09:22:05)',
-        env.clockState.timers.size === 1 && timer.delay === 55000);
-    const keepsGoing = fireClockTimer(env, GLib.DateTime.new_local(2026, 11, 17, 9, 23, 0));
-    check('clock: the minute change updates the row', label.text === 'Tue 17 Nov. 2026   ·   09:23');
-    check('clock: the fired timer ends and a new one waits for the next minute',
-        keepsGoing === false && env.clockState.timers.size === 1 && [...env.clockState.timers.values()][0].delay === 60000);
-    fireClockTimer(env, GLib.DateTime.new_local(2027, 1, 1, 0, 0, 0));
-    check('clock: midnight on 31 December changes the date and the year', label.text === 'Fri 1 Jan. 2027   ·   00:00');
-
-    const [subscription] = [...env.clockState.subscriptions.values()];
-    check('clock: one subscription to logind\'s PrepareForSleep while Scale is open',
-        env.clockState.subscriptions.size === 1 && subscription.sender === 'org.freedesktop.login1' &&
-        subscription.iface === 'org.freedesktop.login1.Manager' && subscription.member === 'PrepareForSleep' &&
-        subscription.path === '/org/freedesktop/login1');
-    const timerBeforeSleep = [...env.clockState.timers.keys()][0];
-    sendPrepareForSleep(env, true);
-    check('clock: going to sleep changes nothing', label.text === 'Fri 1 Jan. 2027   ·   00:00' &&
-        [...env.clockState.timers.keys()].join() === `${timerBeforeSleep}`);
-    env.clockState.now = GLib.DateTime.new_local(2027, 1, 1, 7, 45, 30);
-    sendPrepareForSleep(env, false);
-    check('clock: the resume shows the current minute at once', label.text === 'Fri 1 Jan. 2027   ·   07:45');
-    check('clock: the resume replaces the timer by one due at the next minute',
-        env.clockState.timers.size === 1 && !env.clockState.timers.has(timerBeforeSleep) &&
-        [...env.clockState.timers.values()][0].delay === 30000);
-
+    // Scale closes: the real panel starts its fade-in from 0.
+    panel.actor.opacity = 0;
     closeScale(env);
-    check('clock: closing Scale removes the row, its timer and its subscription', bar.destroyed &&
-        clockBarsOf(env).length === 0 && env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
+    check('copy: Scale closed with the panel still fading in: the copy stays', !copy.destroyed &&
+        panelCopiesOf(env).length === 1 && blocker.destroyed);
+    check('copy: one safety timer while it waits', env.timers.size === 1 && [...env.timers.values()][0].delay === 1000);
+    fadePanelIn(panel, [120, 254]);
+    check('copy: still there while the panel is not fully opaque', !copy.destroyed);
+    fadePanelIn(panel, [255]);
+    check('copy: removed once the real panel is fully back, with its timer', copy.destroyed &&
+        panelCopiesOf(env).length === 0 && env.timers.size === 0);
+    check('copy: no opacity handler is left on the panel once the copy is gone',
+        ![...panel.actor._handlers.values()].some(handler => handler.name === 'notify::opacity'));
 
-    env.clockState.use24h = false;
-    env.clockState.now = GLib.DateTime.new_local(2026, 11, 17, 21, 40, 0);
     openScale(env);
-    check('clock: the 12-hour setting is read at opening', clockBarsOf(env)[0].child.text === 'Tue 17 Nov. 2026   ·   9:40 PM');
-    const reopened = clockBarsOf(env)[0];
+    copy = panelCopiesOf(env)[0];
+    closeScale(env);
+    check('copy: closing with the panel already opaque removes the copy at once', copy.destroyed && env.timers.size === 0);
+
+    panel.actor.opacity = 0;
+    openScale(env);
+    copy = panelCopiesOf(env)[0];
+    closeScale(env);
+    const [timer] = [...env.timers.values()];
+    timer.callback();
+    check('copy: the safety timer removes a copy whose panel never comes back', copy.destroyed &&
+        panelCopiesOf(env).length === 0);
+
+    openScale(env);
+    const first = panelCopiesOf(env)[0];
+    closeScale(env);
+    closeScale(env);
+    check('copy: Scale closed twice keeps one waiting copy', panelCopiesOf(env).length === 1 && env.timers.size === 1);
+    openScale(env);
+    check('copy: Scale opened again during the fade-in replaces the waiting copy',
+        first.destroyed && panelCopiesOf(env).length === 1 && env.timers.size === 0);
+    closeScale(env);
     extension.disable();
-    check('clock: disable() with Scale open removes the row, its timer and its subscription', reopened.destroyed &&
-        env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
+    check('copy: disable() during the fade-in removes the copy and its timer',
+        panelCopiesOf(env).length === 0 && env.timers.size === 0);
+
+    extension.enable();
+    openScale(env);
+    copy = panelCopiesOf(env)[0];
+    extension.disable();
+    check('copy: disable() with Scale open removes the copy', copy.destroyed && panelCopiesOf(env).length === 0 &&
+        env.timers.size === 0);
 }
 
-// Audit L5: a clock that fails while being put on screen leaves no row, no timer and no
-// subscription.
-function testClockConstructorFailure() {
+// No top panel on the primary screen: the panel clock centred in a band; no clock: nothing.
+function testPanelFallbacks() {
     const env = setUp();
-    const overviewClock = env.require('./overviewClock');
-    env.Main.overview._group.insert_child_below = () => {
-        throw new Error('build failed');
-    };
-    const created = [];
-    const OriginalBin = env.imports.gi.St.Bin;
-    env.imports.gi.St.Bin = class extends OriginalBin {
-        constructor(props) {
-            super(props);
-            created.push(this);
-        }
-    };
-    check('clock L5: a failing clock constructor throws', throws(() => new overviewClock.OverviewClock()));
-    check('clock L5: it leaves no row', created.length === 1 && created[0].destroyed);
-    check('clock L5: it leaves no timer and no subscription',
-        env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
-    env.imports.gi.St.Bin = OriginalBin;
+    const extension = env.loadExtension();
+    extension.enable();
+    env.Main.panelManager.panels = [fakePanel(BOTTOM_PANEL)];
+    const clockActor = new FakeActor({ x: 830, y: 1046, width: 259, height: 28 });
+    env.Main.AppletManager.instances['calendar@cinnamon.org'] = [{ actor: clockActor }];
+
+    openScale(env);
+    const [band] = clockBarsOf(env);
+    check('fallback: a bottom panel: its clock copied centred in a band (stock calendar used)',
+        band && band.child instanceof env.Clutter.Clone && band.child.source === clockActor &&
+        band.child.x_align === env.Clutter.ActorAlign.CENTER);
+    check('fallback: no copy above Scale\'s group', panelCopiesOf(env).length === 0);
+    check('fallback: the search field starts under the band', searchBarOf(env).y === NATURAL_HEIGHTS['scale-clock-bar']);
+    closeScale(env);
+    check('fallback: closing Scale removes the band and its copy at once', band.destroyed && env.timers.size === 0);
+
+    env.Main.panelManager.panels = [fakePanel(TOP_PANEL, 0, true)];
+    openScale(env);
+    const [autohideBand] = clockBarsOf(env);
+    check('fallback: an autohide top panel: the clock band, no panel copy',
+        autohideBand && autohideBand.child.source === clockActor && panelCopiesOf(env).length === 0);
+    closeScale(env);
+
+    env.Main.AppletManager.instances = {};
+    openScale(env);
+    check('fallback: no top panel and no clock: nothing, the search field at the top',
+        clockBarsOf(env).length === 0 && panelCopiesOf(env).length === 0 && searchBarOf(env).y === 0);
+    extension.disable();
 }
 
-testClockText();
-testClockMatchesCalendar();
-testClockRow();
-testClockConstructorFailure();
+// Workspaces 1 to @count, the first one active. activate() records itself and makes the
+// workspace the active one, as muffin does.
+function setUpWorkspaces(count) {
+    const activations = [];
+    const workspaces = [];
+    const manager = {
+        active: null,
+        n_workspaces: count,
+        get_active_workspace: () => manager.active,
+        get_workspace_by_index: index => workspaces[index],
+    };
+    for (let i = 0; i < count; i++) {
+        const workspace = {
+            index: () => i,
+            activate() {
+                activations.push(i);
+                manager.active = workspace;
+            },
+            get_neighbor: direction => workspaces[Math.max(0, Math.min(count - 1, i + (direction === 'right' ? 1 : -1)))],
+        };
+        workspaces.push(workspace);
+    }
+    manager.active = workspaces[0];
+    global.workspace_manager = manager;
+    global.get_current_time = () => 0;
+    global.get_window_actors = () => [];
+    return { workspaces, activations, manager };
+}
+
+function clickActor(actor, button = BUTTON.PRIMARY) {
+    actor.emit('button-press-event', buttonEvent(button));
+    actor.emit('button-release-event', buttonEvent(button));
+}
+
+// Owner's choice "One click enters, always", "Everywhere": a click on a thumbnail of any
+// strip enters that workspace and closes Scale; on the current one it only closes Scale.
+function testThumbnailClickEntersWorkspace() {
+    const env = setUp(2, 0);
+    const { workspaces, activations, manager } = setUpWorkspaces(4);
+    const strip = env.require('./workspaceStrip');
+    env.Main.overview.visible = true;
+    const thumbnail = (workspaceIndex, monitorIndex) =>
+        new strip.WorkspaceThumbnail(workspaces[workspaceIndex], env.monitors[monitorIndex], monitorIndex, 0.12);
+
+    // Scale's closing animation zooms the windows of the active workspace: it must already be
+    // the clicked one when hide() runs.
+    let activeAtHide = null;
+    const countHide = env.Main.overview.hide;
+    env.Main.overview.hide = () => {
+        activeAtHide = manager.active;
+        countHide();
+    };
+    clickActor(thumbnail(2, 0).actor);
+    check('enter: the workspace is switched before Scale closes', activeAtHide === workspaces[2]);
+    check('enter: a click on workspace 3 activates it once', activations.join() === '2' && manager.active === workspaces[2]);
+    check('enter: the same click closes Scale once', env.Main.overview.hideCalls === 1);
+
+    env.Main.overview.visible = true;
+    clickActor(thumbnail(2, 0).actor);
+    check('enter: a click on the current workspace does not activate it', activations.join() === '2');
+    check('enter: a click on the current workspace closes Scale', env.Main.overview.hideCalls === 2);
+
+    env.Main.overview.visible = true;
+    clickActor(thumbnail(1, 1).actor);
+    check('enter: a thumbnail of the second screen\'s strip enters too',
+        activations.join() === '2,1' && env.Main.overview.hideCalls === 3);
+
+    env.Main.overview.visible = true;
+    const other = thumbnail(3, 0);
+    clickActor(other.actor, BUTTON.SECONDARY);
+    clickActor(other.actor, BUTTON.MIDDLE);
+    check('enter: right and middle clicks do nothing', activations.join() === '2,1' && env.Main.overview.hideCalls === 3);
+
+    // A drag ends with a release over the thumbnail, without a press on it.
+    other.actor.emit('button-release-event', buttonEvent(BUTTON.PRIMARY));
+    check('enter: a release without a press on the thumbnail (a drop) does not enter',
+        activations.join() === '2,1' && env.Main.overview.hideCalls === 3);
+
+    const draggedWindow = {
+        is_on_all_workspaces: () => false,
+        get_workspace: () => workspaces[0],
+        get_monitor: () => 0,
+        changedTo: null,
+        change_workspace(workspace) {
+            this.changedTo = workspace;
+        },
+        move_to_monitor() {},
+    };
+    const source = Object.assign(new env.WindowClone(), { metaWindow: draggedWindow, _draggable: new FakeSignals() });
+    check('enter: a window dropped on a thumbnail moves there', other.acceptDrop(source) && draggedWindow.changedTo === workspaces[3]);
+    check('enter: the drop does not close Scale or switch workspace',
+        env.Main.overview.hideCalls === 3 && activations.join() === '2,1');
+}
+
+// The wheel keeps switching with Scale open.
+function testWheelKeepsScaleOpen() {
+    const env = setUp();
+    const { workspaces, activations, manager } = setUpWorkspaces(4);
+    const extension = env.loadExtension();
+    extension.enable();
+    openScale(env);
+    env.Main.modalCount = 1;
+    const scroll = { type: () => env.Clutter.EventType.SCROLL, get_scroll_direction: () => env.Clutter.ScrollDirection.DOWN };
+    const stopped = global.stage.emit('captured-event', scroll);
+    check('enter: the wheel switches to the next workspace', stopped && activations.join() === '1' && manager.active === workspaces[1]);
+    check('enter: the wheel does not close Scale', env.Main.overview.hideCalls === 0 && env.Main.overview.visible);
+    extension.disable();
+}
+
+testPanelChoice();
+testPanelCopy();
+testPanelFallbacks();
+testThumbnailClickEntersWorkspace();
+testWheelKeepsScaleOpen();
 testSearchBlocksOtherScreens();
 testMiddleClickDoesNothing();
 testDragHighlightsClearedOnDrop();

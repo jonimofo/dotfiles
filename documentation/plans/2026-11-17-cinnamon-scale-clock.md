@@ -8,7 +8,15 @@ Earlier designs: [`2026-11-11-cinnamon-scale-overview.md`](2026-11-11-cinnamon-s
 [`2026-11-12-cinnamon-scale-dock.md`](2026-11-12-cinnamon-scale-dock.md).
 Install and usage: [`cinnamon/README.md`](../../cinnamon/README.md).
 
+**Current state.** In Scale, `topRow.js` shows a live, non-interactive clone of the primary
+screen's top panel at its exact place, so nothing changes at the top of the screen when Scale
+opens or closes; the copy stays until the real panel is back at full opacity. Without a top
+panel there, the panel clock is cloned, centred in a band; without a clock either, nothing.
+The sections below record each round; the last follow-up describes the code as it is.
+
 ## Goal
+
+_Superseded by "Follow-up: the whole top panel stays"._
 
 In Scale (Super or the hot corner), one centred row above the search field shows the date
 and the local time, bold and large, on the primary screen where the search field is.
@@ -24,6 +32,8 @@ the other screens, a setting, the calendar applet, new dependencies.
 
 ## Validated mockup
 
+_Superseded by "Follow-up: the whole top panel stays"._
+
 ```
 +----------------------------------------------------------+
 |                                                          |
@@ -38,6 +48,8 @@ the other screens, a setting, the calendar applet, new dependencies.
 "32px bold" is a design note, not text of the overview.
 
 ## Decisions
+
+_Superseded by "Follow-up: the whole top panel stays"._
 
 1. Text: `<date>   ·   <time>`. The date is worded as the header of `calendar@bgi`
    (`Tue 17 Nov. 2026`: three-letter weekday, day without padding, three-letter month with a
@@ -64,13 +76,14 @@ the other screens, a setting, the calendar applet, new dependencies.
 
 | File | Change |
 |---|---|
-| `clockText.js` | New. Pure formatter of the row's text, with its English tables |
-| `overviewClock.js` | New. The band, its label and its minute timer |
+| `topRow.js` | New. The top row: the live copy of the top panel, or the fallback clock band (see the last follow-up) |
 | `appSearch.js` | The search bar takes a top offset |
-| `extension.js` | Clock band first on `showing`, torn down on `hidden` and in `disable()` |
-| `stylesheet.css` | `.scale-clock-bar`, `.scale-clock` |
+| `extension.js` | Panel copy first on `showing`, released on `hidden` (kept until the panel is fully back), removed in `disable()` |
+| `stylesheet.css` | `.scale-clock-bar` (fallback band) |
 
-Findings worth keeping:
+Findings worth keeping (first round):
+
+_Superseded by "Follow-up: the whole top panel stays"._
 
 - The band shares the search bar's padding (12px on top, none below), so the gap between the
   time and the field equals the gap between the field and the strip (the strip's 12px top
@@ -83,6 +96,174 @@ Findings worth keeping:
 - The timer is a main loop timeout aligned to the next minute, created at opening and removed
   at closing, rather than a `CinnamonDesktop.WallClock`, which would keep ticking until it is
   garbage collected.
+
+## Follow-up: the panel clock's look
+
+_Superseded by "Follow-up: the whole top panel stays"._
+
+Owner's words: "dernier changement, je veux que en mode overivew, la font de la date et du
+jour soit la meme que en mode normal (taskbar)"
+
+Answer chosen: "Identique à la barre": the row takes the exact size, weight and colour of the
+panel clock, read from the panel at each opening, so it follows a change of the panel's text
+size. The row's text does not change. Look:
+
+```
+Barre des tâches :
+
+   Tue 17 Nov · 11:30 · VN 17:30        16,7 px gras
+
+Overview aujourd'hui :
+
+   Tue 17 Nov. 2026   ·   11:30         24 px gras
+
+Overview après :
+
+   Tue 17 Nov. 2026   ·   11:30         16,7 px gras
+```
+
+Decisions:
+
+1. Source: the label of the running panel clock (`calendar@bgi`, else the stock
+   `calendar@cinnamon.org`), through `Main.AppletManager`. The panel gives no public text size:
+   it writes `font-size: <n>pt` inline on each zone box from `panel-zone-text-sizes`, where `0`
+   means the theme's size, and the theme can set the font, weight and colour on
+   `.applet-label` or on the panel. Only the label's resolved style holds all four.
+2. The row gets an inline style built from that style (`clockFont.js`): family, size in px
+   clamped to 8 to 48, weight rounded to St's 100 steps, colour. Reading the colour this way,
+   rather than adding the stock `applet-label` class to the row, follows themes that colour
+   the panel text on the panel rather than on `.applet-label`.
+3. No clock, no label style yet, any missing part or a failure: no inline style, the
+   `.scale-clock` rule (18pt bold white) applies whole, and the fallback is logged once per
+   session. That rule therefore stays in `stylesheet.css`.
+4. The style is set in the constructor, before the band is put on stage, and `extension.js`
+   reads `clock.getHeight()` after the constructor: the layout gets the height at the panel's
+   size.
+
+## Follow-up: the panel clock itself, at its place
+
+_Superseded by "Follow-up: the whole top panel stays"._
+
+Owner's words, after trying the copied look live: "la date peut elle garder eactement la
+meme possiition que la taskbar ? là ça shift vers le bas et ça fait un petit effet , je veux
+du full neutre"
+
+Answer chosen: "Même position et même texte": the overview row shows exactly the panel's text,
+at the same place to the pixel; at opening the clock does not move and does not change. This
+supersedes the row's own text and the copied style above. Look:
+
+```
+Barre, mode normal :
+
+|        Tue 17 Nov · 11:30 · VN 17:30        |
+
+Overview :
+
+|        Tue 17 Nov · 11:30 · VN 17:30        |   même place, même texte
+|                                              |
+|          [ Type to search...      ]          |
+|     [ws 1]   [ws 2]   [ws 3]   [ws 4]        |
+```
+
+What Scale does to the panel (Cinnamon 6.4): `Overview._animateVisible` calls
+`Main.panelManager.disablePanels()` (`overview.js`); `Panel.disable()` (`panel.js`) eases the
+panel actor to opacity 0 in `AUTOHIDE_ANIMATION_TIME` (0.2 s), then hides it. Scale's group
+fades in over the same time (`ANIMATION_TIME` 0.2 s, `* 0.45` to open).
+`_animateNotVisible` calls `enablePanels()` as it starts to close.
+
+Method: a `Clutter.Clone` of the panel clock applet's `actor`, read at each opening, at the
+actor's stage position and size.
+
+1. The clone is the panel clock: the same pixels, its text, font and colour, and its own
+   updates (minute, second zone), with no code of ours. It takes no input, so no calendar
+   opens; the band under it swallows the clicks.
+2. It goes in `global.overlay_group` above Scale's group, at full opacity, while the group
+   fades in and the panel fades out: the text stays still and steady.
+3. The band behind it is the panel's height, so the search field and the strip sit under the
+   panel's bottom edge, as they did under the row before.
+4. Only for a clock on a panel along the primary screen's top edge. Otherwise (bottom or
+   side panel, another screen, panel hidden by autohide) the clone is centred in a band at the
+   top, with the search bar's padding. Without a running `calendar@bgi` or
+   `calendar@cinnamon.org`, no band.
+
+Dropped:
+
+- Mirroring the text in our own label, with the copied style, at the label's position:
+  exact pixels would need the same font rendering, padding and allocation, and the text to be
+  followed by hand (`notify::text`); the clone gives all of it.
+- Letting the real panel show through Scale: it means patching `disablePanels` or the
+  panel's stacking, and the whole panel, its other applets included, would stay visible and
+  take clicks under Scale's modal grab.
+
+Removed with this change: the row's formatter (`clockText.js`), its copied style
+(`clockFont.js`), the minute timer, the resume subscription to logind, the 12 or 24-hour
+setting read, the `.scale-clock` rule, their tests, and the equality test with the calendar's
+formatter (the row no longer formats a date).
+
+## Follow-up: the whole top panel stays
+
+Owner's words, after the clock's place was confirmed ("nickel"): "nickel, maintenant est il
+possible de supprimer le petit flash violet sur la task bar quand je reviens en mode normal
+depuis le mode oerview??"
+
+Answer chosen: "Toute la barre reste visible": during Scale the whole taskbar stays displayed
+as it is, icons included, as a non-clickable copy; nothing disappears or reappears at the top
+of the screen, at opening or closing. Look:
+
+```
+Mode normal :
+
+| [menu][apps]      Tue 17 Nov · 13:23 · VN 19:23      [tray][bat][vol] |
+
+Overview :
+
+| [menu][apps]      Tue 17 Nov · 13:23 · VN 19:23      [tray][bat][vol] |   identique
+|                    [ Type to search...      ]                        |
+|               [ws 1]   [ws 2]   [ws 3]   [ws 4]                      |
+
+Retour au mode normal : rien ne bouge en haut, aucun flash
+```
+
+Verified sequence (Cinnamon 6.4):
+
+- Opening, `Overview._animateVisible` (`overview.js`): the group is shown at opacity 0,
+  `Main.panelManager.disablePanels()` starts each panel's ease to opacity 0 (`Panel.disable`,
+  `panel.js`, `AUTOHIDE_ANIMATION_TIME` 0.2 s, then `actor.hide()`), the group's tween to 255
+  starts (0.2 s × 0.45), then `showing` is emitted in the same call; `shown` follows the
+  group's tween.
+- Closing, `_animateNotVisible`: `enablePanels()` (`Panel.enable`: `actor.show()`, ease from
+  0 to 255 in 0.2 s), the windows zoom back, the group's tween to 0 (0.2 s) starts, `hiding`
+  is emitted; `_hideDone` hides the group and emits `hidden` when that tween completes.
+- The panels are chrome in `Main.uiGroup`, added after `global.overlay_group`, so above
+  Scale's group.
+- The hypothesis holds: on closing, the panel comes back half transparent over a group that
+  is itself fading out, so the wallpaper shows through the panel's strip for about 0.2 s.
+  The clock band (`rgba(0, 0, 0, 0.45)`) was never the panel's own background either. The
+  panel's fade and the group's tween have the same length but run on two different
+  animation systems (Clutter ease, Tweener): which one ends first is not fixed.
+
+Method: a `Clutter.Clone` of the primary screen's top panel actor, found through
+`Main.panelManager.getPanelsInMonitor(primaryIndex)` (a panel whose snapped box is on the
+monitor's top edge), at the panel's stage box, in `global.overlay_group` above Scale's group.
+
+1. Muffin's Clutter exports `clutter_actor_set_opacity_override`, the call Clutter's clone
+   uses to paint its source with the clone's opacity: the source's own opacity (0 during the
+   fade) does not reach the copy. The clone of the hidden clock was confirmed live to keep
+   painting with the right text.
+2. The real panel fades out above the copy at opening and back in above it at closing: the
+   same pixels over the same pixels, so the strip does not change.
+3. After `hidden`, the copy stays until the panel's `notify::opacity` reports it visible at
+   255, with a 1 s timeout that removes it anyway. Scale opened again, or `disable()`, removes
+   a waiting copy at once.
+4. The copy takes no input. A transparent reactive actor as high as the panel, in Scale's
+   group, swallows the clicks there; the search field and the strip start under it.
+5. Fallback without a top panel on the primary screen, or with one set to autohide or
+   intellihide (`Panel.isHideable()`, added at the audit): the panel clock's copy centred in
+   the `scale-clock-bar` band, as before. Without a clock either: nothing.
+
+The module is renamed `topRow.js` (`createTopRow()`, `PanelCopy`, and `ClockBand` for the
+fallback, renamed from `panelCopy.js` at the audit); the clock placement inside a panel
+(`placeAtPanel`, `chooseClock`) is removed.
 
 ## Known limitations
 

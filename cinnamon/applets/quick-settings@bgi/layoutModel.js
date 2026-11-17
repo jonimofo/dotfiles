@@ -60,10 +60,10 @@ function visibleIds(stored, declared) {
     return normalize(stored, declared).filter(row => row.show).map(row => row.id);
 }
 
-// The Tiles list split into the tile ids to lay out and whether the CPU line shows: the
-// line sits under the tiles whatever its place in the list. @cpuLineId: its id.
-function splitTileLayout(ids, cpuLineId) {
-    return { tileIds: ids.filter(id => id !== cpuLineId), cpuLine: ids.includes(cpuLineId) };
+// The Tiles list split into the tile ids to lay out and whether the media controls show:
+// they sit under the tiles whatever their place in the list. @mediaId: their id.
+function splitTileLayout(ids, mediaId) {
+    return { tileIds: ids.filter(id => id !== mediaId), media: ids.includes(mediaId) };
 }
 
 // @ids split into rows of @perRow; the last row may be shorter.

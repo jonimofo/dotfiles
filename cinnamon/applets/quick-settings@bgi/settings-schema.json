@@ -90,7 +90,7 @@
                     "Do Not Disturb": "do-not-disturb",
                     "Keep awake": "keep-awake",
                     "Mic mute": "mic-mute",
-                    "CPU line": "cpu-line"
+                    "Media controls": "media"
                 }
             }
         ],
@@ -141,7 +141,7 @@
             },
             {
                 "show": true,
-                "id": "cpu-line"
+                "id": "media"
             }
         ]
     },

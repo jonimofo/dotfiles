@@ -5,8 +5,7 @@
 // fed with captured output; list building, the one-open-list rule and the BlueZ and VPN
 // models run on plain data; Night Light (the Warmth row) and Do Not Disturb run on the
 // memory GSettings backend; the keyboard light runs on a fake UPower bus; Airplane mode on
-// fake radios and on the Wi-Fi and Bluetooth fakes; the CPU line parser on captured top
-// output.
+// fake radios and on the Wi-Fi and Bluetooth fakes; media players on a fake session bus.
 // No real setting is changed.
 // Usage: GSETTINGS_BACKEND=memory gjs cinnamon-quick-settings-test.js <applet folder> <fixtures folder>
 const GLib = imports.gi.GLib;
@@ -25,7 +24,6 @@ const [appletDir, fixturesRoot] = ARGV;
 const fixturesDir = `${fixturesRoot}/ddcutil`;
 const nordvpnFixtures = `${fixturesRoot}/nordvpn`;
 const powerFixtures = `${fixturesRoot}/power`;
-const topFixtures = `${fixturesRoot}/top`;
 const SCROLL_DELAY_MS = 30;
 const VOLUME_NORM = 65536;
 let failures = 0;
@@ -955,83 +953,6 @@ function testAirplaneMode() {
     check(`airplane: Bluetooth goes through Adapter1.Powered (${calls})`, `${calls}` === 'Set false');
 }
 
-async function testTopProcess() {
-    const Parser = load('./topParser');
-    const text = readText(`${topFixtures}/top-two-frames.txt`);
-    const busiest = Parser.busiestProcess(text);
-    check(`cpu: the last frame's busiest process, top itself skipped, decimal comma read (${JSON.stringify(busiest)})`,
-        busiest !== null && busiest.name === 'php' && Math.abs(busiest.percent - 211.8) < 1e-9);
-    check(`cpu: label (${Parser.label(busiest)})`, Parser.label(busiest) === 'php 212%');
-    const spaced = text.replace('211,8   0,6   1:03.17 php', '  1,0   0,6   1:03.17 php');
-    check(`cpu: a command name with spaces is kept whole (${Parser.label(Parser.busiestProcess(spaced))})`,
-        Parser.label(Parser.busiestProcess(spaced)) === 'Isolated Web Co 16%');
-    check('cpu: empty output is an error, not a process', thrownBy(() => Parser.busiestProcess('')) === 'no PID header line in the top output');
-    check('cpu: a line whose %CPU is not a number is skipped',
-        Parser.label(Parser.busiestProcess(text.replace('211,8   0,6   1:03.17 php', 'n/a   0,6   1:03.17 php'))) === 'Isolated Web Co 16%');
-    check('cpu: decimal points read too', Parser.busiestProcess(text.replace(/(\d),(\d)/g, '$1.$2')).percent === busiest.percent);
-    const headerOnly = text.slice(0, text.lastIndexOf('COMMAND') + 'COMMAND'.length);
-    check('cpu: a header without process lines, no process', Parser.busiestProcess(headerOnly) === null && Parser.label(null) === '');
-    const thrown = input => {
-        try {
-            Parser.busiestProcess(input);
-            return null;
-        } catch (e) {
-            return e.message;
-        }
-    };
-    check(`cpu: no header line is an error (${thrown(text.split('    PID')[0])})`, thrown(text.split('    PID')[0]) === 'no PID header line in the top output');
-    check(`cpu: COMMAND not last (a reordering toprc) is an error, no guess (${thrown('  PID COMMAND %CPU\n 1 php 50,0\n')})`,
-        (thrown('  PID COMMAND %CPU\n 1 php 50,0\n') || '').includes('"PID COMMAND %CPU"'));
-    const french = readText(`${topFixtures}/top-french-headers.txt`);
-    check(`cpu: translated headers are an error naming the header (${thrown(french)})`,
-        (thrown(french) || '').includes('"PID UTIL. PR NI VIRT RES SHR S %CPU %MEM TEMPS+ COM."'));
-
-    const Constants = load('./constants');
-    check('cpu: top runs from an argv array, never a shell',
-        Array.isArray(Constants.CPU_TOP_COMMAND) && Constants.CPU_TOP_COMMAND[0] === 'top'
-        && Constants.CPU_TOP_COMMAND.every(part => typeof part === 'string') && !Constants.CPU_TOP_COMMAND.includes('-c'));
-    const TopProcess = load('./topProcess');
-    const runs = [];
-    const envs = [];
-    let pending = deferred();
-    let changes = 0;
-    const top = new TopProcess.TopProcess((argv, options) => {
-        runs.push(argv);
-        envs.push(options && options.env);
-        return pending.promise;
-    }, () => changes++);
-    const first = top.refresh();
-    top.refresh();
-    check('cpu: a request while a read runs starts no second top', runs.length === 1 && changes === 0);
-    pending.resolve(text);
-    await first;
-    check('cpu: the read shows the busiest process', changes === 1 && top.process.name === 'php');
-    check(`cpu: top runs with LC_ALL=C, so its headers are not translated (${JSON.stringify(envs[0])})`,
-        JSON.stringify(envs[0]) === '{"LC_ALL":"C"}' && runs[0] === Constants.CPU_TOP_COMMAND);
-    errors = [];
-    pending = deferred();
-    const translated = top.refresh();
-    pending.resolve(french);
-    await translated;
-    check(`cpu: an unreadable header is logged with the header, the title shows alone (${errors})`,
-        top.process === null && errors.length === 1 && errors[0].includes('reading the busiest process failed')
-        && errors[0].includes('COM.'));
-    errors = [];
-    pending = deferred();
-    const failing = top.refresh();
-    pending.reject(new Error('top exited with 1'));
-    await failing;
-    check(`cpu: a failed read is logged and shows the title alone (${errors})`,
-        top.process === null && changes === 3 && errors.length === 1 && errors[0].includes('top exited with 1'));
-    errors = [];
-    pending = deferred();
-    const late = top.refresh();
-    top.destroy();
-    pending.resolve(text);
-    await late;
-    check('cpu: nothing shows after destroy', changes === 3);
-}
-
 function testMediaModel() {
     const Model = load('./mediaModel');
     check('media: MPRIS names only', Model.isPlayerName('org.mpris.MediaPlayer2.vlc')
@@ -1338,7 +1259,7 @@ function testSchemaMatchesDeclarations() {
     check('settings dialog: rows show names, store ids',
         schema.tiles.columns[1].options['Power profile'] === 'power-profile' && schema.header.columns[1].options.Battery === 'battery');
     check('settings dialog: mockup names',
-        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Airplane mode,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,CPU line'
+        `${Object.keys(schema.tiles.columns[1].options)}` === 'Wi-Fi,Bluetooth,VPN,NordVPN,Power profile,Airplane mode,Keyboard light,Dark style,Do Not Disturb,Keep awake,Mic mute,Media controls'
         && `${Object.keys(schema.sliders.columns[1].options)}` === 'Sound,Microphone,Brightness,Warmth'
         && `${Object.keys(schema.header.columns[1].options)}` === 'Battery,Screenshot,Settings,Lock,Power'
         && `${Object.keys(schema['panel-icons'].columns[1].options)}` === 'Wi-Fi,VPN,Bluetooth,Volume,Battery');
@@ -1377,10 +1298,17 @@ function testLayoutModel() {
     ];
     const ownerTiles = Model.visibleIds(saved, Constants.TILE_LAYOUT_ITEMS);
     check(`layout: the owner's saved Tiles list drops night-light and places the new tiles by the defaults (${ownerTiles})`,
-        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,cpu-line');
-    const ownerSplit = Model.splitTileLayout(ownerTiles, Constants.CPU_LINE_ID);
-    check('layout: the CPU line is split off the tiles and shows', ownerSplit.cpuLine && !ownerSplit.tileIds.includes(Constants.CPU_LINE_ID));
-    check('layout: a hidden CPU line does not show', !Model.splitTileLayout(['wifi', 'vpn'], Constants.CPU_LINE_ID).cpuLine);
+        `${ownerTiles}` === 'wifi,bluetooth,nordvpn,vpn,power-profile,airplane-mode,keyboard-light,media');
+    const ownerSplit = Model.splitTileLayout(ownerTiles, Constants.MEDIA_ITEM.id);
+    check('layout: the media controls are split off the tiles and show', ownerSplit.media && !ownerSplit.tileIds.includes('media'));
+    check('layout: hidden media controls do not show', !Model.splitTileLayout(['wifi', 'vpn'], Constants.MEDIA_ITEM.id).media);
+    // A list saved while the CPU line existed: cpu-line dropped, Media controls added, shown.
+    const withCpu = [...Model.defaults(Constants.TILES), { show: false, id: 'cpu-line' }];
+    const cpuUpdate = Model.storedUpdate(withCpu, Constants.TILE_LAYOUT_ITEMS);
+    check(`layout: a saved list with cpu-line and no media loads cleanly (${cpuUpdate.slice(-2).map(row => `${row.id}:${row.show}`)})`,
+        !cpuUpdate.some(row => row.id === 'cpu-line') && cpuUpdate[cpuUpdate.length - 1].id === 'media' && cpuUpdate[cpuUpdate.length - 1].show
+        && Model.visibleIds(withCpu, Constants.TILE_LAYOUT_ITEMS).includes('media'));
+    check('layout: no cpu-line is declared', !Constants.TILE_LAYOUT_ITEMS.some(item => item.id === 'cpu-line'));
     const ownerRows = Model.rows(ownerSplit.tileIds, Constants.TILES_PER_ROW);
     check(`layout: the owner's tile rows (${JSON.stringify(ownerRows)})`,
         JSON.stringify(ownerRows) === '[["wifi","bluetooth"],["nordvpn","vpn"],["power-profile","airplane-mode"],["keyboard-light"]]');
@@ -1433,7 +1361,7 @@ function testLayoutModel() {
     check('layout write-back: a second pass writes nothing (no loop)', second.length === 0 && store.writes.length === 3);
     const rowsText = key => store.values[key].map(row => `${row.id}${row.show ? '' : ' (hidden)'}`).join(', ');
     check(`layout write-back: tiles keep their order and show flags (${rowsText('tiles')})`,
-        rowsText('tiles') === 'wifi, bluetooth, nordvpn, vpn, power-profile, airplane-mode, keyboard-light, dark-style (hidden), do-not-disturb (hidden), keep-awake (hidden), mic-mute (hidden), cpu-line');
+        rowsText('tiles') === 'wifi, bluetooth, nordvpn, vpn, power-profile, airplane-mode, keyboard-light, dark-style (hidden), do-not-disturb (hidden), keep-awake (hidden), mic-mute (hidden), media');
     check(`layout write-back: panel-icons (${rowsText('panel-icons')})`, rowsText('panel-icons') === 'bluetooth, vpn, volume, wifi, battery');
     check(`layout write-back: sliders (${rowsText('sliders')})`, rowsText('sliders') === 'output, input, monitors, warmth');
     check('layout write-back: rows keep the dialog shape { show, id }',
@@ -1881,14 +1809,6 @@ async function testSubprocess() {
         failed !== null && failed.includes('exited with 3') && failed.includes('boom'));
     const missing = await Subprocess.runCommand(['/nonexistent/quick-settings-test']).then(() => null, e => e.message);
     check(`subprocess: a missing command rejects and names it (${missing})`, missing !== null && missing.includes('/nonexistent/quick-settings-test'));
-    const forced = await Subprocess.runCommand(['/usr/bin/env'], { env: { LC_ALL: 'C', QUICK_SETTINGS_TEST: 'set' } });
-    check('subprocess: env sets the variables for that command only',
-        forced.split('\n').includes('LC_ALL=C') && forced.split('\n').includes('QUICK_SETTINGS_TEST=set')
-        && GLib.getenv('QUICK_SETTINGS_TEST') === null);
-    const LIVE = load('./constants');
-    const live = await Subprocess.runCommand(LIVE.CPU_TOP_COMMAND, { env: LIVE.CPU_TOP_ENV });
-    const busiest = load('./topParser').busiestProcess(live);
-    check(`subprocess: the real top under LC_ALL=C parses (${busiest && busiest.name})`, busiest !== null);
 }
 
 const FakeObjectManager = GObject.registerClass({
@@ -1982,7 +1902,6 @@ async function main() {
     await testNightLight();
     testKeyboardLight();
     testAirplaneMode();
-    await testTopProcess();
     testMediaModel();
     testMediaPlayers();
     testBatteryModel();

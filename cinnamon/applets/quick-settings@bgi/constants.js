@@ -100,7 +100,7 @@ const DARK_STYLE_OFF = 'default';
 
 // Battery, from cinnamon-settings-daemon like the stock power applet.
 const POWER_PROXY = 'org.cinnamon.SettingsDaemon.Power';
-// After the battery level and the CPU line's figure.
+// After the battery level.
 const PERCENT_SUFFIX = '%';
 
 // Brightness of the external monitors, through DDC/CI. Buses are detected at runtime: they
@@ -258,20 +258,6 @@ const SESSION_MANAGER_INTERFACE = 'org.gnome.SessionManager';
 const INHIBIT_IDLE_FLAG = 8;
 const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming';
 
-// The CPU line under the tiles: the process using the most CPU, read with top when the menu
-// opens. Two frames half a second apart: the first covers the time since each process
-// started, the second measures that half second. Per-core percent (212% is a bit over two
-// cores); wide lines so no command name is cut.
-const CPU_LINE_ID = 'cpu-line';
-const CPU_LINE_ITEM = { id: CPU_LINE_ID, name: 'CPU line' };
-const CPU_LINE_TITLE = 'CPU';
-// The column top sorts by and the parser reads.
-const CPU_TOP_CPU_COLUMN = '%CPU';
-const CPU_TOP_COMMAND = ['top', '-b', '-n', '2', '-d', '0.5', '-o', CPU_TOP_CPU_COLUMN, '-w', '512'];
-// top translates its column names (COMMAND is COM. in French): run it untranslated.
-const CPU_TOP_ENV = { LC_ALL: 'C' };
-const CPU_IGNORED_COMMANDS = ['top'];
-
 // Media controls under the tiles: one block per MPRIS player with a track, through the
 // session bus like the stock sound applet. Listed at the end of the Tiles tab.
 const MEDIA_ITEM = { id: 'media', name: 'Media controls' };
@@ -308,6 +294,6 @@ const LAYOUT_KEYS = {
 // The header as the settings dialog lists it.
 const HEADER_ITEMS = [HEADER_BATTERY_ITEM, ...HEADER_BUTTONS];
 
-// The Tiles tab: the tiles, then the CPU line. The line stays under the tiles whatever its
-// place in the list, as the battery stays on the left of the header.
-const TILE_LAYOUT_ITEMS = [...TILES, CPU_LINE_ITEM];
+// The Tiles tab: the tiles, then the media controls. They stay under the tiles whatever
+// their place in the list, as the battery stays on the left of the header.
+const TILE_LAYOUT_ITEMS = [...TILES, MEDIA_ITEM];

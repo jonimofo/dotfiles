@@ -285,9 +285,11 @@ the menu:
     keyboard's own hotkey. Dimmed without a keyboard backlight.
   - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
     dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
-- CPU line, under the tiles: the process using the most CPU and its share, like
-  `CPU  php 212%` (per core, as `top` counts: 212% is a bit over two cores). Read each time
-  the menu opens, with `top` over half a second, never in the background.
+- Media controls, under the tiles: one block per media player that has a track (any
+  MPRIS player: VLC, a browser playing a video...), at most three, by player name. The
+  title in bold, then `artist · player` (the player alone without an artist), and
+  previous, play or pause, next. A button the player does not offer is dimmed. No player
+  with a track: no block. Followed live over D-Bus, like the stock sound applet.
 - '>' on a tile or a slider opens its list under that row, in the menu: networks, paired
   devices, VPN profiles, NordVPN countries, power profiles, output and input devices. The
   active entry has a check mark; a click switches to that entry. The last entry opens the
@@ -309,8 +311,8 @@ applet writes that list back to its settings when it loads, so the dialog lists 
 element too; an element no longer declared is dropped the same way.
 
 - The battery stays on the left of the header; the order applies to the buttons.
-- The Tiles tab ends with the CPU line: its checkbox shows or hides it, its place in the
-  list does not move it from under the tiles.
+- The Tiles tab ends with Media controls: its checkbox shows or hides them, its place in
+  the list does not move them from under the tiles. Hidden, they follow no player.
 - With every panel icon hidden or absent, one settings icon keeps the button on the panel.
   A checkbox can hide an icon, never show one its state hides.
 - Add, Remove and Edit come with the stock list and cannot be hidden. Edit only picks a
@@ -368,11 +370,10 @@ or does nothing, and the reason goes to the journal once:
 | `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed and shown off, no VPN panel icon from NordVPN |
 | `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
 | `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
-| `top` (procps) | CPU line | the line shows `CPU` alone, the failure goes to the journal |
 | UPower with a keyboard backlight | Keyboard light tile | tile dimmed |
 
-NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon and the session
-manager come with the desktop.
+NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon, the session
+manager and the session bus (media players) come with the desktop.
 
 ## Quick Settings: known limitations
 
@@ -423,15 +424,15 @@ logic tests.
 
 `cinnamon-quick-settings-test.sh` runs on the memory GSettings backend and on fakes: fake
 NetworkManager objects (Wi-Fi, VPN), a fake system bus (BlueZ, power profiles, UPower's
-keyboard backlight), a fake session bus (Keep awake), fake Cvc streams, fake radios
-(Airplane mode), and fake ddcutil, nordvpn and top commands fed with output captured on
-this machine (`scripts/fixtures/`, `top` in English and with French headers). One check
-runs the real `top` under `LC_ALL=C`, read only. It never talks to the real
-NetworkManager, BlueZ, UPower or session manager.
+keyboard backlight), fake session buses (Keep awake, MPRIS media players), fake Cvc
+streams, fake radios (Airplane mode), and fake ddcutil and nordvpn commands fed with output
+captured on this machine (`scripts/fixtures/`). It never talks to the real
+NetworkManager, BlueZ, UPower, session manager or media players.
 
 Design records:
 [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md),
-[`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md).
+[`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md),
+[`documentation/plans/2026-11-17-cinnamon-quick-settings-media.md`](../documentation/plans/2026-11-17-cinnamon-quick-settings-media.md).
 
 ## Calendar: what it does
 

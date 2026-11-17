@@ -1,4 +1,3 @@
-const Clutter = imports.gi.Clutter;
 const St = imports.gi.St;
 const Constants = require('./constants');
 const Header = require('./header');
@@ -8,10 +7,11 @@ const ThemeColors = require('./themeColors');
 const ListPanel = require('./listPanel');
 const ListHost = require('./listHost');
 const LayoutModel = require('./layoutModel');
-const TopParser = require('./topParser');
+const MediaBlock = require('./mediaBlock');
 
-// Everything inside the menu, top to bottom: header, sliders, tile grid, CPU line. Every tile
-// and slider row is built once; applyLayout() picks which ones show and in which order.
+// Everything inside the menu, top to bottom: header, sliders, tile grid, media blocks. Every
+// tile and slider row is built once; applyLayout() picks which ones show and in which order.
+// Media blocks come and go with the players (setMediaBlocks).
 class MenuContent {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-content', vertical: true });
@@ -33,15 +33,11 @@ class MenuContent {
         this._grid = new St.BoxLayout({ style_class: 'quick-settings-grid', vertical: true });
         this.actor.add_child(this._grid);
 
-        this._cpuLine = new St.BoxLayout({ style_class: 'quick-settings-cpu-line' });
-        this._cpuLine.add_child(new St.Label({
-            text: Constants.CPU_LINE_TITLE,
-            style_class: 'quick-settings-cpu-title',
-            y_align: Clutter.ActorAlign.CENTER,
-        }));
-        this._cpuProcess = new St.Label({ y_align: Clutter.ActorAlign.CENTER });
-        this._cpuLine.add_child(this._cpuProcess);
-        this.actor.add_child(this._cpuLine);
+        this._mediaBox = new St.BoxLayout({ style_class: 'quick-settings-media', vertical: true, visible: false });
+        this._mediaBlocks = new Map();
+        this._mediaShown = true;
+        this._onMediaButton = () => {};
+        this.actor.add_child(this._mediaBox);
 
         // One in-place list at a time, moved under the row whose arrow opened it.
         this.listPanel = new ListPanel.ListPanel();
@@ -54,12 +50,13 @@ class MenuContent {
         this.applyLayout(Constants.SLIDERS.map(item => item.id), Constants.TILE_LAYOUT_ITEMS.map(item => item.id));
     }
 
-    // @sliderIds, @tileLayoutIds: the ones to show, in order; @tileLayoutIds may hold the CPU
-    // line's id. Hidden rows leave no gap; tiles reflow two per row, an odd last tile on the
+    // @sliderIds, @tileLayoutIds: the ones to show, in order; @tileLayoutIds may hold the media
+    // controls' id. Hidden rows leave no gap; tiles reflow two per row, an odd last tile on the
     // left. An open list is closed first: its row may be gone.
     applyLayout(sliderIds, tileLayoutIds) {
-        const { tileIds, cpuLine } = LayoutModel.splitTileLayout(tileLayoutIds, Constants.CPU_LINE_ID);
-        this._cpuLine.visible = cpuLine;
+        const { tileIds, media } = LayoutModel.splitTileLayout(tileLayoutIds, Constants.MEDIA_ITEM.id);
+        this._mediaShown = media;
+        this._syncMediaVisibility();
         this.lists.close();
         this._detach(this.listPanel.actor);
 
@@ -81,9 +78,37 @@ class MenuContent {
         this._grid.visible = tileIds.length > 0;
     }
 
-    // @process: from TopParser.busiestProcess(), null shows the title alone.
-    setTopProcess(process) {
-        this._cpuProcess.text = TopParser.label(process);
+    // @onButton(busName, method): a media button was clicked.
+    setOnMediaButton(onButton) {
+        this._onMediaButton = onButton;
+    }
+
+    // @blocks: from MediaModel.visibleBlocks(), in order. A block is kept while its player
+    // stays, created when one appears, destroyed when it goes; none hides the section.
+    setMediaBlocks(blocks) {
+        const wanted = new Set(blocks.map(block => block.busName));
+        for (const [busName, view] of this._mediaBlocks) {
+            if (!wanted.has(busName)) {
+                view.destroy();
+                this._mediaBlocks.delete(busName);
+            }
+        }
+        for (const view of this._mediaBlocks.values())
+            this._detach(view.actor);
+        for (const block of blocks) {
+            let view = this._mediaBlocks.get(block.busName);
+            if (!view) {
+                view = new MediaBlock.MediaBlock(method => this._onMediaButton(block.busName, method));
+                this._mediaBlocks.set(block.busName, view);
+            }
+            view.update(block);
+            this._mediaBox.add_child(view.actor);
+        }
+        this._syncMediaVisibility();
+    }
+
+    _syncMediaVisibility() {
+        this._mediaBox.visible = this._mediaShown && this._mediaBlocks.size > 0;
     }
 
     // Called each time the menu opens, when every actor has its style.
@@ -99,6 +124,9 @@ class MenuContent {
             row.destroy();
         for (const tile of Object.values(this.tiles))
             tile.destroy();
+        for (const view of this._mediaBlocks.values())
+            view.destroy();
+        this._mediaBlocks.clear();
         this.listPanel.actor.destroy();
     }
 

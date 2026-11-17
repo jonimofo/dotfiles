@@ -142,15 +142,23 @@
     font-weight: bold;
 }
 
-/* CPU line, under the tiles */
+/* Media controls, under the tiles: one block per player */
 
-.quick-settings-cpu-line {
-    padding: 0 8px;
-    spacing: 12px;
+.quick-settings-media {
+    spacing: 10px;
 }
 
-.quick-settings-cpu-title {
+.quick-settings-media-block {
+    padding: 0 8px;
+    spacing: 4px;
+}
+
+.quick-settings-media-title {
     font-weight: bold;
+}
+
+.quick-settings-media-row {
+    spacing: 12px;
 }
 
 /* In-place list, under the row whose arrow opened it */

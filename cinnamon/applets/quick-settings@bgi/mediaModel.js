@@ -81,3 +81,24 @@ function visibleBlocks(players, max) {
         .sort((one, two) => one.name.localeCompare(two.name) || one.busName.localeCompare(two.busName))
         .slice(0, max);
 }
+
+// How to turn the blocks on screen (@oldOrder, bus names top to bottom) into @newOrder
+// without touching the blocks that stay in place, so keyboard focus and hover survive a
+// player change. Returns { remove: [busName], steps: [{ kind: 'add' | 'move', busName,
+// index }] }: remove first, then apply the steps in order, each putting @busName at @index.
+function blockMoves(oldOrder, newOrder) {
+    const wanted = new Set(newOrder);
+    const remove = oldOrder.filter(busName => !wanted.has(busName));
+    const current = oldOrder.filter(busName => wanted.has(busName));
+    const steps = [];
+    newOrder.forEach((busName, index) => {
+        if (current[index] === busName)
+            return;
+        const at = current.indexOf(busName);
+        if (at >= 0)
+            current.splice(at, 1);
+        current.splice(index, 0, busName);
+        steps.push({ kind: at >= 0 ? 'move' : 'add', busName, index });
+    });
+    return { remove, steps };
+}

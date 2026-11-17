@@ -8,6 +8,7 @@ const ListPanel = require('./listPanel');
 const ListHost = require('./listHost');
 const LayoutModel = require('./layoutModel');
 const MediaBlock = require('./mediaBlock');
+const MediaModel = require('./mediaModel');
 
 // Everything inside the menu, top to bottom: header, sliders, tile grid, media blocks. Every
 // tile and slider row is built once; applyLayout() picks which ones show and in which order.
@@ -83,28 +84,36 @@ class MenuContent {
         this._onMediaButton = onButton;
     }
 
-    // @blocks: from MediaModel.visibleBlocks(), in order. A block is kept while its player
-    // stays, created when one appears, destroyed when it goes; none hides the section.
+    // @blocks: from MediaModel.visibleBlocks(), in order. A block stays in place while its
+    // player stays (MediaModel.blockMoves), so focus and hover survive; one is created when a
+    // player appears, destroyed when it goes; none hides the section.
     setMediaBlocks(blocks) {
-        const wanted = new Set(blocks.map(block => block.busName));
-        for (const [busName, view] of this._mediaBlocks) {
-            if (!wanted.has(busName)) {
-                view.destroy();
-                this._mediaBlocks.delete(busName);
+        const onScreen = this._mediaBox.get_children().map(actor => this._busNameOf(actor));
+        const { remove, steps } = MediaModel.blockMoves(onScreen, blocks.map(block => block.busName));
+        for (const busName of remove) {
+            this._mediaBlocks.get(busName).destroy();
+            this._mediaBlocks.delete(busName);
+        }
+        for (const { kind, busName, index } of steps) {
+            if (kind === 'add') {
+                const view = new MediaBlock.MediaBlock(method => this._onMediaButton(busName, method));
+                this._mediaBlocks.set(busName, view);
+                this._mediaBox.insert_child_at_index(view.actor, index);
+            } else {
+                this._mediaBox.set_child_at_index(this._mediaBlocks.get(busName).actor, index);
             }
         }
-        for (const view of this._mediaBlocks.values())
-            this._detach(view.actor);
-        for (const block of blocks) {
-            let view = this._mediaBlocks.get(block.busName);
-            if (!view) {
-                view = new MediaBlock.MediaBlock(method => this._onMediaButton(block.busName, method));
-                this._mediaBlocks.set(block.busName, view);
-            }
-            view.update(block);
-            this._mediaBox.add_child(view.actor);
-        }
+        for (const block of blocks)
+            this._mediaBlocks.get(block.busName).update(block);
         this._syncMediaVisibility();
+    }
+
+    _busNameOf(actor) {
+        for (const [busName, view] of this._mediaBlocks) {
+            if (view.actor === actor)
+                return busName;
+        }
+        return null;
     }
 
     _syncMediaVisibility() {

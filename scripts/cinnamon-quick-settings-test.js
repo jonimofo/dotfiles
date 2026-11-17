@@ -1037,6 +1037,31 @@ function testMediaModel() {
     check('media: same display name, ordered by bus name', `${same.map(b => b.busName)}` === 'org.mpris.MediaPlayer2.a,org.mpris.MediaPlayer2.b');
     const many = Model.visibleBlocks(['d', 'a', 'c', 'b'].map((n, i) => player(`org.mpris.MediaPlayer2.${n}`, `:1.${i}`, n.toUpperCase(), 't')), 3);
     check(`media: at most three blocks, the first three by name (${many.map(b => b.name)})`, `${many.map(b => b.name)}` === 'A,B,C');
+    const moves = (before, after) => JSON.stringify(Model.blockMoves(before, after));
+    check('media moves: nothing changes, nothing moves', moves(['a', 'b'], ['a', 'b']) === '{"remove":[],"steps":[]}');
+    check(`media moves: a new player is added, the others stay (${moves(['a', 'c'], ['a', 'b', 'c'])})`,
+        moves(['a', 'c'], ['a', 'b', 'c']) === '{"remove":[],"steps":[{"kind":"add","busName":"b","index":1}]}');
+    check(`media moves: a gone player is removed only (${moves(['a', 'b', 'c'], ['a', 'c'])})`,
+        moves(['a', 'b', 'c'], ['a', 'c']) === '{"remove":["b"],"steps":[]}');
+    check(`media moves: a reorder moves one block (${moves(['a', 'b', 'c'], ['c', 'a', 'b'])})`,
+        moves(['a', 'b', 'c'], ['c', 'a', 'b']) === '{"remove":[],"steps":[{"kind":"move","busName":"c","index":0}]}');
+    check('media moves: from nothing, every block added in order',
+        moves([], ['a', 'b']) === '{"remove":[],"steps":[{"kind":"add","busName":"a","index":0},{"kind":"add","busName":"b","index":1}]}');
+    check('media moves: to nothing, every block removed', moves(['a', 'b'], []) === '{"remove":["a","b"],"steps":[]}');
+    // Applying the moves to any old order gives the new order.
+    const apply = (before, after) => {
+        const { remove, steps } = Model.blockMoves(before, after);
+        const list = before.filter(id => !remove.includes(id));
+        for (const step of steps) {
+            if (step.kind === 'move')
+                list.splice(list.indexOf(step.busName), 1);
+            list.splice(step.index, 0, step.busName);
+        }
+        return `${list}`;
+    };
+    check('media moves: applied, they always give the new order',
+        [[['a', 'b', 'c'], ['b', 'd', 'a']], [['x'], ['y', 'x']], [['a', 'b', 'c'], ['c', 'b', 'a']], [['a'], ['a']]]
+            .every(([before, after]) => apply(before, after) === `${after}`));
     check('media: no player with a title, no block', Model.visibleBlocks([player('org.mpris.MediaPlayer2.idle', ':1.3', 'Idle', null)], 3).length === 0
         && Model.visibleBlocks([], 3).length === 0);
     check('media: unknown owners are not merged',

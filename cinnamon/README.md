@@ -11,6 +11,8 @@ My Cinnamon extensions and applets, versioned. Each one is symlinked into
 - `applets/quick-settings@bgi/`: one panel button that opens a GNOME-style Quick Settings
   menu (sound, microphone, brightness, network, Bluetooth, VPN, power and session).
   Tested on Cinnamon 6.4 (X11). See [Quick Settings](#quick-settings-what-it-does) below.
+- `applets/calendar@bgi/`: the stock calendar applet with a second time zone and larger text.
+  Tested on Cinnamon 6.4 (X11). See [Calendar](#calendar-what-it-does) below.
 - `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
   Enable adds it at the right end of panel1's right zone.
 - `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
@@ -386,6 +388,7 @@ scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
 scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
+scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, tick clock, day marker, stylesheet rules
 ```
 
 Prerequisites: `node` and `jq` for the check, `gjs` with the libnm and Cvc typelibs for the
@@ -402,3 +405,160 @@ NetworkManager, BlueZ, UPower or session manager.
 Design records:
 [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md),
 [`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md).
+
+## Calendar: what it does
+
+`applets/calendar@bgi/` is the stock Cinnamon calendar applet (`calendar@cinnamon.org`,
+Cinnamon 6.4) with a second time zone and its own look:
+
+- The panel reads `Mon 16 Nov · 15:52 · VN 21:52`: short date, local time, then a second
+  time zone with its label. Dates are in English whatever the locale (`LC_TIME`), from the
+  name tables of `constants.js`. The time follows the desktop's 24h or 12h and seconds
+  settings.
+- The popup opens on a header band: the selected day's date on the left
+  (`Mon 16 Nov. 2026`: the month gets a dot when shortened, so `May` has none), its number
+  of events in the middle (`1 event`, `16 events`; nothing for a day without events), the
+  clocks on the right (`15:52 Paris`, `21:52 VN`, a thin line between them). The three sit
+  in equal thirds of the band, so they never overlap. A click on the clocks goes back to
+  today, as the stock date did.
+- Left column, the selected day's events, one row each: the calendar's colour bar, the
+  time block `10:00 – 11:00`, then the title over its metadata. A summary such as
+  `Team meeting | Alex | [R1]` is cut at its first ` | `: title `Team meeting`, metadata
+  `Alex | [R1]`; without ` | ` the summary is the title alone. A line too long ends in `…`;
+  the tooltip shows the whole summary. The column is as tall as its events, up to 70% of
+  the screen's height (`EVENTS_MAX_HEIGHT_RATIO` in `constants.js`); beyond it only the
+  list scrolls.
+- On today, past events are dimmed, the ongoing one has a thicker violet outline and a violet accent bar, and a violet line
+  with the current time (`09:22`) sits after the last event that has started. The states and
+  the line follow the clock minute by minute while the popup is open, and the list scrolls to
+  the line on opening. Another day shows no line and nothing dimmed.
+- Right column, the month: one row `<  November 2026  >` with a gap under it, headings `Mon Tue ...` (the arrows, 24px icons that
+  grow with the Days size, and the mouse wheel move one month), larger day cells, one dot under a day with events. The selected day is
+  filled violet, today has a thin light outline, a selected today has both; days of the
+  other months are greyed.
+- Under the month, a `Today` button goes back to today's date and month, like a click on
+  the clocks; it is always active.
+- At the bottom left, the stock "Date and Time Settings" entry is a button as wide as its
+  label, with the Today button's look.
+
+The look lives in `applets/calendar@bgi/stylesheet.css`, under the applet's own classes:
+other menus and the stock calendar are not touched. Its colours are the owner's validated
+palette (dark navy), each written once at the top of the file by role; they do not follow
+the desktop theme. The event colour bar keeps the colour of the event's calendar.
+
+Origin and licence: copied from `/usr/share/cinnamon/applets/calendar@cinnamon.org/` of
+Cinnamon 6.4.10 (Linux Mint, <https://github.com/linuxmint/cinnamon>), GPL-2+ (see
+`/usr/share/doc/cinnamon/copyright`). The first commit of the folder is the unchanged copy;
+the stock functions changed since are listed in the plan, for a re-sync with upstream.
+
+## Calendar: settings
+
+Right-click the clock > Configure... Two tabs; every change applies at once, without a
+reload.
+
+**Appearance**, text sizes (70% to 160%, step 5) and the gap:
+
+| Setting | Default | |
+|---|---|---|
+| Events | 100 % | time, title and metadata of the event rows, and the now line |
+| Days | 100 % | day digits and headings; the day cells grow with them (the month row too) |
+| Header | 100 % | the whole header band: date, event count and clocks |
+| Gap between events | 8 px | 0 to 24 px between two event rows |
+
+**Appearance**, shown elements; an element switched off leaves no empty space:
+
+| Setting | Default | |
+|---|---|---|
+| Calendar events | on | stock switch: the event list, the dots and the event count |
+| Clocks in the header | on | both clocks; the second one also needs "Show a second time zone". Hidden, their click back to today goes too; the Today button stays |
+| Metadata line | on | the second line of each event |
+| Now line and event states | on | on today: past events dimmed, the ongoing one outlined in violet, a violet line with the time between them and the upcoming ones |
+| Dot under days | on | the dot under a day with events; off, the digits are centred |
+| Event count | on | the number of events in the middle of the header band |
+| Today button | on | the button under the month |
+| Week numbers | off | stock switch |
+
+**Panel**: the stock custom date format (switch, panel format, tooltip format, syntax
+help), then the second time zone:
+
+| Setting | Default | |
+|---|---|---|
+| Show a second time zone | on | off hides it on the panel and in the popup |
+| Time zone | `Asia/Ho_Chi_Minh` | an IANA id; an unknown one hides the second time and is logged once |
+| Label | `VN` | shown before the time on the panel, after it in the popup |
+
+With the custom date format on, it replaces the date part of the panel text only: the times
+and the second zone follow it. Its default is date only, `%a %e %b` (a format saved before
+keeps its value). The custom formats keep the stock behaviour: they follow the
+locale (`LC_TIME`), unlike the rest of the applet.
+
+The stock "Show calendar" keyboard shortcut (`<Super>c`) is removed: the applet registers no
+global shortcut.
+
+The tabs, keys, defaults, ranges and labels are in `applets/calendar@bgi/constants.js`;
+`settings-schema.json` is written by hand and the test checks that the two agree. The
+applet's own wording is in English whatever the locale: dates, and every phrase it shows
+("No Events", "All day", "Today", "Date and Time Settings"), which come from
+`constants.js` instead of Cinnamon's translations.
+
+## Calendar: install
+
+The link must point to the main checkout, not to a git worktree. The stock applet is
+replaced on the panel by this one:
+
+```bash
+ln -s ~/Repos/dotfiles/cinnamon/applets/calendar@bgi \
+  ~/.local/share/cinnamon/applets/calendar@bgi
+~/Repos/dotfiles/cinnamon/applet.sh disable calendar@cinnamon.org
+~/Repos/dotfiles/cinnamon/applet.sh enable calendar@bgi
+```
+
+`applet.sh enable` adds it at the right end of panel1's right zone; drag it in panel edit
+mode to move it. Its settings start from the defaults: the stock applet's settings are not
+copied (events, week numbers).
+
+Reload after an edit:
+
+```bash
+~/Repos/dotfiles/cinnamon/applet.sh reload calendar@bgi
+journalctl --user -b --since "-2 min" --no-pager | grep -E 'calendar@bgi|JS ERROR'
+```
+
+Back to the stock applet:
+
+```bash
+~/Repos/dotfiles/cinnamon/applet.sh disable calendar@bgi
+~/Repos/dotfiles/cinnamon/applet.sh enable calendar@cinnamon.org
+rm ~/.local/share/cinnamon/applets/calendar@bgi
+```
+
+## Calendar: known limitations
+
+- Each opening, at most once every 15 s, asks the calendar server to send the events of the
+  six weeks shown again; the server sends one D-Bus signal per event (about 500 here) and
+  handling them keeps Cinnamon busy for a fraction of a second, so a close made during that
+  time is drawn after it. Within 15 s of the last request the server, still running, sends
+  each change by itself, so the request is skipped.
+- Applets removed or reloaded before the performance round left their calendar server
+  connection running until Cinnamon restarts; each one handles the same signals again. Restart
+  Cinnamon once after updating (log out and back in) to drop them.
+
+- On a vertical panel the stock text is shown, without the second time zone.
+- The 12-hour clock's AM/PM marker still comes from the locale (GLib's `%p`).
+- An all-day event is never dimmed nor outlined during its day; it counts as upcoming for
+  the now line.
+- The event rows show no countdown ("In progress", "In 1 hour"): the now line and the
+  states replace it.
+- The colours are fixed: a light desktop theme keeps the dark popup. The test checks their
+  contrast: 4.5:1 for text, 3:1 for outlines and edges.
+- Clicks on the header date (opens GNOME Calendar) and on the clocks (back to today) have no
+  visible cue, as in the stock applet.
+- The days and the arrows of the month take no keyboard focus, as in the stock applet; the
+  Today and settings buttons do.
+- The day dot is a `•` character: its exact place under the number depends on the font.
+- The events column does not use the theme's `calendar-events-main-box` class (it carries a
+  fixed height in some themes), so a theme's border or padding on that column is not drawn.
+- A size changed in `stylesheet.css` shows after the next login (see
+  [Reload after an edit](#reload-after-an-edit)).
+
+Design record: [`documentation/plans/2026-11-16-cinnamon-calendar-applet.md`](../documentation/plans/2026-11-16-cinnamon-calendar-applet.md).

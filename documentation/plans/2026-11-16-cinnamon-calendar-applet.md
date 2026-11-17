@@ -1,0 +1,879 @@
+Status: DONE
+
+# Cinnamon calendar applet with a second time zone
+
+Applet `cinnamon/applets/calendar@bgi`, Cinnamon 6.4, X11. Issue #55.
+Install and usage: [`cinnamon/README.md`](../../cinnamon/README.md).
+
+## Goal
+
+A copy of the stock calendar applet (`calendar@cinnamon.org`) that shows a second time zone
+on the panel and in the popup, with event titles, event times and day numbers large enough to
+read under any Cinnamon theme. The Dracula theme sets `.calendar-day-base` to 80% and
+`.calendar-day-heading` to 70%, which is why the stock applet is hard to read.
+
+## Owner's words
+
+- "je veux : barre task: ajouter autre heure (ex Vietnam), je veux égalemennt que les
+  évènement soient bien + gros et visibles, pareil pour les jours (un peu comme gnome, l'état
+  actuel est très illisible"
+- "il faudra aussi changer la façon dont la date est affichée  : e.g Lundi novembre 16 doit
+  deveni Lun 16 Nov + sep + heure + VN + heure VN"
+- Approach chosen: "Applet dérivé dans dotfiles": a copy of the stock applet becomes
+  `calendar@bgi` in dotfiles, like `quick-settings@bgi`, with its own stylesheet and the
+  second time zone.
+
+## Validated mockups
+
+A. Panel text, chosen "Point médian":
+
+```
+Aujourd'hui :
+
+  Lundi novembre 16, 15:52
+
+Proposé :
+
+  Lun 16 Nov · 15:52 · VN 21:52
+```
+
+B. Popup, chosen "Deux colonnes agrandies". The event titles of the validated mockup came
+from the owner's calendar; they are replaced here by neutral names, the layout is unchanged.
+
+```
++----------------------------------+------------------------------+
+|  Lundi 16 novembre 2026          |  15:52 Paris  ·  21:52 VN    |
+|                                  |                              |
+| | 10:00 - 11:00                  |   <   Novembre 2026   >      |
+| | Team meeting                   |                              |
+|                                  |  Lun Mar Mer Jeu Ven Sam Dim |
+| | 11:00 - 12:00                  |                              |
+| | Review                         |   26  27  28  29  30  31   1 |
+|                                  |                              |
+| | 11:00 - 12:00                  |    2   3   4   5   6   7   8 |
+| | Call                           |                              |
+|                                  |    9  10  11  12  13  14  15 |
+| | 12:00 - 13:30                  |                              |
+| | Lunch                          |  [16] 17  18  19  20  21  22 |
+|                                  |                              |
+| | 12:00 - 13:30                  |   23  24  25  26  27  28  29 |
+| | ...                            |                              |
+|                                  |   30   1   2   3   4   5   6 |
++----------------------------------+------------------------------+
+|  Date and Time Settings                                         |
++-----------------------------------------------------------------+
+
+Titres : gras, grande taille, pleine couleur
+Heures : taille normale, pleine couleur
+Jours  : grande taille, cases larges
+```
+
+Reading notes: titles are bold, they keep their stored case. The three lines under the frame
+are design notes, not UI text. The coloured bar at the left of each event (the calendar's
+colour) stays as in the stock applet.
+
+C. Day markers, chosen "Un seul point": one dot under each day that has at least one event.
+
+```
+  Lun  Mar  Mer  Jeu  Ven  Sam  Dim
+
+    9   10   11   12   13   14   15
+    o    o    o    o    o
+
+ [16]  17   18   19   20   21   22
+    o    o    o    o    o         o
+
+   23   24   25   26   27   28   29
+    o    o    o    o    o
+```
+
+## Decisions
+
+1. *Date wording superseded by the eighth round: English tables, `Mon 16 Nov`.* Panel date `Lun 16 Nov`: abbreviated weekday, day number without padding, abbreviated
+   month, from the locale (`LC_TIME`), trailing dots removed, first letter of each word
+   capitalised. Then ` · `, the local time, ` · `, the second zone's label and its time. The
+   time follows the desktop's 24h/12h and seconds settings, as the stock applet does.
+2. Second zone: three applet settings, show it (default on), IANA zone id (default
+   `Asia/Ho_Chi_Minh`), label (default `VN`). `GLib.TimeZone.new_identifier` and
+   `GLib.DateTime.to_timezone`, no subprocess. An unknown id hides the second time and logs
+   once with the id; the clock keeps running.
+3. *Superseded: the third round splits the clocks with a thin line, the seventh centres them over the calendar, the eighth puts them on the right of the header band.* Popup header right: `15:52 Paris  ·  21:52 VN`: local time and the local zone's city (last
+   part of the IANA id, underscores as spaces), then the second time and its label. Without a
+   second zone, the local part alone. It replaces the stock day and date labels inside the
+   "back to today" button, which keeps its behaviour.
+4. *Superseded by the eighth round: `Mon 16 Nov. 2026`.* Popup header left: `Lundi 16 novembre 2026` for the selected day: full weekday, day, full
+   month, year, first letter capitalised.
+5. *Colours superseded by the third round (the owner's palette, own day state classes); event
+   text sizes by the fourth (em of a 12px list).* Sizes in the applet's own `stylesheet.css`,
+   relative units, own class names, no colour literal: event title bold and larger, event time at base size, both at the theme's full
+   foreground colour; day numbers large in wide cells; day headings `Lun Mar ...` without dot
+   at a readable size. Today, selected day, other-month and weekend days keep the theme
+   classes the stock applet uses.
+6. *Colour superseded by the third round: the palette's text colour.* Day marker: one dot, a `•` glyph in the theme's foreground colour, under a day with one or
+   more events; none otherwise.
+7. Kept from the stock applet: the `<Super>c` keybinding setting (removed in the fourth round), week numbers, events on or
+   off, "Date and Time Settings", the custom format option. With the custom format on, it
+   replaces the date part only of the horizontal panel text; the tooltip keeps its own custom
+   format. On a vertical panel the stock text is kept, without the second zone.
+8. *Separator superseded by the third round: ` – `.* Event times read `10:00 - 11:00` as in mockup B (stock: `10:00  ►  11:00`). The same
+   separator is used for multi-day events.
+9. Every label, format, separator, class name and settings key added by the change lives in
+   `constants.js`; the formatters are pure functions tested by
+   `scripts/cinnamon-calendar-test.sh`.
+
+## Facts read on the machine (2026-11-16)
+
+- Cinnamon 6.4.10 (Debian 13). `LC_TIME=fr_FR.UTF-8`, `LANG=en_US.UTF-8`, zone `Europe/Paris`.
+- `GLib.DateTime.format('%a')` gives `lun.`, `%b` gives `nov.`, `%A` `lundi`, `%B` `novembre`
+  (no longer used since the eighth round).
+- `GLib.TimeZone.new_identifier('Nowhere/Bad')` returns `null`; `new_local().get_identifier()`
+  returns `Europe/Paris`.
+- Cinnamon loads the theme first, then each applet's `stylesheet.css`; the default Cinnamon
+  theme is only a fallback. Dracula styles none of the event classes.
+
+## Stock functions modified
+
+For a future re-sync with upstream, checked against `git diff f3bcdfc..HEAD` (the stock
+copy) at the audit round. Everything else is the stock code.
+
+| File | Function or part | Change |
+|---|---|---|
+| `metadata.json` | | uuid, name, description, `cinnamon-version`, `version`, `url` |
+| `settings-schema.json` | | `section1`, `section2` and `keyOpen` removed; a `layout` with two pages (Appearance: Text size, Shown elements; Panel: Date, Second time zone); eleven appearance keys and three second zone keys added; stock labels "Show calendar events" and "Show week numbers in calendar" reworded `Calendar events` and `Week numbers` |
+| `applet.js` | imports | `DAY_FORMAT`, `DATE_FORMAT_SHORT`, `DATE_FORMAT_FULL` and the unused `Separator` removed; the applet's modules required |
+| `applet.js` | `constructor` | settings uuid; popup class; one `St.Table` for the header band (date, event count, clocks in three equal columns) and the two columns instead of `calendar-main-box`; the event list's date label moved to the header; the clocks inside the "back to today" button; calendar panel; Today button; the settings entry as a button instead of the stock separator and menu item; second zone and appearance bindings with light callbacks; handler ids kept for removal; `keyOpen` binding removed; tick clock; accessible name on the clocks button |
+| `applet.js` | `_setKeybinding` | removed (no hotkey) |
+| `applet.js` | `on_applet_added_to_panel`, `on_applet_removed_from_panel` | tick clock connected and disconnected; hotkey removal gone; on removal: zone id timer removed, handlers disconnected, settings finalized, menu destroyed |
+| `applet.js` | `_updateFormatString` | `_inVerticalPanel()` and the desktop keys of `constants.js` |
+| `applet.js` | `_onSettingsChanged` | resolves the second zone, applies the appearance settings |
+| `applet.js` | `_updateClockAndDate` | panel text, clocks, header date, tooltip and event count from the pure formatters; the redundant first `reactive` line removed |
+| `applet.js` | `_has_calendars_changed` | updates the event count |
+| `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height; forces a refresh of the events at most once per 15 s (`_forcedFetchDue`, performance round) |
+| `applet.js` | new methods | `_updateSecondZone`, `_inVerticalPanel`, `_timeFormat`, `_secondTime`, `_panelText`, `_applyAppearance`, `_buildClock`, `_updateClocks`, `_updateHeaderCount`, `_onDisplayChanged`, `_onSecondZoneChanged`, `_onZoneIdChanged` |
+| `calendar.js` | imports | `Gettext_gtk30` removed; the applet's modules required |
+| `calendar.js` | `_formatEventTime` | removed (unused, gettext) |
+| `calendar.js` | `_getCalendarDayAbbreviation` | English abbreviation from `constants.js` |
+| `calendar.js` | `constructor` | binds the day dot switch; GTK month/year order detection removed |
+| `calendar.js` | `_buildHeader`, new `_monthArrow` | one month row instead of the month and year rows; the arrows are the applet's icons instead of the theme's images; accessible names on the arrows; day heading class; column from `DayCell.weekdayColumn` |
+| `calendar.js` | `_onPrevYearButtonClicked`, `_onNextYearButtonClicked` | removed with the year row |
+| `calendar.js` | new `_buildCells` | the 42 day cells and 6 week numbers, built once (performance round) |
+| `calendar.js` | `_update` | updates the cells in place instead of removing and creating them (performance round); English month title; own day state classes; `:selected` pseudo-class no longer set; week number class; column from `DayCell.weekdayColumn`; one marker instead of one dot per event |
+| `eventView.js` | imports and constants | `CinnamonDesktop`, `DATE_FORMAT_FULL`, `DAY_FORMAT`, `locale_cap` removed; `Separator` replaced by `Tooltips`; `ARROW_SEPARATOR` is ` – ` |
+| `eventView.js` | `EventsManager.eds_service_found`, `log_dbus_error` | log prefix |
+| `eventView.js` | `EventsManager.constructor`, `_calendar_server_ready`, new `destroy` | server signal ids kept; the proxy's handlers, bus watch and timers released on removal (performance round) |
+| `eventView.js` | new `EventsManager.get_events_for_date` | the selected day's events, for the header count |
+| `eventView.js` | `EventList.constructor` | own column class instead of `calendar-events-main-box`; own list class; English "No Events" |
+| `eventView.js` | new `EventList.set_appearance`, `EventList.set_monitor_height`, `EventList._apply_column_style` | Events size on the column and the list, gap, metadata and countdown switches; `max-height` of the column |
+| `eventView.js` | `EventList.set_date` | English header date |
+| `eventView.js` | `EventList.set_events` | no separator between two events; row options passed on; now line kept and placed; scroll to the line |
+| `eventView.js` | new `EventList.set_show_now`, `_refresh_now`, `scroll_to_now`, `_scroll_to`, `EventRow.set_state` | event states and the now line |
+| `eventView.js` | `format_timespan` | removed with the countdown |
+| `eventView.js` | `EventRow.constructor` | accent bar, time block, title over metadata (summary cut at the first ` \| `), ellipsis, tooltip, switches |
+| `eventView.js` | `EventRow.constructor`, `EventRow.update_variations` | no countdown label (now-line round); one time class; no pseudo-classes; the clocks' time format; English "All day", "Today", weekday and date |
+
+New files (countdown.js removed in the now-line round): `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
+`dayCell.js`, `eventCount.js`, `appearance.js`, `countdown.js`,
+`tickClock.js`, `refresh.js`, `nowLine.js`, `stylesheet.css`.
+
+## Steps
+
+All done, in the PR that closes #55.
+
+1. This plan.
+2. Stock copy, unchanged except the uuid and name in `metadata.json`.
+3. Panel text with the second zone and its settings.
+4. Popup: header, sizes, stylesheet.
+5. One dot per day with events.
+6. Tests in `scripts/check-all.sh`, README section, plan to `DONE`, draft PR.
+
+## Built differently from the steps
+
+- The popup header times came with step 3: they share the second zone code with the panel.
+- `scripts/check-all.sh` needed no change: it runs every `scripts/*-test.sh`, so it picks up
+  `scripts/cinnamon-calendar-test.sh`. `scripts/cinnamon-extension-check.sh` checks every
+  folder under `cinnamon/applets/`, the new one included.
+- The test also checks the stylesheet: no colour, no `opacity`, no `px` or `pt`, and every
+  class of `constants.js` styled. *Superseded: the third round brings the palette and px row
+  sizes; the audit round derives the palette from the stylesheet and checks classes both
+  ways.*
+
+## Events column tightened (second review round)
+
+Owner's words, after loading the applet live: "c'est mieux mais la colonne de gauche avec
+les évnèments peut eetre amélioré, y'a trop d'espace, je veux que tout s'affiche d'un coup
+quand c possible (hauteur max à définir)". Chosen option: "Deux lignes serrées", with the
+note: "indented la seconde ligne legerement".
+
+Validated mockup:
+
+```
++----------------------------------+
+|  Lundi 16 novembre 2026          |
+| | 10:00 - 11:00                  |
+| | Team meeting | Room A          |
+| | 11:00 - 12:00                  |
+| | Review | Project B             |
+| | 11:00 - 12:00                  |
+| | Review | Project C             |
+| | 12:00 - 13:30                  |
+| | Lunch                          |
+| | 14:00 - 15:00                  |
+| | Call | Client                  |
+| | 15:00 - 16:00                  |
+| | Workshop                       |
++----------------------------------+
+
+Un fin trait d'espace entre deux événements,
+plus de grand vide.
+Hauteur : selon le contenu, 70 % de l'écran au plus.
+```
+
+The three lines under the frame are design notes, not UI text. The title line is slightly
+indented under the time line.
+
+Where the space came from, and what replaced it in this round. *The "Now" column is
+superseded by the third round: cards with an 8px list spacing (fourth round), own row and
+content classes, no separator, sizes in px or em of the list.*
+
+| Space | Before | Now |
+|---|---|---|
+| Between two events | the stock `Separator` (class `separator`): Dracula gives it `height: 1em` | `.separator.calendar-bgi-event-gap`, `height: 0.3em`; the theme still draws its line colour, Dracula's is transparent |
+| Under the last event | `height: 26em` on the column (first round); themes such as Adapta set `height: 300px` on `calendar-events-main-box` | no height: the column takes its content's height, `max-height` set by the applet |
+| Around an event | `calendar-event-button`: `padding: 5px 10px` in Adapta, nothing in Dracula | `.calendar-event-button.calendar-bgi-event-row`, `padding: 0.2em 0.4em`, `margin: 0`; the theme's hover stays |
+| Inside an event | `calendar-event-row-content` (unstyled by Dracula) | `calendar-bgi-event-content`, `spacing: 0.1em` |
+| Title indent | none | `padding-left: 0.6em` on `calendar-bgi-event-title` |
+
+Height: each time the menu opens, the applet reads the height of the monitor holding the
+panel button (`Main.layoutManager.findMonitorForActor`, as the stock popup menu does) and
+sets `max-height` on the column to `EVENTS_MAX_HEIGHT_RATIO` (0.7) of it, in style pixels
+(divided by `global.ui_scale`), rounded down (`eventsHeight.js`, tested). Beyond it the
+stock scroll view scrolls. An unknown or zero monitor height sets no cap; the stock popup
+menu's own cap (the monitor's height) still applies.
+
+Column alignment (*superseded by the seventh round: one `St.Table` holds the header band and
+the two columns, each column with its own padding*): both columns sit in the stock horizontal `calendar-main-box`, which gives
+them the height of the taller one. With few events the events column is as tall as the
+calendar, events at the top. With many, the calendar stays at the top of its column and
+the space is under it.
+
+The column no longer carries the stock `calendar-events-main-box` class, so a theme's
+padding or right border on it no longer applies: the applet gives it `padding-right: 1em`
+(*now `padding: 12px 2px 0 12px`*).
+
+## Design handoff (third review round)
+
+*Superseded in part: the day card (decision 8) by the fifth and eighth rounds, the French wording by the fourth round's English wording, the month title and headings by the eighth round's English dates.*
+
+
+Owner's words: "lis <dossier du handoff> pour améliorer" (the folder's local path left out).
+The folder is the owner's design handoff, status VALIDATED: a mockup image, a design spec with a
+palette table and a validation checklist, Cinnamon notes, reference CSS. It stays outside the
+repo: its images and examples hold private calendar content. This round supersedes the event
+row layout of the first two rounds where they differ.
+
+Decisions made by the designer and the owner:
+
+1. Month navigation on one row `<  Novembre 2026  >`, the arrows move one month; the year
+   arrows go; no dropdown chevron next to the month. The mouse wheel over the grid kept
+   changing month (stock `_onScroll`: up or left for the previous month, down or right for
+   the next).
+2. One horizontal row per event: accent bar (the calendar's colour from the data), time
+   block `HH:MM – HH:MM` on its own background, then the title (bold, primary text) over the
+   metadata (smaller, secondary text). The summary is cut at its first ` | `; without one it
+   is the title alone, with no empty second line. No icon, no duration.
+3. Long titles end in an ellipsis on one line. The full summary is in a tooltip: the stock
+   row had none, Cinnamon's `Tooltips.Tooltip` makes it one line.
+4. The palette of the spec, each colour defined once in the applet stylesheet, by role; no
+   colour in JavaScript. This reverses the "no colour literal" decision of the first round.
+   The event accent keeps the data colour; the code has no fallback colour, so the spec's four
+   accent colours are not used.
+5. Day cells larger, digits slightly larger, weight 500 to 600.
+6. Selected day violet with white bold text, today a thin light outline, both on a selected
+   today, other-month days discreet; the single event dot stays, in a reserved space.
+7. Header band: full date on the left, the two clocks on the right, time in primary text,
+   `Paris` and `VN` in secondary text. *The eighth round adds the event count in the middle.*
+8. *Superseded by the fifth round (count only), then the eighth (the count moves to the
+   header band, the card is gone).* Under the calendar, one card for the selected day: `Aujourd'hui` or that day's date, the
+   number of events, the range from the first start to the last end, never a duration. A day
+   without events has no card, so no empty box is left.
+9. No legend. Footer entry kept as it is.
+10. Height of round two kept: only the list scrolls, up to 70% of the monitor's height. Row
+    sizes in px where the spec gives px.
+11. Only properties St supports; what it cannot do is listed below.
+12. Every new class is the applet's own (`calendar-bgi-`); the popup is styled through its
+    own class `calendar-bgi-popup` next to `menu`, so other menus keep their look.
+
+Day cells, before and after (CSS values; the cell is the day's font size times these):
+
+| | Before (rounds one and two) | Now |
+|---|---|---|
+| Font size | 125% | 133% (about +1 px), weight 500 |
+| Width | 2.6em, 3.25 base em | 2.6em, 3.46 base em (+6%) |
+| Height | 2.6em, 3.25 base em | 2.75em, 3.66 base em (+13%) |
+| Border | none | 1px in every state, coloured only for today and focus |
+| Marker | 2.6em down at 80% | 3.25em down at 80%; the digit is lifted by a 0.35em bottom padding |
+
+Spec checklist (section 7) and other spec items:
+
+| Spec item | Done | Not possible in St, or not done, and why |
+|---|---|---|
+| Look of the validated mockup | yes, except the items below | |
+| No category icon on the rows | yes (the stock rows had none) | |
+| No duration per event, time range shown | yes | |
+| No legend, no space kept for it | yes (there was none) | |
+| Larger day cells (+10 to 15% height) | yes, +13% height, +6% width | |
+| Six-week months fully visible | yes: the grid always has six rows (stock), no height cap on the calendar | to confirm live |
+| Independent, scrolling event list | yes, the calendar column does not scroll | |
+| Real data kept, no code or tag dropped | yes: the metadata is shown as stored; a summary starting with ` \| ` shows its metadata as the title | |
+| Summary without a wrong duration | yes: count and range only, tested | |
+| Selected, today, days with events distinct | yes | |
+| No regression in clicks, navigation, time zone, settings | tests green | year arrows removed on purpose |
+| Tabular figures for times | no | St has no font feature settings |
+| Accent bar following the row's rounded corners | no | St does not clip children to a border radius |
+| Keyboard focus visible | style defined (`:focus`, light violet border) | the stock days and arrows never take keyboard focus; making them focusable would change the stock behaviour |
+| Selected weekday heading highlighted ("Dim" in the mockup) | no | not in the decisions; would rebuild the headings on every selection |
+| Dropdown chevron next to the month | no | decision 1 |
+| Footer band colour | no | decision 9: footer kept as it is |
+| Thin scroll bar, stronger on hover | yes, 5px, hover colour | |
+| Category accent colours as fallback | no | the event colour always comes from the data |
+
+## Appearance settings (fourth review round)
+
+Owner's words: "je veux aussi pouvoir régler la font size, et les differents éléments dans la
+config de cet applet". Chosen option: "Tailles par zone et interrupteurs". Before this round,
+the main session widened the gap between event rows from 4px to 8px at the owner's request:
+"ajoute un peu de gap entre les cards des events".
+
+Validated mockup:
+
+```
+Configure  >  onglet Apparence
+
+  Taille du texte
+    Événements        [----O-----]  100 %
+    Jours             [-----O----]  100 %
+    En-tête           [----O-----]  100 %
+    Espace entre événements   [ 8 ] px
+
+  Éléments affichés
+    Horloges dans l'en-tête        [ON ]
+    Ligne de métadonnées           [ON ]
+    Compte à rebours               [ON ]
+    Point sous les jours           [ON ]
+    Carte de résumé                [ON ]
+    Numéros de semaine             [OFF]
+
+Onglet Barre : date, second fuseau, libellé
+Onglet Raccourci : Super+C
+```
+
+Decisions:
+
+1. The dialog uses the schema's `layout` with two pages: Apparence (Taille du texte,
+   Éléments affichés) and Barre (Date, Second fuseau). The Raccourci tab of the mockup was
+   dropped with the keybinding (decision 7). The stock
+   "Show calendar events" switch comes first in Éléments affichés; week numbers is the stock
+   key moved there. New labels are in French; stock labels and the round-one second zone
+   labels stay in English, so Éléments affichés mixes both.
+2. Three text sizes in percent, 100 by default, 70 to 160, step 5: Événements (event row
+   texts), Jours (day digits and headings, the cells grow with them), En-tête (header date
+   and clocks).
+3. Applied from code as an inline `font-size` on three containers: the event list
+   (`12px` times the scale, so the event texts in em give 13, 14, 12 and 11 px at 100%, the
+   round-three sizes; the test multiplies each em value of the stylesheet by 12), the
+   calendar grid and the header band (`100%` at the default, so their em and % contents are
+   unchanged). `appearance.js` turns a setting into a style and clamps it: not a number gives
+   the default, out of range gives the nearest end, then rounded to the step.
+4. Gap between events: a spin setting, 8 px by default, 0 to 24, applied as the list's
+   `spacing`; the stylesheet keeps 8px as the default.
+5. Element switches, on by default except week numbers. Hiding the clocks hides the button
+   that holds them; hiding the dots also drops the room kept under the digit; hiding the
+   metadata line or the countdown rebuilds the rows without them.
+6. Every key, default, range, step and label in `constants.js`; the schema stays written by
+   hand and the test checks it against them, plus every key the code reads.
+7. No keyboard shortcut. Owner's words: "je ne veux pas de raccourci = show calendar". The
+   stock `keyOpen` setting, its section and tab, and the code that registered and removed the
+   `<Super>c` hotkey are gone; the applet registers no global hotkey. A test checks that the
+   schema has no keybinding setting.
+
+How it applies live: each new key is bound with `settings.bind(key, property,
+this._onSettingsChanged)`, which calls `_applyAppearance()` and then `select_date(..., true)`
+so the rows are rebuilt; the day dot switch is bound in the calendar grid with
+`bindWithObject(..., this._onSettingsChange)`, as the stock week numbers switch is.
+
+Wording, after the keybinding removal: the owner chose one language for the applet's own
+wording, option "Tout en anglais". Validated wording:
+
+```
+Appearance
+  Shown elements
+    Calendar events               [ON ]
+    Clocks in the header          [ON ]
+    Week numbers                  [OFF]
+
+Panel
+  Second time zone
+    Show a second time zone       [ON ]
+    Time zone          Asia/Ho_Chi_Minh
+    Label              VN
+```
+
+This supersedes the French wording of the fourth-round mockup above and of decisions 1 and 8
+of the third round (`Aujourd'hui`, `activités`): tabs `Appearance` and `Panel`; sections
+`Text size` (`Events`, `Days`, `Header`, `Gap between events`) and `Shown elements`
+(`Calendar events`, `Clocks in the header`, `Metadata line`, `Countdown`, `Dot under days`,
+`Summary card`, `Week numbers`); Panel sections `Date` and `Second time zone`. The stock
+custom-format labels are unchanged. The count reads `1 event`, `16 events` (the card it sat
+in is gone since the eighth round; the `Summary card` switch is now `Event count`). *Dates:
+superseded by the eighth round, English whatever `LC_TIME` says.*
+
+## Count card and Today button (fifth review round)
+
+*The count card is superseded by the eighth round (count in the header band); the dimmed Today state by the seventh (never dimmed).*
+
+
+Owner's words, after loading round four live: "the number of events on the day should be the
+only thing in the block under calendar, no need to add again the date, etc; instead under
+it, create a new button to go directly to today s date".
+
+Look to build:
+
+```
++----------------------------------+
+|  <       Novembre 2026        >  |
+|  Lun  Mar  Mer  Jeu  Ven  Sam Dim |
+|   ...                            |
++----------------------------------+
+
++----------------------------------+
+|  6 events                        |
++----------------------------------+
+
++----------------------------------+
+|              Today               |
++----------------------------------+
+```
+
+Decisions:
+
+1. The card holds the count only (`1 event`, `N events`): its heading, divider and time
+   range are gone with their code (`summariseDay`, `minutesFrom`, `formatRange`,
+   `summaryHeading`, `SUMMARY_TODAY_HEADING`, `MINUTES_IN_DAY`, the heading class) and
+   tests. A day without events still has no card. This supersedes decision 8 of the third
+   round.
+2. A `Today` St.Button under the card, full width, with the card's colours, border and
+   corners and the shared hover colour (no new colour), an accessible name, `track_hover`.
+   Its click calls `_resetCalendar()`, the handler of the header clocks' click: today is
+   selected, and the grid shows the selected day's month. Like the stock buttons of the
+   popup (days, month arrows), it takes no keyboard focus.
+3. Always shown with its switch, with or without the card. While today is selected and
+   shown it is not reactive and dimmed with `opacity` 160 of 255, the mechanism of
+   `quick-settings@bgi` (`INACTIVE_OPACITY`). The pure decision `todayButtonActive(selected,
+   shownMonth, today)` is tested; the grid always shows the selected day's month, so the
+   applet passes the selected date for both.
+4. `Today button` switch in Shown elements (`show-today-button`, on), live like the others.
+5. Hiding the header clocks no longer removes the only way back to today (README updated).
+
+## Larger count, settings button (sixth review round)
+
+*The 18px count is superseded by the seventh round (plain 14px text), then by the eighth (count in the header band).*
+
+
+Owner's words, after loading round five live: "nb of events should be bigger and centered,
+date and time setting should also be a button + be just regular size of button, not too
+wide".
+
+Look to build:
+
+```
++----------------------------------+
+|             7 events             |     bigger text, centred
++----------------------------------+
+
++----------------------------------+
+|              Today               |     unchanged, full width
++----------------------------------+
+
+ [ Date and Time Settings ]              bottom left, a button
+                                         as wide as its label plus padding
+```
+
+Decisions:
+
+1. The count is centred, bold, `18px` (the event title's 14px at 100% times 1.3, rounded);
+   before, it inherited the theme's font size, normal weight, left-aligned. The card sits
+   under none of the three text sizes (Events scales the event list, Days the calendar grid,
+   Header the header band), so the count does not scale.
+2. The stock separator and "Date and Time Settings" menu item are replaced by a footer with
+   an St.Button of its label's width, left-aligned, with the Today button's colours, border,
+   radius and padding (no new colour), hover, an accessible name, and keyboard focus as the
+   menu item had (focus border from the palette). Its click calls `_onLaunchSettings`, the
+   stock item's handler. The label is the stock translation `_("Date and Time Settings")`.
+3. The Today button is unchanged.
+4. The footer has 12px padding on every side, as the columns have on theirs, so no band is
+   left where the menu item was.
+
+## Plain count, Today never dimmed, centred clocks (seventh review round)
+
+*The count under the calendar and the clocks centred over the calendar are superseded by the eighth round.*
+
+
+Owner's words, after loading round six live: "nb events font is too big, button todays is
+not enough, also nb events should not look like a button it should be text, also the time
+should be centered in the header".
+
+A. Clocks, chosen "Centred over the calendar":
+
+```
++-------------------------------+------------------------------+
+| Lundi 16 novembre 2026        |    19:41 Paris | 01:41 VN    |
++-------------------------------+------------------------------+
+| | 10:00 - 11:00  Event        |   <   Novembre 2026    >     |
+| | 11:00 - 12:00  Event        |  Lun Mar Mer Jeu Ven Sam Dim |
+```
+
+B. Today button, chosen "Never dimmed, clearer text", with the count as text:
+
+```
+  7 events                  plain text, smaller, centred
+
++----------------------------------+
+|              Today               |   full contrast, bold
++----------------------------------+
+
+ [ Date and Time Settings ]
+```
+
+The words at the right of each line are design notes, not UI text.
+
+Decisions:
+
+1. The count is plain centred text: no background, border, radius or padding; 14px (the
+   event title at 100%), weight 600, primary text. The column's 12px spacing keeps it off
+   the calendar panel and the button.
+2. The Today button is always reactive and at full contrast, bold, primary text. Its
+   inactive state is gone: `todayButton.js` (`todayButtonActive`), the opacity code, the
+   `INACTIVE_OPACITY` and `FULL_OPACITY` constants and their tests. A click on today runs
+   the same handler.
+3. The header band and the two columns are one `St.Table` (`calendar-bgi-layout`): row 0
+   holds the date cell and the clocks cell, row 1 the events column and the calendar
+   column. A table column has one width for both rows, so the clocks cell is exactly as
+   wide as the calendar column, and the clocks are centred in it; both have the same side
+   padding (12px), so the clocks share the month title's centre. No width is computed in
+   code. The table has no spacing: the two header cells make one strip, and the columns'
+   own padding (2px + 12px) makes the 14px gap between them. With the events switched off,
+   the events column is hidden and the first column is as wide as the date: the date stays
+   on the left, the clocks centred over the calendar. With one clock (second zone off), the
+   single clock is centred. The thin line is now only between the two clocks, not before
+   the first.
+4. Nothing else changes.
+
+## Count in the header, English dates (eighth review round)
+
+Owner's words, after loading round seven live: "remove button events count, instead, add it
+in the middle of the header (date left, time right, nb events mid), also use abbreviated
+english for the date (set date in english BUT always use DD MM YYYY, meaning today is \"Mon
+10 Nov. 2026\"". The example's day was 10; the format is what matters.
+
+Look to build:
+
+```
++--------------------------------------------------------------+
+| Mon 16 Nov. 2026           7 events     19:41 Paris | 01:41 VN|
++-------------------------------+------------------------------+
+| | 10:00 – 11:00  Event        |   <   November 2026    >     |
+| | 11:00 – 12:00  Event        |  Mon Tue Wed Thu Fri Sat Sun |
+|                               |   ...                        |
+|                               +------------------------------+
+|                               |            Today             |
+|                               +------------------------------+
+ [ Date and Time Settings ]
+```
+
+This supersedes the French panel text `Lun 16 Nov` of round one, the locale-based header
+date and month title, and the clocks centred over the calendar column of round seven.
+
+Decisions:
+
+1. The count line under the calendar is gone (actor, classes, CSS, its size test). The
+   count (`1 event`, `N events`) sits in the middle of the header band, plain text, the
+   date's size one weight lighter, primary colour; nothing on a day without events. The
+   `show-day-summary` key stays, labelled `Event count`, on by default.
+2. The header band is one cell of the layout table spanning both columns, holding a
+   homogeneous `St.Table` of three equal columns: date (left-aligned), count (centred),
+   clocks (right-aligned), 16px apart. Equal columns put the count at the band's centre and
+   keep the three apart at any width: the band grows instead of overlapping. The clocks
+   centred over the calendar column (round seven) could not be kept: at the 160% header
+   size the clocks are about as wide as the calendar column and would cover a centred count,
+   so they are right-aligned. With the events switched off, the band spans the calendar
+   column alone (or more, if its three thirds need more), with the same three parts.
+3. Dates in English from the tables of `constants.js` (`WEEKDAY_NAMES`,
+   `WEEKDAY_ABBREVIATIONS`, `MONTH_NAMES`, `MONTH_ABBREVIATIONS`), never from GLib or the
+   locale:
+   - header date `Mon 16 Nov. 2026` (dot only after a shortened month: `May`, no dot);
+   - panel `Mon 16 Nov · 19:41 · VN 01:41`;
+   - month title `November 2026`, day headings `Mon Tue Wed Thu Fri Sat Sun` (first day of
+     the week unchanged);
+   - other dates the applet writes: the panel tooltip (now the header date; the stock full
+     locale date is gone), multi-day event spans in the time block (`Wednesday` instead of
+     the locale's `%A`, `7 Sep. 2026` instead of `%x`). The month/year order taken from GTK's
+     translation (`calendar:MY`) is gone with the locale names.
+   - Left as they were: the custom panel and tooltip formats (stock option, locale-based),
+     the vertical panel text (digits only), week numbers (`%V`, digits), the
+     `gnome-calendar --date` argument (not shown), the 12-hour AM/PM marker (`%p`).
+4. The Today button stays under the calendar panel. Nothing else changes.
+
+The test script runs a second time under `LC_ALL=fr_FR.utf8` when that locale is installed,
+to show the dates do not depend on it.
+
+## Checked on the live panel
+
+The owner loaded each round live and validated the popup after the eighth round ("ok").
+Still to look at on the panel after the audit round:
+
+- The scroll bar handle (violet, light violet on hover) on a day with more events than 70%
+  of the screen.
+- Seconds ticking with a custom date format on and seconds shown.
+- The English "No Events", "All day", countdowns and "Date and Time Settings" with a French
+  `LANGUAGE` or `LC_MESSAGES`.
+- After the performance round, once Cinnamon has restarted: the open and close times with
+  the probe given in the PR (`menu.open` time, `grid._update` time, the close's first frame).
+- After the second audit round: the darker selected violet, button edges, the Today button's
+  focus border, month arrows at 160% Days, the events column at 160% Events, removing and
+  adding the applet again.
+
+## Audit round
+
+The diff audit of 2026-11-16 found 2 HIGH, 9 MEDIUM and 19 LOW findings: 2 HIGH fixed, 9
+MEDIUM fixed, 19 LOW of which 17 fixed and 2 accepted by the owner (L4, L19).
+
+- M1: a second WallClock without a format (`tickClock.js`) drives the updates, so the seconds
+  tick with a custom date format without `%S`. Checked on the memory GSettings backend: it
+  ticks every second with seconds shown, never more than once in 2.5 s without, while a
+  `%a %e` clock ticks at most once (test).
+- M2: the scroll bar handle is violet `#9274DD` (4.71:1 on the popup background `#151B2B`;
+  `#7B5CD6`, 3.55:1, since H1),
+  light violet `#BAA3F0` on hover (7.83:1, drawn as a 3px border that fills the handle), both
+  from the palette.
+- M3: every phrase the applet shows is an English constant (`TEXT` in `constants.js`); no
+  gettext call is left, which the test checks; the hour plural is in `countdown.js`.
+- M4, M5: superseded decisions and tables marked inline; the table of modified stock
+  functions rebuilt from `git diff f3bcdfc..HEAD`.
+- M6: the README settings table matches the code.
+- M7, M8, M9: the test derives the palette from the stylesheet's palette block, finds a colour
+  in any string of the code, and matches classes exactly both ways; each proven by a
+  deliberate break that turned it red.
+
+HIGH, fixed after the owner's decision:
+
+- H1, chosen "Darker violet": the selected day is `#7B5CD6`, white digit 4.83:1 (was 3.64:1).
+  Validated look:
+
+  ```
+  Proposed:
+
+     [ 16 ]   white on #7B5CD6   4.83 : 1
+
+  Same violet family, one step deeper.
+  ```
+
+  The today outline on it is 3.76:1 and the scroll bar handle 3.55:1 on the popup, both
+  above 3:1, so both keep their colours.
+- H2: the events column carries the Events size as a percentage (`eventColumnStyle`), so its
+  `28em` width grows with the text; the list keeps its px base, so nothing scales twice and
+  100% is unchanged (`font-size: 100%`).
+- A contrast test reads the palette block and checks each colour on the backgrounds it is
+  used on: 4.5:1 for text, 3:1 for outlines, edges and the handle; the thin `#394761` lines
+  and the data-coloured accent bar are named exceptions. To allow white as an outline later,
+  a colour is now written once per property, not once in the file.
+
+LOW, 17 fixed, 2 accepted:
+
+- L1: date-only default custom format `%a %e %b`.
+- L2: appearance keys, the zone switch and the label refresh without a forced fetch of the
+  events; the zone id is resolved 500 ms after the last keystroke, so a half-typed id is not
+  logged.
+- L3: removal removes the zone timer, disconnects the events, desktop settings and UPower
+  handlers and both clocks, finalizes the settings (bindings of the applet and the grid) and
+  destroys the menu, as the stock menu and printers applets do.
+- L4: accepted by the owner: the header date and clocks clicks keep no visible cue.
+- L5: the Today button follows its switch in `_applyAppearance`, not on every tick.
+- L6: stale comments reworded.
+- L7: no `:focus` rule for actors that never take focus; the Today button takes focus like
+  the settings button, with the same light violet border.
+- L8: `headerDateOf`, `panelDateOf`, `dayMonthYearOf`, `weekdayNameOf` on a GLib.DateTime.
+- L9: one vertical-panel test, desktop keys in `constants.js`, unused import and redundant
+  `reactive` removed.
+- L10: `eventCount.js`, `_updateHeaderCount`, `EVENT_COUNT_*`, `ELEMENT_SWITCHES.eventCount`;
+  the key stays `show-day-summary`, with a comment.
+- L11: accessible names `Previous month`, `Next month`, `Back to today`.
+- L12: time block `min-width: 8em` (96px at 100%); month arrows `1.33333em` (16px at 100%).
+- L13: button edges `#818CA4` (5.08:1 on the popup, were 1.84:1); other-month days on hover
+  in the secondary text colour (5.61:1, were 3.10:1).
+- L14: the pseudo-classes nothing styles (`:selected` on days, `:imminent`, `:soon`,
+  `:current`, `:all-day`) are no longer set; the validated look gave them no style, so
+  nothing changes on screen.
+- L15: the marker's empty rule goes; the test names it as a class without a rule.
+- L16: event rows use the clocks' time format, no leading space on 12-hour times.
+- L17: tests that could not fail replaced (heading order through `weekdayColumn`, no ratio
+  constant check, no test of GLib's own DST); new: New York's DST change against Paris, the
+  70 and 160 bounds, the Shown elements order, the header count's visibility.
+- L18: `set_monitor_height` has its own comment.
+- L19: accepted by the owner: the stock Configure tooltips stay.
+
+## Performance round
+
+Owner's words, after validating the look: "ok it works but it's slow to open, and even slower
+to close back".
+
+Measured by the main session on the live applet (menu effects off, 393 actors in the menu):
+`menu.open(false)` blocks 224 to 303 ms, of which the grid's `_update` about 125 ms (18 ms
+with the menu hidden) and `actor.show()` about 84 ms; first frame 300 to 380 ms after the
+click. After each opening about 500 `events-updated` between 478 and 1256 ms; after
+`menu.close`, which returns in 19 ms, no frame for about 420 ms.
+
+Probed through Cinnamon's evaluator on the pushed code (`12586fc`; the live applet runs the
+main checkout, so the fixes below could not be measured live), four open and close cycles,
+every wrap restored:
+
+- Open, 302 to 324 ms in `menu.open`: `actor.show()` 92 ms, then about 80 ms in the other
+  `open-state-changed` handlers (stock menu machinery), then the applet's reset of today:
+  the grid `_update` 131 to 143 ms while shown (14 to 18 ms hidden), then `select_date` 1 ms.
+- Flood: 498 `EventsAddedOrUpdated` signals (561 events, one per recurring instance) reach
+  Cinnamon between 565 and 698 ms (D-Bus monitor, headers only). Handling them held the main
+  loop in one block of 630 to 740 ms; the 498 `events-updated` emissions took 35 to 39 ms,
+  the header count 22 ms of it.
+- Close: an idle at priority 1 or above queued right after `menu.close` ran 616 ms later,
+  priority 0 at once (the redraw source is priority 150). So sources at the default priority
+  kept the loop busy, without long blocks, for about 1 s after the applet's own handling had
+  ended. A plain 850 ms block without the flood caused no such wait. At each opening the
+  calendar server, restarted, received `Properties.GetAll` from Cinnamon ten times: ten
+  calendar server proxies live in Cinnamon, one per applet instance created by reloads (the
+  stock applet never releases its proxy). Each handles the same 500 signals, about 180 ms
+  each; that is the time the close waits for.
+
+Stock versus branch: the grid rebuild on every update (removed, not destroyed), the forced
+refresh on every opening and its flood, the proxy never released, and the Stack, button and
+dot box per day are all stock. The branch added the layout and header tables (3 actors),
+the tick clock (one WallClock, ticking each minute here), the header count on every
+`events-updated` (22 ms per flood), richer event rows and one tooltip per row (not hot in the
+profile). The left-over proxies came from the many reloads of the review rounds.
+
+Fixes, each tied to a measurement:
+
+1. The day grid is built once (`_buildCells`) and updated in place, setting a label or a
+   class only when it changes: the 131 to 143 ms rebuild while opening goes, and the next
+   `show()` no longer styles 168 new actors. Expected: the open drops by about 130 ms, maybe
+   more on `show()`.
+2. `EventsManager.destroy()` on removal releases the proxy's signal handlers, the bus watch
+   and the timers. Expected: the close waits only for this instance's own handling. The ten
+   proxies already in the running Cinnamon stay until it restarts.
+3. The header count runs once per burst of `events-updated` (`Refresh.Coalescer`): 22 ms per
+   flood.
+4. An opening within 15 s of the last forced refresh does not force another
+   (`Refresh.forcedFetchDue`; the server exits 20 s after its last request and pushes every
+   change while it runs). Expected: no flood at all on a quick reopen. Risk: if the server
+   is restarted by something else inside the 15 s, a change shows at the next opening after
+   them.
+
+Not fixed: `actor.show()` (about 90 ms, St styling the menu's actors on map) and the stock
+`open-state-changed` handlers (about 80 ms); the flood itself (one signal per event, the
+server's design), whose handling (about 180 ms here for one proxy) still delays a close made
+during it, about 0.5 to 0.7 s after the click.
+
+## Bigger month arrows
+
+Owner's words, after the performance round: "just make the < and > arrows for the days
+navigation bigger plz".
+
+```
+Now:        ‹        November 2026        ›      16px theme images
+Wanted:     <        November 2026        >      clearly bigger, about 24px at 100 %
+```
+
+The stock arrows were the theme's 16px background images (`calendar-change-month-back`,
+`-forward`), which St does not scale. They are now the applet's own `St.Icon`s,
+`pan-start-symbolic` and `pan-end-symbolic` (present in `~/.icons/dracula-icons/symbolic/actions/`
+and `/usr/share/icons/Adwaita/symbolic/ui/`), `icon-size: 2em` of the grid's font (24px at
+100%, growing with Days), in a button padded to a day cell's height (`0.8333em`, 3.67em in
+all against 3.66em), primary text colour, light violet on a hover background (4.78:1). For a
+right-to-left desktop the two names swap, as the stock theme's `:rtl` images did. The stock
+classes are gone from the two buttons.
+
+## Now line, event states, no countdown
+
+Owner's words: "i dont want to see : in progress, in one hour, etc, also add a big more gap
+under the month (above the days), also is it possible to ahve a line that shows what is
+passed / what is ongoing ? Ask me questions to confirm your understanding"
+
+A. Chosen "Now line plus dimmed past":
+
+```
+| 07:00 - 08:00   Early call          |   over: dimmed
+| 08:00 - 09:30   Team meeting        |   ongoing: violet edge
+|--- 09:22 ---------------------------|   now line
+| 09:30 - 11:00   Review              |   upcoming
+| 11:00 - 12:30   Workshop            |
+| 12:00 - 13:30   Lunch               |
+
+The line moves down as the day goes on.
+On another day than today: no line, nothing dimmed.
+```
+
+B. Ongoing mark, chosen "Violet outline around the card" (replaces the "violet edge" of A;
+the calendar colour bar stays):
+
+```
+  dimmed  | 07:00 - 08:00   Early call        |
+
+         +-------------------------------------+
+  violet  || 08:00 - 09:30   Team meeting      |   outline in violet
+         +-------------------------------------+
+  ------- 09:22 -------------------------------
+          | 09:30 - 11:00   Review            |
+```
+
+C. Countdown, chosen "Remove them completely":
+
+```
+Before:
+| 08:00 - 09:30   Team meeting   In progress |
+| 11:00 - 12:30   Workshop           In 1 hour |
+
+After:
+| 08:00 - 09:30   Team meeting                |
+| 11:00 - 12:30   Workshop                    |
+
+Configure: the Countdown switch disappears.
+```
+
+The words at the right of the lines are design notes, not UI text.
+
+Decisions:
+
+1. States, on today only (`nowLine.js`, tested): `past` when the end is at or before now,
+   `ongoing` when the start is at or before now and the end after it, `upcoming` otherwise;
+   all-day events read as upcoming; multi-day events use their real start and end.
+2. Past cards: their texts in the discreet colour, 4.20:1 on the card, 3.60:1 on the time
+   block, 3.10:1 on hover; a named exception of the contrast test at 3:1.
+3. Ongoing card: its 1px border in the selection violet (3.55:1 on the popup), nothing moves.
+4. Now line: a list item of its own (time in light violet, 7.83:1, and a 2px violet rule),
+   after the last started event, first when none has started, last when all have; hidden on
+   an empty list or another day.
+5. Updates: the existing tick reaches `EventList.set_events`, which calls `_refresh_now()`;
+   it does nothing within the same minute, and then only restyles a row whose state changed
+   and moves the line when its place changed. The rows are not rebuilt. On opening,
+   `scroll_to_now()` scrolls the list to the line; a rebuild of the rows scrolls to it too.
+6. Countdown removed: labels, `countdown.js`, its texts and constants, the
+   `show-event-countdown` key and its row. Cinnamon rebuilds a saved configuration from the
+   schema when the schema changes (`_doUpgrade` in `settings.js` copies only the schema's
+   keys), so the stale key is dropped without error.
+7. Switch `Now line and event states` (`show-now-line`, on), live.
+8. Month row gap: bottom padding 0.3em to 1.1333em of the grid's font, 3.6px to 13.6px at
+   100%, growing with Days.
+9. No new colour: discreet text, light violet and violet were in the palette.
+
+## Out of scope
+
+Any feature not in the mockups, the theme in `~/.themes`, enabling the applet on the live
+panel (done by the owner afterwards), `quick-settings@bgi`.

@@ -652,6 +652,12 @@ function testClockPlacement() {
     print(`  top panel: ${JSON.stringify(place)}`);
     check('place: on the top panel, the copy takes the clock\'s position and the band the panel\'s height',
         place && place.x === 830.5 && place.y === 6 && place.bandHeight === 40);
+    check('place: float noise in the stage coordinates still counts as the top edge',
+        JSON.stringify(placeAtPanel(
+            { x: 815, y: 0.0001220703125, width: 290, height: 29.9998779296875 },
+            { x: 0.00011444091796875, y: 0.0001220703125, width: 1919.999755859375, height: 29.9998779296875 },
+            { x: 0, y: 0, width: 1920, height: 1200 })) ===
+        JSON.stringify({ x: 815, y: 0, bandHeight: 30 }));
     const second = { x: 1920, y: 0, width: 1920, height: 1080 };
     check('place: a top panel of a screen right of the primary, offsets stay relative to its screen',
         JSON.stringify(placeAtPanel({ ...CLOCK_ON_TOP_PANEL, x: 2750.5 }, { ...TOP_PANEL, x: 1920 }, second)) ===

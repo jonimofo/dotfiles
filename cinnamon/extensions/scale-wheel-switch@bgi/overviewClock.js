@@ -8,6 +8,9 @@ const PANEL_CLOCK_UUIDS = ['calendar@bgi', 'calendar@cinnamon.org'];
 const BAND_STYLE_CLASS = 'scale-clock-bar';
 // Off the panel's top edge, the copy sits in a band with the search bar's padding.
 const CENTRED_BAND_STYLE_CLASS = 'scale-clock-bar-centred';
+// Stage coordinates carry float noise (a panel at y 0.000122, 29.999878 high): snapped to
+// the hundredth of a pixel, so a panel on the edge compares equal to the monitor's edge.
+const STAGE_SNAP = 100;
 
 // Stage box {x, y, width, height} of @actor.
 function boxOf(actor) {
@@ -16,10 +19,17 @@ function boxOf(actor) {
     return { x, y, width, height };
 }
 
+function snapBox(box) {
+    const snap = value => Math.round(value * STAGE_SNAP) / STAGE_SNAP;
+    return { x: snap(box.x), y: snap(box.y), width: snap(box.width), height: snap(box.height) };
+}
+
 // The panel clock's place, relative to @monitor, when its panel runs along the top edge of
 // @monitor: {x, y, bandHeight}, the band reaching the panel's bottom edge. Null otherwise
 // (panel at the bottom or on the side, on another monitor, or hidden by autohide).
-function placeAtPanel(clockBox, panelBox, monitor) {
+function placeAtPanel(rawClockBox, rawPanelBox, monitor) {
+    const clockBox = snapBox(rawClockBox);
+    const panelBox = snapBox(rawPanelBox);
     const onTopEdge = panelBox.y === monitor.y && panelBox.x >= monitor.x &&
         panelBox.x + panelBox.width <= monitor.x + monitor.width;
     const inPanel = clockBox.x >= panelBox.x && clockBox.x + clockBox.width <= panelBox.x + panelBox.width &&

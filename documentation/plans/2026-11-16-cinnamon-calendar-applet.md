@@ -154,7 +154,7 @@ copy) at the audit round. Everything else is the stock code.
 | `calendar.js` | `_formatEventTime` | removed (unused, gettext) |
 | `calendar.js` | `_getCalendarDayAbbreviation` | English abbreviation from `constants.js` |
 | `calendar.js` | `constructor` | binds the day dot switch; GTK month/year order detection removed |
-| `calendar.js` | `_buildHeader` | one month row instead of the month and year rows; accessible names on the arrows; day heading class; column from `DayCell.weekdayColumn` |
+| `calendar.js` | `_buildHeader`, new `_monthArrow` | one month row instead of the month and year rows; the arrows are the applet's icons instead of the theme's images; accessible names on the arrows; day heading class; column from `DayCell.weekdayColumn` |
 | `calendar.js` | `_onPrevYearButtonClicked`, `_onNextYearButtonClicked` | removed with the year row |
 | `calendar.js` | new `_buildCells` | the 42 day cells and 6 week numbers, built once (performance round) |
 | `calendar.js` | `_update` | updates the cells in place instead of removing and creating them (performance round); English month title; own day state classes; `:selected` pseudo-class no longer set; week number class; column from `DayCell.weekdayColumn`; one marker instead of one dot per event |
@@ -779,6 +779,25 @@ Not fixed: `actor.show()` (about 90 ms, St styling the menu's actors on map) and
 `open-state-changed` handlers (about 80 ms); the flood itself (one signal per event, the
 server's design), whose handling (about 180 ms here for one proxy) still delays a close made
 during it, about 0.5 to 0.7 s after the click.
+
+## Bigger month arrows
+
+Owner's words, after the performance round: "just make the < and > arrows for the days
+navigation bigger plz".
+
+```
+Now:        ‹        November 2026        ›      16px theme images
+Wanted:     <        November 2026        >      clearly bigger, about 24px at 100 %
+```
+
+The stock arrows were the theme's 16px background images (`calendar-change-month-back`,
+`-forward`), which St does not scale. They are now the applet's own `St.Icon`s,
+`pan-start-symbolic` and `pan-end-symbolic` (present in `~/.icons/dracula-icons/symbolic/actions/`
+and `/usr/share/icons/Adwaita/symbolic/ui/`), `icon-size: 2em` of the grid's font (24px at
+100%, growing with Days), in a button padded to a day cell's height (`0.8333em`, 3.67em in
+all against 3.66em), primary text colour, light violet on a hover background (4.78:1). For a
+right-to-left desktop the two names swap, as the stock theme's `:rtl` images did. The stock
+classes are gone from the two buttons.
 
 ## Out of scope
 

@@ -428,8 +428,8 @@ Cinnamon 6.4) with a second time zone and its own look:
   the tooltip shows the whole summary. The column is as tall as its events, up to 70% of
   the screen's height (`EVENTS_MAX_HEIGHT_RATIO` in `constants.js`); beyond it only the
   list scrolls.
-- Right column, the month: one row `<  November 2026  >`, headings `Mon Tue ...` (the arrows and the mouse wheel
-  move one month), larger day cells, one dot under a day with events. The selected day is
+- Right column, the month: one row `<  November 2026  >`, headings `Mon Tue ...` (the arrows, 24px icons that
+  grow with the Days size, and the mouse wheel move one month), larger day cells, one dot under a day with events. The selected day is
   filled violet, today has a thin light outline, a selected today has both; days of the
   other months are greyed.
 - Under the month, a `Today` button goes back to today's date and month, like a click on

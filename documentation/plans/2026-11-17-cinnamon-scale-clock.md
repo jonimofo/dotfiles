@@ -8,7 +8,15 @@ Earlier designs: [`2026-11-11-cinnamon-scale-overview.md`](2026-11-11-cinnamon-s
 [`2026-11-12-cinnamon-scale-dock.md`](2026-11-12-cinnamon-scale-dock.md).
 Install and usage: [`cinnamon/README.md`](../../cinnamon/README.md).
 
+**Current state.** In Scale, `panelCopy.js` shows a live, non-interactive clone of the primary
+screen's top panel at its exact place, so nothing changes at the top of the screen when Scale
+opens or closes; the copy stays until the real panel is back at full opacity. Without a top
+panel there, the panel clock is cloned, centred in a band; without a clock either, nothing.
+The sections below record each round; the last follow-up describes the code as it is.
+
 ## Goal
+
+_Superseded by "Follow-up: the whole top panel stays"._
 
 In Scale (Super or the hot corner), one centred row above the search field shows the date
 and the local time, bold and large, on the primary screen where the search field is.
@@ -24,6 +32,8 @@ the other screens, a setting, the calendar applet, new dependencies.
 
 ## Validated mockup
 
+_Superseded by "Follow-up: the whole top panel stays"._
+
 ```
 +----------------------------------------------------------+
 |                                                          |
@@ -38,6 +48,8 @@ the other screens, a setting, the calendar applet, new dependencies.
 "32px bold" is a design note, not text of the overview.
 
 ## Decisions
+
+_Superseded by "Follow-up: the whole top panel stays"._
 
 1. Text: `<date>   ·   <time>`. The date is worded as the header of `calendar@bgi`
    (`Tue 17 Nov. 2026`: three-letter weekday, day without padding, three-letter month with a
@@ -66,10 +78,12 @@ the other screens, a setting, the calendar applet, new dependencies.
 |---|---|
 | `panelCopy.js` | New. The live copy of the top panel, or the fallback clock band (see the last follow-up) |
 | `appSearch.js` | The search bar takes a top offset |
-| `extension.js` | Clock band first on `showing`, torn down on `hidden` and in `disable()` |
+| `extension.js` | Panel copy first on `showing`, released on `hidden` (kept until the panel is fully back), removed in `disable()` |
 | `stylesheet.css` | `.scale-clock-bar` (fallback band) |
 
-Findings worth keeping:
+Findings worth keeping (first round):
+
+_Superseded by "Follow-up: the whole top panel stays"._
 
 - The band shares the search bar's padding (12px on top, none below), so the gap between the
   time and the field equals the gap between the field and the strip (the strip's 12px top
@@ -84,6 +98,8 @@ Findings worth keeping:
   garbage collected.
 
 ## Follow-up: the panel clock's look
+
+_Superseded by "Follow-up: the whole top panel stays"._
 
 Owner's words: "dernier changement, je veux que en mode overivew, la font de la date et du
 jour soit la meme que en mode normal (taskbar)"
@@ -125,6 +141,8 @@ Decisions:
    size.
 
 ## Follow-up: the panel clock itself, at its place
+
+_Superseded by "Follow-up: the whole top panel stays"._
 
 Owner's words, after trying the copied look live: "la date peut elle garder eactement la
 meme possiition que la taskbar ? là ça shift vers le bas et ça fait un petit effet , je veux

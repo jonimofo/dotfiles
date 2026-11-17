@@ -283,6 +283,12 @@ the menu:
     brightest, through UPower. Shows the level: Off, Low, High for a two-level light (On
     for a one-level light, Medium above half on a light with more levels). Follows the
     keyboard's own hotkey. Dimmed without a keyboard backlight.
+  - Charge: `Charge 80%` while the battery stops charging at 80 % (charge mode Custom,
+    thresholds 75 and 80), `Charge 100%`, highlighted, while it charges fully (Adaptive). A
+    click switches between the two, for example before a trip. After a full charge, the
+    first time the charger is unplugged it goes back to `Charge 80%` by itself. It writes
+    through the root helper [`system/battery-charge-limit`](../system/battery-charge-limit/README.md),
+    run with `sudo -n`; dimmed until the helper is installed or without these sysfs files.
   - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
     dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
 - Media controls, under the tiles: one block per media player that has a track (any
@@ -355,6 +361,9 @@ Reload after an edit:
 journalctl --user -b --since "-2 min" --no-pager | grep -E 'quick-settings|JS ERROR'
 ```
 
+The Charge tile also needs its root helper, installed once by hand (a copy owned by root,
+not a link): see [`system/battery-charge-limit`](../system/battery-charge-limit/README.md).
+
 ## Quick Settings: uninstall
 
 ```bash
@@ -375,6 +384,7 @@ or does nothing, and the reason goes to the journal once:
 | `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
 | `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
 | UPower with a keyboard backlight | Keyboard light tile | tile dimmed |
+| `/usr/local/sbin/battery-charge-limit` ([install](../system/battery-charge-limit/README.md)), `sudo` without a password for it, a battery with `charge_types` and charge thresholds in sysfs | Charge tile | tile dimmed; a refused `sudo -n` is logged and the tile shows the real mode |
 
 NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon, the session
 manager and the session bus (media players) come with the desktop.
@@ -387,6 +397,11 @@ windows, in Cinnamon's own order; the applet picks by `get_user_time()` itself),
 `Main.activateWindow(window, time)`, the call of the stock window list on a click.
 
 ## Quick Settings: known limitations
+
+- The Charge tile reads the charge mode when the menu opens and on each battery change
+  (sysfs sends no change signal): a mode changed by another tool shows at the next one. The
+  return to 80 % needs the applet running when the charger is unplugged, and is forgotten
+  across a reload until the battery is seen full on AC again.
 
 - A click on a media block brings a window forward, never a browser tab: no browser lets
   another program switch its tabs. Among a browser's windows, the one whose title holds the

@@ -1,4 +1,4 @@
-Status: VALIDATED
+Status: DONE
 
 # Cinnamon Quick Settings: charge limit
 
@@ -69,6 +69,20 @@ Dell XPS, kernel 6.12, `dell_laptop` loaded.
 - No sudoers file is shipped: on this machine the owner's account already runs commands
   without a password. A narrow rule for another machine is an optional example in the
   helper's README.
+
+## As built
+
+- Helper: `system/battery-charge-limit/battery-charge-limit`, with its README (install,
+  uninstall, the optional narrow sudoers line). Tests: `scripts/battery-charge-limit-test.sh`,
+  on a fake sysfs tree, through a copy that differs only by its `BATTERY_DIR` line; the write
+  order is read from the copy's `sh -x` trace.
+- Applet: `chargeModel.js` (pure: state from the sysfs texts, labels, the helper command,
+  the automatic return), `chargeLimit.js` (reads with `Gio.File.load_contents_async`, runs
+  the helper through `Subprocess.runCommand`), wired in `applet.js`.
+- "On AC" comes from the battery state cinnamon-settings-daemon already sends with
+  `GetDevices()`: `BatteryModel.pickBattery()` now also returns `onAc` and `full`. No extra
+  read.
+- A test compares the applet's constants with the helper's.
 
 ## Security reasoning for the helper
 

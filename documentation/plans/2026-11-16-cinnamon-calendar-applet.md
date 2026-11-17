@@ -887,7 +887,7 @@ Wanted:    <          Nov. 2026          >       same centre line as the arrows,
   arrow buttons (3.67em high) are taller than the label, which was top-aligned.
 - `formatMonthHeading` reuses `monthWithDot`, the header date's rule: `Nov. 2026`,
   `May 2026`. This replaces the full month name of the eighth round.
-- `.calendar-bgi-month-label` gets `font-size: 130%`, relative to the grid's font, so it
+- `.calendar-bgi-month-label` gets `font-size: 125%` (the header date's size; 130% at first, changed at the owner's request), relative to the grid's font, so it
   follows the Days size; still bold.
 
 ## Out of scope

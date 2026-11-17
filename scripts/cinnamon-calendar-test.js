@@ -305,8 +305,8 @@ function testGrid() {
     checkEqual('month arrows: swapped right to left', DayCell.monthArrowIcons(true).join(' '), 'pan-end-symbolic pan-start-symbolic');
     const css = readText(`${appletDir}/stylesheet.css`);
     const titleRule = css.match(new RegExp(`\\.${Constants.STYLE.monthLabel}\\s*\\{([^}]*)\\}`));
-    check(`month title: 130% of the grid's font, bold (${titleRule ? titleRule[1].replace(/\\s+/g, ' ').trim() : '?'})`,
-        titleRule !== null && /font-size:\s*130%/.test(titleRule[1]) && /font-weight:\s*bold/.test(titleRule[1]));
+    check(`month title: 125% of the grid's font like the header date, bold (${titleRule ? titleRule[1].replace(/\\s+/g, ' ').trim() : '?'})`,
+        titleRule !== null && /font-size:\s*125%/.test(titleRule[1]) && /font-weight:\s*bold/.test(titleRule[1]));
     const iconSize = css.match(new RegExp(`\\.${Constants.STYLE.monthArrowIcon}\\s*\\{[^}]*icon-size:\\s*([0-9.]+)em`));
     check(`month arrows: 2em icons, 24px at 100% of the grid's 12px font (${iconSize ? iconSize[1] + 'em' : '?'})`,
         iconSize !== null && Number(iconSize[1]) * 12 === 24);

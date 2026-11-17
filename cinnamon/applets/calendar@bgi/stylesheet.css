@@ -293,7 +293,7 @@
     padding: 6px 8px 8px 8px;
 }
 
-/* One month row: '<  Nov. 2026  >', the title at 130% and centred on the arrows' line,
+/* One month row: '<  Nov. 2026  >', the title at the header date's 125% and centred on the arrows' line,
    with 1.1333em under it (13.6px at 100%) before the day headings. The arrows are the
    applet's icons, 2em of the grid's font (24px at 100%), so they grow with the Days size;
    the padding makes the button about as high as a day cell (3.66em of the grid's font). */
@@ -311,7 +311,7 @@
 }
 
 .calendar-bgi-month-label {
-    font-size: 130%;
+    font-size: 125%;
     font-weight: bold;
     text-align: center;
 }

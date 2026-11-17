@@ -159,20 +159,21 @@ copy) at the audit round. Everything else is the stock code.
 | `calendar.js` | new `_buildCells` | the 42 day cells and 6 week numbers, built once (performance round) |
 | `calendar.js` | `_update` | updates the cells in place instead of removing and creating them (performance round); English month title; own day state classes; `:selected` pseudo-class no longer set; week number class; column from `DayCell.weekdayColumn`; one marker instead of one dot per event |
 | `eventView.js` | imports and constants | `CinnamonDesktop`, `DATE_FORMAT_FULL`, `DAY_FORMAT`, `locale_cap` removed; `Separator` replaced by `Tooltips`; `ARROW_SEPARATOR` is ` – ` |
-| `eventView.js` | `format_timespan` | English countdown from `countdown.js` instead of gettext |
 | `eventView.js` | `EventsManager.eds_service_found`, `log_dbus_error` | log prefix |
 | `eventView.js` | `EventsManager.constructor`, `_calendar_server_ready`, new `destroy` | server signal ids kept; the proxy's handlers, bus watch and timers released on removal (performance round) |
 | `eventView.js` | new `EventsManager.get_events_for_date` | the selected day's events, for the header count |
 | `eventView.js` | `EventList.constructor` | own column class instead of `calendar-events-main-box`; own list class; English "No Events" |
 | `eventView.js` | new `EventList.set_appearance`, `EventList.set_monitor_height`, `EventList._apply_column_style` | Events size on the column and the list, gap, metadata and countdown switches; `max-height` of the column |
 | `eventView.js` | `EventList.set_date` | English header date |
-| `eventView.js` | `EventList.set_events` | no separator between two events; row options passed on |
+| `eventView.js` | `EventList.set_events` | no separator between two events; row options passed on; now line kept and placed; scroll to the line |
+| `eventView.js` | new `EventList.set_show_now`, `_refresh_now`, `scroll_to_now`, `_scroll_to`, `EventRow.set_state` | event states and the now line |
+| `eventView.js` | `format_timespan` | removed with the countdown |
 | `eventView.js` | `EventRow.constructor` | accent bar, time block, title over metadata (summary cut at the first ` \| `), ellipsis, tooltip, switches |
-| `eventView.js` | `EventRow.update_variations` | one time class; no pseudo-classes (`:imminent`, `:soon`, `:current`, `:all-day`); the clocks' time format; English "In progress", "All day", "Today", weekday and date |
+| `eventView.js` | `EventRow.constructor`, `EventRow.update_variations` | no countdown label (now-line round); one time class; no pseudo-classes; the clocks' time format; English "All day", "Today", weekday and date |
 
-New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
+New files (countdown.js removed in the now-line round): `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
 `dayCell.js`, `eventCount.js`, `appearance.js`, `countdown.js`,
-`tickClock.js`, `refresh.js`, `stylesheet.css`.
+`tickClock.js`, `refresh.js`, `nowLine.js`, `stylesheet.css`.
 
 ## Steps
 
@@ -798,6 +799,79 @@ and `/usr/share/icons/Adwaita/symbolic/ui/`), `icon-size: 2em` of the grid's fon
 all against 3.66em), primary text colour, light violet on a hover background (4.78:1). For a
 right-to-left desktop the two names swap, as the stock theme's `:rtl` images did. The stock
 classes are gone from the two buttons.
+
+## Now line, event states, no countdown
+
+Owner's words: "i dont want to see : in progress, in one hour, etc, also add a big more gap
+under the month (above the days), also is it possible to ahve a line that shows what is
+passed / what is ongoing ? Ask me questions to confirm your understanding"
+
+A. Chosen "Now line plus dimmed past":
+
+```
+| 07:00 - 08:00   Early call          |   over: dimmed
+| 08:00 - 09:30   Team meeting        |   ongoing: violet edge
+|--- 09:22 ---------------------------|   now line
+| 09:30 - 11:00   Review              |   upcoming
+| 11:00 - 12:30   Workshop            |
+| 12:00 - 13:30   Lunch               |
+
+The line moves down as the day goes on.
+On another day than today: no line, nothing dimmed.
+```
+
+B. Ongoing mark, chosen "Violet outline around the card" (replaces the "violet edge" of A;
+the calendar colour bar stays):
+
+```
+  dimmed  | 07:00 - 08:00   Early call        |
+
+         +-------------------------------------+
+  violet  || 08:00 - 09:30   Team meeting      |   outline in violet
+         +-------------------------------------+
+  ------- 09:22 -------------------------------
+          | 09:30 - 11:00   Review            |
+```
+
+C. Countdown, chosen "Remove them completely":
+
+```
+Before:
+| 08:00 - 09:30   Team meeting   In progress |
+| 11:00 - 12:30   Workshop           In 1 hour |
+
+After:
+| 08:00 - 09:30   Team meeting                |
+| 11:00 - 12:30   Workshop                    |
+
+Configure: the Countdown switch disappears.
+```
+
+The words at the right of the lines are design notes, not UI text.
+
+Decisions:
+
+1. States, on today only (`nowLine.js`, tested): `past` when the end is at or before now,
+   `ongoing` when the start is at or before now and the end after it, `upcoming` otherwise;
+   all-day events read as upcoming; multi-day events use their real start and end.
+2. Past cards: their texts in the discreet colour, 4.20:1 on the card, 3.60:1 on the time
+   block, 3.10:1 on hover; a named exception of the contrast test at 3:1.
+3. Ongoing card: its 1px border in the selection violet (3.55:1 on the popup), nothing moves.
+4. Now line: a list item of its own (time in light violet, 7.83:1, and a 2px violet rule),
+   after the last started event, first when none has started, last when all have; hidden on
+   an empty list or another day.
+5. Updates: the existing tick reaches `EventList.set_events`, which calls `_refresh_now()`;
+   it does nothing within the same minute, and then only restyles a row whose state changed
+   and moves the line when its place changed. The rows are not rebuilt. On opening,
+   `scroll_to_now()` scrolls the list to the line; a rebuild of the rows scrolls to it too.
+6. Countdown removed: labels, `countdown.js`, its texts and constants, the
+   `show-event-countdown` key and its row. Cinnamon rebuilds a saved configuration from the
+   schema when the schema changes (`_doUpgrade` in `settings.js` copies only the schema's
+   keys), so the stale key is dropped without error.
+7. Switch `Now line and event states` (`show-now-line`, on), live.
+8. Month row gap: bottom padding 0.3em to 1.1333em of the grid's font, 3.6px to 13.6px at
+   100%, growing with Days.
+9. No new colour: discreet text, light violet and violet were in the palette.
 
 ## Out of scope
 

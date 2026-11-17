@@ -428,7 +428,11 @@ Cinnamon 6.4) with a second time zone and its own look:
   the tooltip shows the whole summary. The column is as tall as its events, up to 70% of
   the screen's height (`EVENTS_MAX_HEIGHT_RATIO` in `constants.js`); beyond it only the
   list scrolls.
-- Right column, the month: one row `<  November 2026  >`, headings `Mon Tue ...` (the arrows, 24px icons that
+- On today, past events are dimmed, the ongoing one has a violet outline, and a violet line
+  with the current time (`09:22`) sits after the last event that has started. The states and
+  the line follow the clock minute by minute while the popup is open, and the list scrolls to
+  the line on opening. Another day shows no line and nothing dimmed.
+- Right column, the month: one row `<  November 2026  >` with a gap under it, headings `Mon Tue ...` (the arrows, 24px icons that
   grow with the Days size, and the mouse wheel move one month), larger day cells, one dot under a day with events. The selected day is
   filled violet, today has a thin light outline, a selected today has both; days of the
   other months are greyed.
@@ -456,7 +460,7 @@ reload.
 
 | Setting | Default | |
 |---|---|---|
-| Events | 100 % | time, title, metadata and countdown of the event rows |
+| Events | 100 % | time, title and metadata of the event rows, and the now line |
 | Days | 100 % | day digits and headings; the day cells grow with them (the month row too) |
 | Header | 100 % | the whole header band: date, event count and clocks |
 | Gap between events | 8 px | 0 to 24 px between two event rows |
@@ -468,7 +472,7 @@ reload.
 | Calendar events | on | stock switch: the event list, the dots and the event count |
 | Clocks in the header | on | both clocks; the second one also needs "Show a second time zone". Hidden, their click back to today goes too; the Today button stays |
 | Metadata line | on | the second line of each event |
-| Countdown | on | "Starting in 5 minutes", "In progress" |
+| Now line and event states | on | on today: past events dimmed, the ongoing one outlined in violet, a violet line with the time between them and the upcoming ones |
 | Dot under days | on | the dot under a day with events; off, the digits are centred |
 | Event count | on | the number of events in the middle of the header band |
 | Today button | on | the button under the month |
@@ -494,7 +498,7 @@ global shortcut.
 The tabs, keys, defaults, ranges and labels are in `applets/calendar@bgi/constants.js`;
 `settings-schema.json` is written by hand and the test checks that the two agree. The
 applet's own wording is in English whatever the locale: dates, and every phrase it shows
-("No Events", "All day", "Today", the countdowns, "Date and Time Settings"), which come from
+("No Events", "All day", "Today", "Date and Time Settings"), which come from
 `constants.js` instead of Cinnamon's translations.
 
 ## Calendar: install
@@ -541,8 +545,10 @@ rm ~/.local/share/cinnamon/applets/calendar@bgi
 
 - On a vertical panel the stock text is shown, without the second time zone.
 - The 12-hour clock's AM/PM marker still comes from the locale (GLib's `%p`).
-- Event times have one colour whether the event is past, in progress or to come; the
-  countdown ("Starting in 5 minutes", "In progress") is kept, after the title.
+- An all-day event is never dimmed nor outlined during its day; it counts as upcoming for
+  the now line.
+- The event rows show no countdown ("In progress", "In 1 hour"): the now line and the
+  states replace it.
 - The colours are fixed: a light desktop theme keeps the dark popup. The test checks their
   contrast: 4.5:1 for text, 3:1 for outlines and edges.
 - Clicks on the header date (opens GNOME Calendar) and on the clocks (back to today) have no

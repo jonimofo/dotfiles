@@ -1,0 +1,95 @@
+#!/bin/sh
+# Sets the laptop battery's charge mode, for the Quick Settings applet's Charge tile.
+#   battery-charge-limit limit   Custom mode, charging from 75 % up to 80 %
+#   battery-charge-limit full    Adaptive mode, charging up to 100 %
+# Runs as root (installed as /usr/local/sbin/battery-charge-limit, root:root 0755). Its only
+# inputs are its one argument, compared with two fixed words, and the sysfs files below:
+# no environment variable, no current directory, no other command. Anything else writes
+# nothing and exits non-zero. Writing the state already in place is fine (exit 0).
+set -eu
+
+PATH='/usr/sbin:/usr/bin:/sbin:/bin'
+export PATH
+
+readonly BATTERY_DIR='/sys/class/power_supply/BAT0'
+readonly LIMIT_MODE='Custom'
+readonly FULL_MODE='Adaptive'
+readonly LIMIT_START=75
+readonly LIMIT_END=80
+
+readonly CHARGE_TYPES="$BATTERY_DIR/charge_types"
+readonly START_FILE="$BATTERY_DIR/charge_control_start_threshold"
+readonly END_FILE="$BATTERY_DIR/charge_control_end_threshold"
+readonly NAME='battery-charge-limit'
+
+usage() {
+    printf 'usage: %s limit|full\n' "$NAME" >&2
+    exit 2
+}
+
+fail() {
+    printf '%s: %s\n' "$NAME" "$1" >&2
+    exit 1
+}
+
+require_files() {
+    for file in "$CHARGE_TYPES" "$START_FILE" "$END_FILE"; do
+        if [ ! -f "$file" ]; then
+            fail "$file is missing: no charge threshold support on this machine"
+        fi
+    done
+}
+
+# Prints the number held in file $1; fails on anything else.
+read_number() {
+    value=''
+    IFS= read -r value < "$1" || true
+    case $value in
+        '' | *[!0-9]*) fail "$1 does not hold a number" ;;
+    esac
+    printf '%s\n' "$value"
+}
+
+write_value() {
+    printf '%s\n' "$2" > "$1"
+}
+
+# The start threshold must stay below the end one at every step: when the new start is not
+# below the current end, the end moves first, else the start does.
+# Everything is read and checked before the first write.
+apply_limit() {
+    current_end=$(read_number "$END_FILE")
+    read_number "$START_FILE" > /dev/null
+    write_value "$CHARGE_TYPES" "$LIMIT_MODE"
+    if [ "$LIMIT_START" -ge "$current_end" ]; then
+        write_value "$END_FILE" "$LIMIT_END"
+        write_value "$START_FILE" "$LIMIT_START"
+    else
+        write_value "$START_FILE" "$LIMIT_START"
+        write_value "$END_FILE" "$LIMIT_END"
+    fi
+    printf '%s: limit applied (%s, %s to %s %%)\n' "$NAME" "$LIMIT_MODE" "$LIMIT_START" "$LIMIT_END"
+}
+
+apply_full() {
+    write_value "$CHARGE_TYPES" "$FULL_MODE"
+    printf '%s: full applied (%s)\n' "$NAME" "$FULL_MODE"
+}
+
+main() {
+    if [ "$#" -ne 1 ]; then
+        usage
+    fi
+    case $1 in
+        limit | full) ;;
+        *) usage ;;
+    esac
+    require_files
+    if [ "$1" = 'limit' ]; then
+        apply_limit
+    else
+        apply_full
+    fi
+}
+
+main "$@"

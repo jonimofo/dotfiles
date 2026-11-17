@@ -289,6 +289,26 @@ function testWording() {
     'No Events / All day / In progress / Today / Date and Time Settings');
 }
 
+// Performance round: the grid is built once and updated in place from these.
+function testGrid() {
+    const iso = date => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    const monday = DayCell.gridDates(new Date(2026, 10, 16), 1);
+    checkEqual('grid: six weeks', monday.length, 42);
+    checkEqual('grid: November 2026, Monday weeks, from 26 Oct to 6 Dec',
+        `${iso(monday[0])} ${iso(monday[41])}`, '2026-10-26 2026-12-6');
+    checkEqual('grid: the 1st sits under Sunday', `${monday[6].getDate()} ${monday[6].getDay()}`, '1 0');
+    const sunday = DayCell.gridDates(new Date(2026, 10, 30), 0);
+    checkEqual('grid: November 2026, Sunday weeks, from 1 Nov', iso(sunday[0]), '2026-11-1');
+    const march = DayCell.gridDates(new Date(2026, 2, 10), 1);
+    const steps = march.slice(1).map((date, i) => Math.round((date - march[i]) / 3600000));
+    const days = march.slice(1).every((date, i) => (date.getDay() + 6) % 7 === (march[i].getDay() + 1 + 6) % 7);
+    check(`grid: one day per cell across the end of March DST change (${[...new Set(steps)].join(', ')} h)`, days);
+    checkEqual('grid: first cell position', JSON.stringify(DayCell.cellPosition(0)), '[2,0]');
+    checkEqual('grid: last cell position', JSON.stringify(DayCell.cellPosition(41)), '[7,6]');
+    checkEqual('grid: cell column follows the week start', DayCell.cellPosition(13)[1],
+        DayCell.weekdayColumn(monday[13].getDay(), 1));
+}
+
 function testEventsHeight() {
     const ratio = Constants.EVENTS_MAX_HEIGHT_RATIO;
     checkEqual('events cap: 1080 px monitor', EventsHeight.eventsMaxHeight(1080, ratio, 1), 756);
@@ -550,6 +570,7 @@ testTimeOfEventRows();
 testSecondZone();
 testDayMarker();
 testEventsHeight();
+testGrid();
 testWording();
 testTickClock();
 testDayCell();

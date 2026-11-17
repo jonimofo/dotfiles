@@ -16,6 +16,7 @@ const DayMarker = require('./dayMarker');
 const DayCell = require('./dayCell');
 
 const MSECS_IN_DAY = 24 * 60 * 60 * 1000;
+const THURSDAY = 4;
 const WEEKDATE_HEADER_WIDTH_DIGITS = 3;
 const SHOW_WEEKDATE_KEY = 'show-week-numbers';
 const FIRST_WEEKDAY_KEY = 'first-day-of-week';
@@ -259,8 +260,59 @@ class Calendar {
             iter.setTime(iter.getTime() + MSECS_IN_DAY);
         }
 
-        // All the children after this are days, and get removed when we update the calendar
-        this._firstDayIndex = this.actor.get_n_children();
+        this._buildCells(offsetCols);
+    }
+
+    // One cell per day of the six weeks shown, and one week number per row, built once here
+    // and updated in place by _update(): rebuilding them on each update cost about 125 ms
+    // while the menu was shown, most of it styling the new actors.
+    _buildCells(offsetCols) {
+        this._cells = [];
+        for (let i = 0; i < Constants.GRID_DAYS; i++) {
+            let group = new Cinnamon.Stack();
+
+            let button = new St.Button({ label: "" });
+            group.add_actor(button);
+
+            let dot_box = new Cinnamon.GenericContainer(
+                {
+                    style_class: Constants.STYLE.dayMarkerBox,
+                }
+            );
+            dot_box.connect('allocate', this._allocate_dot_box.bind(this));
+            group.add_actor(dot_box);
+
+            let marker = new St.Label(
+                {
+                    style_class: Constants.STYLE.dayMarker,
+                    text: Constants.DAY_MARKER_TEXT,
+                    visible: false
+                }
+            );
+            dot_box.add_actor(marker);
+
+            let cell = { button: button, marker: marker, date: null };
+            button.connect('clicked', Lang.bind(this, function(b) {
+                if (!this.events_enabled) {
+                    return;
+                }
+                this.setDate(new Date(cell.date.getTime()), false);
+            }));
+
+            let [row, col] = DayCell.cellPosition(i);
+            this.actor.add(group, { row: row, col: offsetCols + col });
+            this._cells.push(cell);
+        }
+
+        this._weekNumbers = [];
+        if (this.show_week_numbers) {
+            for (let week = 0; week < Constants.GRID_WEEKS; week++) {
+                let label = new St.Label({ style_class: Constants.STYLE.weekNumber });
+                this.actor.add(label,
+                               { row: DayCell.cellPosition(week * Constants.DAYS_IN_WEEK)[0], col: 0, y_align: St.Align.MIDDLE });
+                this._weekNumbers.push(label);
+            }
+        }
     }
 
     _onStyleChange(actor, event) {
@@ -326,97 +378,40 @@ class Calendar {
         this._monthLabel.text = DateText.formatMonthHeading(this._selectedDate.getMonth() + 1,
                                                             this._selectedDate.getFullYear());
 
-        // Remove everything but the topBox and the weekday labels
-        let children = this.actor.get_children();
-        for (let i = this._firstDayIndex; i < children.length; i++)
-            this.actor.remove_actor(children[i]);
+        let dates = DayCell.gridDates(this._selectedDate, this._weekStart);
+        let show_markers = this.events_enabled && this.show_day_marker;
 
-        // Start at the beginning of the week before the start of the month
-        let beginDate = new Date(this._selectedDate);
-        beginDate.setDate(1);
-        beginDate.setSeconds(0);
-        beginDate.setHours(12);
-        let daysToWeekStart = (7 + beginDate.getDay() - this._weekStart) % 7;
-        beginDate.setTime(beginDate.getTime() - daysToWeekStart * MSECS_IN_DAY);
+        dates.forEach((date, i) => {
+            let cell = this._cells[i];
+            cell.date = date;
 
-        let iter = new Date(beginDate);
-        let row = 2;
-
-        while (true) {
-            let group = new Cinnamon.Stack();
-
-            let button = new St.Button(
-                {
-                    label: iter.getDate().toString(),
-                }
-            );
-
-            group.add_actor(button);
-
-            let dot_box = new Cinnamon.GenericContainer(
-                {
-                    style_class: Constants.STYLE.dayMarkerBox,
-                }
-            );
-            dot_box.connect('allocate', this._allocate_dot_box.bind(this));
-            group.add_actor(dot_box);
-
-            let iterStr = iter.toUTCString();
-            button.connect('clicked', Lang.bind(this, function(b) {
-                if (!this.events_enabled) {
-                    return;
-                }
-                let newlySelectedDate = new Date(iterStr);
-                this.setDate(newlySelectedDate, false);
-            }));
+            let label = date.getDate().toString();
+            if (cell.button.label !== label) {
+                cell.button.label = label;
+            }
 
             // The applet's own state classes only: theme day classes would mix their
             // colours and borders with the applet's palette.
             let styleClass = DayCell.dayStyleClass({
-                today: _today(iter),
-                selected: _sameDay(this._selectedDate, iter),
-                outside: iter.getMonth() != this._selectedDate.getMonth(),
-                weekend: !_isWorkDay(iter),
+                today: _today(date),
+                selected: _sameDay(this._selectedDate, date),
+                outside: date.getMonth() != this._selectedDate.getMonth(),
+                weekend: !_isWorkDay(date),
                 marked: this.show_day_marker
             });
-
-            button.style_class = styleClass;
-
-            let offsetCols = this.show_week_numbers ? 1 : 0;
-            this.actor.add(group,
-                           { row: row, col: offsetCols + DayCell.weekdayColumn(iter.getDay(), this._weekStart) });
-
-            if (this.show_week_numbers && iter.getDay() == 4) {
-                let label = new St.Label({ text: iter.toLocaleFormat('%V'),
-                                           style_class: Constants.STYLE.weekNumber});
-                this.actor.add(label,
-                               { row: row, col: 0, y_align: St.Align.MIDDLE });
+            if (cell.button.style_class !== styleClass) {
+                cell.button.style_class = styleClass;
             }
 
-            let color_set = this.events_manager.get_colors_for_date(iter);
-            let marker_count = DayMarker.dayMarkerCount(this.events_enabled && this.show_day_marker, color_set);
+            let color_set = this.events_manager.get_colors_for_date(date);
+            cell.marker.visible = DayMarker.dayMarkerCount(show_markers, color_set) > 0;
+        });
 
-            for (let i = 0; i < marker_count; i++) {
-                let marker = new St.Label(
-                    {
-                        style_class: Constants.STYLE.dayMarker,
-                        text: Constants.DAY_MARKER_TEXT
-                    }
-                );
-
-                dot_box.add_actor(marker);
-            }
-
-            iter.setTime(iter.getTime() + MSECS_IN_DAY);
-            if (iter.getDay() == this._weekStart) {
-                row++;
-                // We always stop after placing 6 rows, even if month fits in 4
-                // to prevent issues with jumping controls, see #226
-                if (row > 7) {
-                    break;
-                }
-            }
-        }
+        // The ISO week number of each row's Thursday
+        this._weekNumbers.forEach((label, week) => {
+            let thursday = dates[week * Constants.DAYS_IN_WEEK + DayCell.weekdayColumn(THURSDAY, this._weekStart)];
+            label.text = thursday.toLocaleFormat('%V');
+        });
     }
 
     _allocate_dot_box (actor, box, flags) {

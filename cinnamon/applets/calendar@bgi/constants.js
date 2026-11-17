@@ -115,6 +115,15 @@ const NUMBER_PLACEHOLDER = '%d';
 // "This evening" when it starts after 18:00, else "Starting later today".
 const COUNTDOWN = { imminentMinutes: 10, soonMinutes: 60, laterHours: 6, eveningHour: 18 };
 
+// The month grid: always six weeks (stock), under the month row and the day headings.
+const DAYS_IN_WEEK = 7;
+const GRID_WEEKS = 6;
+const GRID_DAYS = DAYS_IN_WEEK * GRID_WEEKS;
+const GRID_FIRST_ROW = 2;
+const MS_IN_DAY = 24 * 60 * 60 * 1000;
+// Hour of the day the grid dates are set to, away from midnight and DST changes (stock).
+const GRID_DATE_HOUR = 12;
+
 // One marker under a day that has events, in the day's palette text colour.
 const DAY_MARKER_TEXT = '•';
 const DAY_MARKER_MAX = 1;

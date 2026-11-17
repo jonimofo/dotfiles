@@ -159,10 +159,6 @@
     font-weight: bold;
 }
 
-.quick-settings-media-row {
-    spacing: 0;
-}
-
 .quick-settings-media-player {
     font-style: italic;
 }
@@ -172,7 +168,7 @@
     spacing: 6px;
 }
 
-/* No disc behind the icons: they sit on the player name's line, centred on it. */
+/* Bare icons on the player name's line, centred on it; only the hover tints them. */
 .quick-settings-media-button {
     padding: 4px;
     border-radius: 6px;

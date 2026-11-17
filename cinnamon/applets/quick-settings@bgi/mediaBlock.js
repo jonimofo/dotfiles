@@ -2,16 +2,15 @@ const Clutter = imports.gi.Clutter;
 const Pango = imports.gi.Pango;
 const St = imports.gi.St;
 const Tooltips = imports.ui.tooltips;
+const Constants = require('./constants');
 const UiHelpers = require('./uiHelpers');
-
-const BUTTON_KEYS = ['previous', 'playPause', 'next'];
 
 // One player's block: a separator line, the title in bold, then "artist · " and the player
 // name in italic, and the previous, play or pause, next buttons: bare icons on that
 // line. The texts come from the player: they are set as plain text (St.Label.text), never
 // as markup; italic and bold come from style classes. When line 2 is too long the artist
-// gives way first (it ellipsizes; the player name, at most 16 characters, does not), so the
-// player name stays readable. @onButton(method) runs on a click of a working button.
+// gives way first (it ellipsizes; the player name, at most Constants.MEDIA_PLAYER_NAME_MAX
+// characters, does not), so the player name stays readable. @onButton(method) runs on a click of a working button.
 class MediaBlock {
     constructor(onButton) {
         this.actor = new St.BoxLayout({ vertical: true, style_class: 'quick-settings-media-block' });
@@ -19,7 +18,7 @@ class MediaBlock {
         this._title = plainLabel('quick-settings-media-title');
         this.actor.add_child(this._title);
 
-        const row = new St.BoxLayout({ style_class: 'quick-settings-media-row' });
+        const row = new St.BoxLayout();
         this._artist = plainLabel(null);
         row.add_child(this._artist);
         this._player = plainLabel('quick-settings-media-player');
@@ -29,7 +28,7 @@ class MediaBlock {
         row.add_child(new St.Widget({ x_expand: true }));
         const buttonsBox = new St.BoxLayout({ style_class: 'quick-settings-media-buttons' });
         this._buttons = {};
-        for (const key of BUTTON_KEYS) {
+        for (const key of Constants.MEDIA_BUTTON_ORDER) {
             const icon = UiHelpers.symbolicIcon(null, 'quick-settings-media-icon');
             const button = new St.Button({ child: icon, style_class: 'quick-settings-media-button', y_align: Clutter.ActorAlign.CENTER });
             const entry = { button, icon, tooltip: new Tooltips.Tooltip(button, ''), method: null };
@@ -50,7 +49,7 @@ class MediaBlock {
         this._artist.text = block.text.artist;
         this._artist.visible = block.text.artist !== '';
         this._player.text = block.text.player;
-        for (const key of BUTTON_KEYS) {
+        for (const key of Constants.MEDIA_BUTTON_ORDER) {
             const state = block.buttons[key];
             const entry = this._buttons[key];
             entry.icon.icon_name = state.icon;

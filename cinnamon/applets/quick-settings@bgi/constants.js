@@ -267,6 +267,26 @@ const MPRIS_ROOT_INTERFACE = 'org.mpris.MediaPlayer2';
 const MPRIS_PLAYER_INTERFACE = 'org.mpris.MediaPlayer2.Player';
 const MPRIS_PLAYING = 'Playing';
 const DBUS_DAEMON = { name: 'org.freedesktop.DBus', path: '/org/freedesktop/DBus', iface: 'org.freedesktop.DBus' };
+// The D-Bus types the media code reads; anything else from a player is ignored.
+const MPRIS_TYPES = {
+    nameOwnerChanged: '(sss)',
+    propertiesChanged: '(sa{sv}as)',
+    listNames: '(as)',
+    nameOwner: '(s)',
+    getAll: '(a{sv})',
+    properties: {
+        Identity: 's',
+        Metadata: 'a{sv}',
+        PlaybackStatus: 's',
+        CanControl: 'b',
+        CanGoPrevious: 'b',
+        CanGoNext: 'b',
+        CanPlay: 'b',
+        CanPause: 'b',
+    },
+};
+// A player's error text in the log is cut to this many characters.
+const MEDIA_ERROR_TEXT_MAX = 120;
 // The menu does not grow without bound: the first blocks in display-name order.
 const MEDIA_MAX_PLAYERS = 3;
 // Cut lengths, in characters; the labels also ellipsize at their width.
@@ -275,7 +295,10 @@ const MEDIA_ARTIST_MAX = 20;
 const MEDIA_PLAYER_NAME_MAX = 16;
 const MEDIA_ARTIST_SEPARATOR = ', ';
 const MEDIA_PLAYER_SEPARATOR = ' · ';
-// The buttons, left to right: icon, accessible name and tooltip, MPRIS method.
+// The buttons, left to right: the keys of MediaModel.buttonStates().
+const MEDIA_BUTTON_ORDER = ['previous', 'playPause', 'next'];
+// Each button's icon, accessible name and tooltip, MPRIS method (play and pause share the
+// middle place).
 const MEDIA_BUTTONS = {
     previous: { icon: 'media-skip-backward-symbolic', label: 'Previous', method: 'Previous' },
     play: { icon: 'media-playback-start-symbolic', label: 'Play', method: 'PlayPause' },

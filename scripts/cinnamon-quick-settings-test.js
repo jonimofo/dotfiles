@@ -66,6 +66,14 @@ function thrownBy(call) {
     }
 }
 
+// Resolves after the idle callbacks already queued (IdleCoalescer) have run.
+function nextIdle() {
+    return new Promise(resolve => GLib.idle_add(GLib.PRIORITY_LOW, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
+}
+
 function check(label, condition) {
     print(`${condition ? 'PASS' : 'FAIL'} ${label}`);
     if (!condition)
@@ -982,6 +990,9 @@ function testMediaModel() {
         Model.blockText({}, 'VLC') === null && Model.blockText({ 'xesam:title': '  ' }, 'VLC') === null
         && Model.blockText({ 'xesam:title': 7 }, 'VLC') === null && Model.blockText(null, 'VLC') === null);
     const odd = Model.blockText({ 'xesam:title': 'Line one\nline two\t<b>x</b>', 'xesam:artist': ['A & B'] }, 'VLC');
+    const hidden = Model.blockText({ 'xesam:title': 'Song\u202Eeltit\u202C\u0007 one\u2066x\u2069\u200E', 'xesam:artist': ['\u200FArtist\u001B'] }, Model.playerName('VLC\u0000', 'org.mpris.MediaPlayer2.vlc'));
+    check(`media: control and bidi characters are removed from every text (${JSON.stringify(hidden)})`,
+        hidden.title === 'Songeltit onex' && hidden.artist === 'Artist · ' && hidden.player === 'VLC');
     check(`media: newlines and tabs become spaces, markup characters stay as text (${odd.title})`,
         odd.title === 'Line one line two <b>x</b>' && line2(odd) === 'A & B · VLC');
     check('media: line 2 in two parts, the separator with the artist, the player alone',
@@ -1079,6 +1090,9 @@ class FakeMprisBus {
         this.subscriptions = new Map();
         this.nextSubscription = 1;
         this.held = null;
+        // Bus names whose GetAll answers with a wrong type; the text of every refusal.
+        this.badGetAll = new Set();
+        this.errorText = 'refused';
     }
 
     addPlayer(busName, owner, root, player) {
@@ -1097,7 +1111,7 @@ class FakeMprisBus {
     }
 
     call(name, path, iface, method, parameters, replyType, flags, timeout, cancellable, callback) {
-        const call = { name, method, args: parameters ? parameters.deepUnpack() : [], cancellable };
+        const call = { name, method, args: parameters ? parameters.deepUnpack() : [], cancellable, replyType };
         this.calls.push(`${name} ${method}${call.args.length ? ` ${call.args}` : ''}`);
         const answer = () => callback(this, call);
         if (this.held)
@@ -1110,7 +1124,17 @@ class FakeMprisBus {
         if (call.cancellable && call.cancellable.is_cancelled())
             throw new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED, 'Operation was cancelled');
         if (this.failing.has(call.method))
-            throw new GLib.Error(Gio.DBusError, Gio.DBusError.FAILED, `${call.method} refused`);
+            throw new GLib.Error(Gio.DBusError, Gio.DBusError.FAILED, `${call.method} ${this.errorText}`);
+        const reply = this._reply(call);
+        // As GDBus does with a reply type: a reply of another type is an error.
+        if (reply && call.replyType && reply.get_type_string() !== call.replyType.dup_string())
+            throw new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.INVALID_ARGUMENT, `wrong reply type ${reply.get_type_string()}`);
+        return reply;
+    }
+
+    _reply(call) {
+        if (call.method === 'GetAll' && this.badGetAll.has(call.name))
+            return new GLib.Variant('(s)', ['not properties']);
         if (call.method === 'ListNames')
             return new GLib.Variant('(as)', [['org.freedesktop.DBus', ...this.owners.keys()]]);
         if (call.method === 'GetNameOwner')
@@ -1129,6 +1153,13 @@ class FakeMprisBus {
             if (sub.signal === 'NameOwnerChanged')
                 sub.callback(this, 'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', sub.signal,
                     new GLib.Variant('(sss)', [busName, oldOwner, newOwner]));
+        }
+    }
+
+    emitRaw(busName, signal, variant) {
+        for (const sub of [...this.subscriptions.values()]) {
+            if (sub.signal === signal && (signal === 'NameOwnerChanged' || sub.sender === busName))
+                sub.callback(this, busName, '/org/mpris/MediaPlayer2', 'org.freedesktop.DBus.Properties', signal, variant);
         }
     }
 
@@ -1158,7 +1189,7 @@ function mprisPlayer(title, artists, status) {
     };
 }
 
-function testMediaPlayers() {
+async function testMediaPlayers() {
     const MediaPlayers = load('./mediaPlayers');
     errors = [];
     const bus = new FakeMprisBus();
@@ -1211,11 +1242,54 @@ function testMediaPlayers() {
         errors.length === 1 && errors[0].includes('Next on the media player VLC media player failed'));
     errors = [];
 
+    // One update per burst of changes.
+    await nextIdle();
+    const burst = changes;
+    for (const status of ['Playing', 'Paused', 'Playing'])
+        bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { PlaybackStatus: new GLib.Variant('s', status) });
+    check('media players: no update before the next idle', changes === burst);
+    await nextIdle();
+    check(`media players: three changes in a row give one update (${changes - burst})`, changes === burst + 1);
+
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2', { Identity: new GLib.Variant('s', 'Renamed') });
+    check(`media players: an Identity change renames the block (${players.blocks.map(b => b.name)})`,
+        players.blocks.some(b => b.name === 'Renamed'));
+
+    errors = [];
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { Metadata: new GLib.Variant('s', 'not a map') });
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { CanGoNext: new GLib.Variant('s', 'yes') });
+    check(`media players: a wrongly typed Metadata is ignored, the block kept, logged once (${errors})`,
+        players.blocks.some(b => b.text.title === 'Back') && errors.length === 1 && errors[0].includes('sent Metadata of type s, ignored'));
+    errors = [];
+    bus.emitRaw('org.mpris.MediaPlayer2.firefox.instance_1_2', 'PropertiesChanged', new GLib.Variant('(s)', ['odd']));
+    bus.emitRaw('org.mpris.MediaPlayer2.firefox.instance_1_2', 'PropertiesChanged', new GLib.Variant('(s)', ['odd']));
+    bus.emitRaw('', 'NameOwnerChanged', new GLib.Variant('(s)', ['odd']));
+    check(`media players: wrongly typed signals are ignored, logged once per player, no stack (${errors})`,
+        errors.length === 1 && errors[0].includes('Firefox sent PropertiesChanged of type (s), ignored') && players.blocks.length === 2);
+    errors = [];
+
+    bus.properties.set('org.mpris.MediaPlayer2.vlc', {
+        'org.mpris.MediaPlayer2': { Identity: new GLib.Variant('s', 'Other player') },
+        'org.mpris.MediaPlayer2.Player': mprisPlayer('Other song', null, 'Paused'),
+    });
+    bus.emitOwnerChanged('org.mpris.MediaPlayer2.vlc', ':1.10', ':1.99');
+    check(`media players: a name taken over by another process is read again (${players.blocks.map(b => b.name)})`,
+        players.blocks.some(b => b.name === 'Other player' && b.text.title === 'Other song') && bus.subscribedTo('org.mpris.MediaPlayer2.vlc') === 1);
+
+    bus.errorText = `refused ${'x'.repeat(500)}`;
+    players.call('org.mpris.MediaPlayer2.vlc', 'Next');
+    check(`media players: a player's error text is cut in the log (${errors[0] && errors[0].length} characters)`,
+        errors.length === 1 && errors[0].includes('Next on the media player Other player failed: Next refused xxx') && errors[0].length < 250);
+    errors = [];
+
+    await nextIdle();
     const before = changes;
+    bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { PlaybackStatus: new GLib.Variant('s', 'Paused') });
     players.destroy();
     check(`media players: destroy releases every subscription (${bus.subscriptions.size} left)`, bus.subscriptions.size === 0);
     bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', { PlaybackStatus: new GLib.Variant('s', 'Playing') });
-    check('media players: nothing runs after destroy', changes === before && players.blocks.length === 0);
+    await nextIdle();
+    check('media players: nothing runs after destroy, a pending update included', changes === before && players.blocks.length === 0);
 
     // Replies that arrive after the player left, or after destroy, change nothing.
     const slow = new FakeMprisBus();
@@ -1226,10 +1300,53 @@ function testMediaPlayers() {
     slow.held.shift()();
     slow.held.shift()();
     slow.emitOwnerChanged('org.mpris.MediaPlayer2.vlc', ':1.10', '');
+    await nextIdle();
+    const beforeLate = slowChanges;
     while (slow.held.length > 0)
         slow.held.shift()();
-    check('media players: a GetAll reply for a player that left is dropped', late.blocks.length === 0 && slow.subscriptions.size === 1);
+    await nextIdle();
+    check(`media players: a GetAll reply for a player that left is dropped, no update (${slowChanges - beforeLate})`,
+        late.blocks.length === 0 && slow.subscriptions.size === 1 && slowChanges === beforeLate);
     late.destroy();
+    const typed = new FakeMprisBus();
+    typed.addPlayer('org.mpris.MediaPlayer2.odd', ':1.50', { Identity: new GLib.Variant('s', 'Odd') }, mprisPlayer('Song', null, 'Playing'));
+    typed.badGetAll.add('org.mpris.MediaPlayer2.odd');
+    errors = [];
+    const oddPlayers = new MediaPlayers.MediaPlayers(() => {}, typed);
+    check(`media players: a GetAll reply of another type is refused by its reply type, logged without stack (${errors.length})`,
+        oddPlayers.blocks.length === 0 && errors.length === 2 && errors.every(line => line.includes('wrong reply type (s)'))
+        && typed.calls.some(call => call.includes('GetAll')));
+    oddPlayers.destroy();
+    errors = [];
+
+    const caps = new FakeMprisBus();
+    const noControl = mprisPlayer('Song', null, 'Playing');
+    noControl.CanControl = new GLib.Variant('b', false);
+    caps.addPlayer('org.mpris.MediaPlayer2.radio', ':1.60', { Identity: new GLib.Variant('s', 'Radio') }, noControl);
+    caps.addPlayer('org.mpris.MediaPlayer2.browser', ':1.70', { Identity: new GLib.Variant('s', 'Browser') }, mprisPlayer('Video', null, 'Playing'));
+    caps.addPlayer('org.mpris.MediaPlayer2.browser.instance_1_9', ':1.70', { Identity: new GLib.Variant('s', 'Browser') }, mprisPlayer('Video', null, 'Playing'));
+    const capPlayers = new MediaPlayers.MediaPlayers(() => {}, caps);
+    const radio = capPlayers.blocks.find(b => b.name === 'Radio');
+    check('media players: CanControl false over the bus makes every button inactive',
+        radio && !radio.buttons.previous.working && !radio.buttons.playPause.working && !radio.buttons.next.working);
+    check(`media players: two names of one owner give one block (${capPlayers.blocks.map(b => b.busName)})`,
+        `${capPlayers.blocks.filter(b => b.name === 'Browser').map(b => b.busName)}` === 'org.mpris.MediaPlayer2.browser.instance_1_9');
+    capPlayers.destroy();
+
+    // A player that leaves before its GetAll fails is no error.
+    const leaving = new FakeMprisBus();
+    leaving.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
+    leaving.failing.add('GetAll');
+    leaving.held = [];
+    const left = new MediaPlayers.MediaPlayers(() => {}, leaving);
+    leaving.held.shift()();
+    leaving.held.shift()();
+    leaving.emitOwnerChanged('org.mpris.MediaPlayer2.vlc', ':1.10', '');
+    errors = [];
+    while (leaving.held.length > 0)
+        leaving.held.shift()();
+    check(`media players: a player gone before its GetAll failed is not logged (${errors})`, errors.length === 0);
+    left.destroy();
     const afterDestroy = new FakeMprisBus();
     afterDestroy.addPlayer('org.mpris.MediaPlayer2.vlc', ':1.10', { Identity: new GLib.Variant('s', 'VLC') }, mprisPlayer('Song', null, 'Playing'));
     afterDestroy.held = [];
@@ -1942,7 +2059,7 @@ async function main() {
     testKeyboardLight();
     testAirplaneMode();
     testMediaModel();
-    testMediaPlayers();
+    await testMediaPlayers();
     testBatteryModel();
     testMicMute();
     testSchemaMatchesDeclarations();

@@ -9,11 +9,17 @@ function isPlayerName(busName) {
         && busName.length > Constants.MPRIS_NAME_PREFIX.length;
 }
 
-// A string as one trimmed line; an array of strings joined; anything else empty.
+// Control characters, and the bidi controls that could reorder the rest of the line.
+const HIDDEN_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
+// A string as one trimmed line without control characters; an array of strings joined;
+// anything else empty.
 function plainText(value) {
     if (Array.isArray(value))
         return value.map(plainText).filter(text => text).join(Constants.MEDIA_ARTIST_SEPARATOR);
-    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+    if (typeof value !== 'string')
+        return '';
+    return value.replace(/\s+/g, ' ').replace(HIDDEN_CHARACTERS, '').replace(/ {2,}/g, ' ').trim();
 }
 
 // The player part of the bus name, without an instance suffix, capitalised:
@@ -52,12 +58,11 @@ function blockText(metadata, name) {
 function buttonStates(player) {
     const control = player.CanControl !== false;
     const playing = player.PlaybackStatus === Constants.MPRIS_PLAYING;
-    const playPause = playing ? Constants.MEDIA_BUTTONS.pause : Constants.MEDIA_BUTTONS.play;
-    return {
-        previous: { ...Constants.MEDIA_BUTTONS.previous, working: control && player.CanGoPrevious === true },
-        playPause: { ...playPause, working: control && (playing ? player.CanPause : player.CanPlay) === true },
-        next: { ...Constants.MEDIA_BUTTONS.next, working: control && player.CanGoNext === true },
-    };
+    const buttons = Constants.MEDIA_BUTTONS;
+    const definitions = { previous: buttons.previous, playPause: playing ? buttons.pause : buttons.play, next: buttons.next };
+    const capable = { previous: player.CanGoPrevious, playPause: playing ? player.CanPause : player.CanPlay, next: player.CanGoNext };
+    return Object.fromEntries(Constants.MEDIA_BUTTON_ORDER.map(key =>
+        [key, { ...definitions[key], working: control && capable[key] === true }]));
 }
 
 // The blocks to show. @players: [{ busName, owner, identity, metadata, properties }]. Two

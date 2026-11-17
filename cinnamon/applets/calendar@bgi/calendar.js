@@ -259,7 +259,7 @@ class Calendar {
             this.actor.add(label,
                            { row: 1,
                              col: offsetCols + DayCell.weekdayColumn(iter.getDay(), this._weekStart),
-                             x_fill: false, x_align: St.Align.MIDDLE });
+                             x_fill: true });
             iter.setTime(iter.getTime() + MSECS_IN_DAY);
         }
 

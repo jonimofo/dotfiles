@@ -115,10 +115,12 @@
     border-color: transparent;
 }
 
-/* Thin borders: popup, event rows, the line between the two clocks */
+/* Thin borders: popup, event rows, the line between the two clocks, the line under the
+   day headings */
 .menu.calendar-bgi-popup,
 .calendar-bgi-event-row,
-.calendar-bgi-clock-divided {
+.calendar-bgi-clock-divided,
+.calendar-bgi-day-heading {
     border-color: #394761;
 }
 
@@ -316,10 +318,14 @@
     text-align: center;
 }
 
+/* The headings fill their columns, so their bottom borders join into one thin line above
+   the days. */
 .calendar-bgi-day-heading {
     font-weight: 600;
     text-align: center;
     padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    border-bottom-width: 1px;
 }
 
 .calendar-bgi-week-number {

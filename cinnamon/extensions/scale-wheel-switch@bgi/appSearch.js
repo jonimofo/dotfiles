@@ -111,11 +111,12 @@ function createClickBlocker({ x, y, width, height }) {
     return blocker;
 }
 
-// Search field above the workspace strip, and the application grid that takes the place
-// of Scale's windows while the field has text. Scale keeps the keyboard focus: keys arrive
-// through handleKeyPress (see enable()), so typing needs no click.
+// Search field above the workspace strip, @topOffset pixels below the top of the primary
+// monitor, and the application grid that takes the place of Scale's windows while the field
+// has text. Scale keeps the keyboard focus: keys arrive through handleKeyPress (see
+// enable()), so typing needs no click.
 var AppSearch = class AppSearch {
-    constructor() {
+    constructor(topOffset = 0) {
         this._monitor = Main.layoutManager.primaryMonitor;
         this._index = null;
         this._apps = [];
@@ -136,7 +137,7 @@ var AppSearch = class AppSearch {
 
         this.actor = new St.Bin({ style_class: 'scale-search-bar', child: this._entry, reactive: true });
         UiHelpers.swallowClicks(this.actor);
-        this.actor.set_position(this._monitor.x, this._monitor.y);
+        this.actor.set_position(this._monitor.x, this._monitor.y + topOffset);
         this.actor.set_width(this._monitor.width);
 
         this._results = new St.BoxLayout({ style_class: 'scale-search-grid', vertical: true, reactive: true });

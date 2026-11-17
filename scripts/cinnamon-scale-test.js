@@ -63,6 +63,9 @@ class FakeSignals {
     }
 }
 
+// Natural heights of the fake bands, by style class: the clock row is above the search.
+const NATURAL_HEIGHTS = { 'scale-clock-bar': 52, 'scale-search-bar': 50 };
+
 class FakeActor extends FakeSignals {
     constructor(props = {}) {
         super();
@@ -71,8 +74,12 @@ class FakeActor extends FakeSignals {
         this.parent = null;
         this.destroyed = false;
         this.themeLengths = {};
-        this.naturalHeight = 0;
+        this.naturalHeight = NATURAL_HEIGHTS[props.style_class] || 0;
         this.naturalWidth = 0;
+    }
+
+    set_text(text) {
+        this.text = text;
     }
 
     add_actor(child) {
@@ -213,6 +220,28 @@ function makeImports(monitorCount, primaryIndex) {
         get_event_state: () => 0,
     };
 
+    // The clock's time source and timers: the time is set by the test, timers fire on demand.
+    const clockState = { now: GLib.DateTime.new_local(2026, 11, 17, 9, 22, 5), use24h: true, timers: new Map(), nextTimerId: 1 };
+    const FakeGLib = { DateTime: { new_now_local: () => clockState.now } };
+    const Gio = {
+        Settings: class {
+            get_boolean(key) {
+                return key === 'clock-use-24h' && clockState.use24h;
+            }
+        },
+    };
+    const Mainloop = {
+        timeout_add(delay, callback) {
+            const id = clockState.nextTimerId++;
+            clockState.timers.set(id, { delay, callback });
+            return id;
+        },
+        source_remove(id) {
+            if (!clockState.timers.delete(id))
+                throw new Error(`No source ${id}`);
+        },
+    };
+
     const monitors = [];
     for (let i = 0; i < monitorCount; i++)
         monitors.push({ x: i * 1920, y: 0, width: 1920, height: 1080 });
@@ -253,10 +282,11 @@ function makeImports(monitorCount, primaryIndex) {
 
     return {
         imports: {
-            gi: { Clutter, St, CMenu, Cinnamon, Meta: { MotionDirection: {} } },
+            gi: { Clutter, St, CMenu, Cinnamon, Gio, GLib: FakeGLib, Meta: { MotionDirection: {} } },
             ui: { main: Main, workspace: { Workspace, WindowClone }, workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 } },
+            mainloop: Mainloop,
         },
-        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases,
+        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, clockState, strips: [],
     };
 }
 
@@ -295,6 +325,9 @@ function makeSiblingStubs(env) {
     class WorkspaceStrip {
         constructor(index, topOffset, bottomInset) {
             const monitor = env.monitors[index];
+            this.index = index;
+            this.topOffset = topOffset;
+            env.strips.push(this);
             this.area = {
                 x: monitor.x,
                 y: monitor.y + topOffset + STRIP_HEIGHT,
@@ -630,8 +663,90 @@ function testClockMatchesCalendar() {
         count === DAYS_2024_TO_2027 && mismatches.length === 0);
 }
 
+function clockBarsOf(env) {
+    return env.Main.overview._group.children.filter(actor => actor.style_class === 'scale-clock-bar');
+}
+
+function searchBarOf(env) {
+    return env.Main.overview._group.children.find(actor => actor.style_class === 'scale-search-bar');
+}
+
+function closeScale(env) {
+    env.Main.overview.visible = false;
+    env.Main.overview.emit('hidden');
+}
+
+// Fires the only pending clock timer at @now, as the main loop would.
+function fireClockTimer(env, now) {
+    const [[id, timer]] = [...env.clockState.timers];
+    env.clockState.timers.delete(id);
+    env.clockState.now = now;
+    return timer.callback();
+}
+
+// The clock row: above the search on the primary screen, right at opening, updated at each
+// minute change, no timer left once Scale is closed or the extension disabled.
+function testClockRow() {
+    // Two screens, the second one primary.
+    const env = setUp(2, 1);
+    const extension = env.loadExtension();
+    extension.enable();
+    check('clock: no row and no timer before Scale opens', clockBarsOf(env).length === 0 && env.clockState.timers.size === 0);
+
+    openScale(env);
+    const bars = clockBarsOf(env);
+    const bar = bars[0];
+    const label = bar && bar.child;
+    const primary = env.monitors[1];
+    print(`  row text at 2026-11-17 09:22:05: "${label && label.text}"`);
+    check('clock: one row, on the primary screen only', bars.length === 1 && bar.x === primary.x && bar.y === primary.y &&
+        bar.width === primary.width);
+    check('clock: the row reads "Tue 17 Nov. 2026   ·   09:22" at opening', label.text === 'Tue 17 Nov. 2026   ·   09:22');
+    check('clock: the row is below the cover pane, like the search field',
+        env.Main.overview._group.children.indexOf(bar) < env.Main.overview._group.children.indexOf(env.Main.overview._coverPane));
+    const search = searchBarOf(env);
+    check('clock: the search field starts under the row', search.y === primary.y + NATURAL_HEIGHTS['scale-clock-bar']);
+    const primaryStrip = env.strips.find(strip => strip.index === 1);
+    const otherStrip = env.strips.find(strip => strip.index === 0);
+    check('clock: the primary strip starts under the row and the search field',
+        primaryStrip.topOffset === NATURAL_HEIGHTS['scale-clock-bar'] + NATURAL_HEIGHTS['scale-search-bar']);
+    check('clock: the other screen keeps its strip at the very top', otherStrip.topOffset === 0);
+    check('clock: a click on the row is swallowed and does nothing',
+        bar.emit('button-press-event', buttonEvent(BUTTON.PRIMARY)) === true &&
+        bar.emit('button-release-event', buttonEvent(BUTTON.PRIMARY)) === true);
+    check('clock: no key focus on the row', !bar.can_focus && !label.can_focus);
+
+    typeKey(env, keyEvent('f'));
+    check('clock: typing still goes to the search', search.child.get_text() === 'f');
+    typeKey(env, keyEvent(null, ESCAPE_KEY));
+
+    const [timer] = [...env.clockState.timers.values()];
+    check('clock: one timer, due at the next minute (55 s after 09:22:05)',
+        env.clockState.timers.size === 1 && timer.delay === 55000);
+    const keepsGoing = fireClockTimer(env, GLib.DateTime.new_local(2026, 11, 17, 9, 23, 0));
+    check('clock: the minute change updates the row', label.text === 'Tue 17 Nov. 2026   ·   09:23');
+    check('clock: the fired timer ends and a new one waits for the next minute',
+        keepsGoing === false && env.clockState.timers.size === 1 && [...env.clockState.timers.values()][0].delay === 60000);
+    fireClockTimer(env, GLib.DateTime.new_local(2027, 1, 1, 0, 0, 0));
+    check('clock: midnight on 31 December changes the date and the year', label.text === 'Fri 1 Jan. 2027   ·   00:00');
+
+    closeScale(env);
+    check('clock: closing Scale removes the row and its timer', bar.destroyed && clockBarsOf(env).length === 0 &&
+        env.clockState.timers.size === 0);
+
+    env.clockState.use24h = false;
+    env.clockState.now = GLib.DateTime.new_local(2026, 11, 17, 21, 40, 0);
+    openScale(env);
+    check('clock: the 12-hour setting is read at opening', clockBarsOf(env)[0].child.text === 'Tue 17 Nov. 2026   ·   9:40 PM');
+    const reopened = clockBarsOf(env)[0];
+    extension.disable();
+    check('clock: disable() with Scale open removes the row and its timer', reopened.destroyed &&
+        env.clockState.timers.size === 0);
+}
+
 testClockText();
 testClockMatchesCalendar();
+testClockRow();
 testSearchBlocksOtherScreens();
 testMiddleClickDoesNothing();
 testDragHighlightsClearedOnDrop();

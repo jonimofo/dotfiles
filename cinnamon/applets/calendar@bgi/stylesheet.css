@@ -48,10 +48,12 @@
 }
 
 /* Violet: selected day (hover included so it stays violet; white digit 4.83:1, today's
-   outline 3.76:1 on it), scroll bar handle (3.55:1 on the popup background) */
+   outline 3.76:1 on it), scroll bar handle and now line rule (3.55:1 on the popup
+   background) */
 .calendar-bgi-day-selected,
 .calendar-bgi-day-selected:hover,
-.calendar-bgi-events StScrollBar StButton#vhandle {
+.calendar-bgi-events StScrollBar StButton#vhandle,
+.calendar-bgi-now-line-rule {
     background-color: #7B5CD6;
 }
 
@@ -81,14 +83,20 @@
     color: #B5BED0;
 }
 
-/* Light violet: month arrows on hover (4.78:1 on the hover background) */
-.calendar-bgi-month-arrow:hover {
+/* Light violet: month arrows on hover (4.78:1 on the hover background), the now line's time
+   (7.83:1 on the popup background) */
+.calendar-bgi-month-arrow:hover,
+.calendar-bgi-now-line-time {
     color: #BAA3F0;
 }
 
-/* Discreet text: days of the other months, week numbers */
+/* Discreet text: days of the other months, week numbers, and the texts of today's past
+   events, dimmed on purpose (at least 3:1 on their card, see the contrast test) */
 .calendar-bgi-day-outside,
-.calendar-bgi-week-number {
+.calendar-bgi-week-number,
+.calendar-bgi-event-past .calendar-bgi-event-time,
+.calendar-bgi-event-past .calendar-bgi-event-title,
+.calendar-bgi-event-past .calendar-bgi-event-meta {
     color: #818CA4;
 }
 
@@ -111,6 +119,11 @@
 .calendar-bgi-event-row,
 .calendar-bgi-clock-divided {
     border-color: #394761;
+}
+
+/* Violet: the outline of today's ongoing event, the card's own 1px border recoloured */
+.calendar-bgi-event-ongoing {
+    border-color: #7B5CD6;
 }
 
 /* Button edges: the discreet colour, 5.08:1 on the popup background */
@@ -247,6 +260,20 @@
 
 .calendar-bgi-event-meta {
     font-size: 1em;
+}
+
+/* The now line among today's events: the time, then a rule across the list. */
+.calendar-bgi-now-line {
+    spacing: 0.5em;
+}
+
+.calendar-bgi-now-line-time {
+    font-size: 0.91667em;
+    font-weight: bold;
+}
+
+.calendar-bgi-now-line-rule {
+    height: 2px;
 }
 
 /* Right column: the calendar panel, then the Today button. */

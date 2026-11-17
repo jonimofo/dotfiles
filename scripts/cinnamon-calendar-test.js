@@ -502,7 +502,8 @@ function contrast(first, second) {
 }
 
 // Where each colour is actually used: [foreground selector, property, background selector,
-// minimum]. Text needs 4.5:1; outlines, edges and the scroll bar handle (not text) 3:1.
+// minimum]. Text needs 4.5:1; outlines, edges, the scroll bar handle and the now line's
+// rule (not text) 3:1.
 // Exceptions, on purpose: the thin #394761 lines (popup border, event card edges, line
 // between the clocks) are decoration, the card's own background marks it; the event accent
 // bar takes the calendar's colour from the data.
@@ -530,6 +531,14 @@ const CONTRAST_PAIRS = [
     ['.calendar-bgi-today-button', 'color', '.calendar-bgi-today-button:hover', 4.5],
     ['.calendar-bgi-settings-button', 'color', '.calendar-bgi-settings-button', 4.5],
     ['.menu.calendar-bgi-popup', 'color', '.menu.calendar-bgi-popup', 4.5],
+    // Named exception: today's past events are dimmed on purpose; their texts keep 3:1.
+    ['.calendar-bgi-event-past .calendar-bgi-event-title', 'color', '.calendar-bgi-event-row', 3],
+    ['.calendar-bgi-event-past .calendar-bgi-event-title', 'color', '.calendar-bgi-event-row:hover', 3],
+    ['.calendar-bgi-event-past .calendar-bgi-event-meta', 'color', '.calendar-bgi-event-row', 3],
+    ['.calendar-bgi-event-past .calendar-bgi-event-time', 'color', '.calendar-bgi-event-time-block', 3],
+    ['.calendar-bgi-now-line-time', 'color', '.menu.calendar-bgi-popup', 4.5],
+    ['.calendar-bgi-now-line-rule', 'background-color', '.menu.calendar-bgi-popup', 3],
+    ['.calendar-bgi-event-ongoing', 'border-color', '.menu.calendar-bgi-popup', 3],
     ['.calendar-bgi-day-today', 'border-color', '.calendar-bgi-calendar-panel', 3],
     ['.calendar-bgi-day-today', 'border-color', '.calendar-bgi-day-selected', 3],
     ['.calendar-bgi-today-button', 'border-color', '.menu.calendar-bgi-popup', 3],

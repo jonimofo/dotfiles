@@ -30,6 +30,7 @@
                 "show-events",
                 "show-header-clocks",
                 "show-event-meta",
+                "show-now-line",
                 "show-day-marker",
                 "show-day-summary",
                 "show-today-button",
@@ -115,6 +116,11 @@
         "type": "switch",
         "default": true,
         "description": "Metadata line"
+    },
+    "show-now-line": {
+        "type": "switch",
+        "default": true,
+        "description": "Now line and event states"
     },
     "show-day-marker": {
         "type": "switch",

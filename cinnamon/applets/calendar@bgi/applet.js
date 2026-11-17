@@ -228,6 +228,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
             this.settings.bind(Constants.EVENT_GAP.key, "event_gap", this._onDisplayChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.headerClocks.key, "show_header_clocks", this._onDisplayChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.eventMeta.key, "show_event_meta", this._onDisplayChanged);
+            this.settings.bind(Constants.ELEMENT_SWITCHES.nowLine.key, "show_now_line", this._onDisplayChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.eventCount.key, "show_event_count", this._onDisplayChanged);
             this.settings.bind(Constants.ELEMENT_SWITCHES.todayButton.key, "show_today_button", this._onDisplayChanged);
 
@@ -330,6 +331,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
     // rows on the next select_date(), which _onSettingsChanged() forces.
     _applyAppearance() {
         this.event_list.set_appearance(this.events_text_scale, this.event_gap, this.show_event_meta);
+        this.event_list.set_show_now(this.show_now_line);
         this._calendar.actor.style = Appearance.percentFontStyle(this.days_text_scale, Constants.TEXT_SCALES.days);
         this._header.style = Appearance.percentFontStyle(this.header_text_scale, Constants.TEXT_SCALES.header);
         this.go_home_button.visible = this.show_header_clocks;
@@ -514,6 +516,7 @@ class CinnamonCalendarApplet extends Applet.TextApplet {
                 this.event_list.set_monitor_height(monitor ? monitor.height : null);
                 this._resetCalendar();
                 this.events_manager.select_date(this._calendar.getSelectedDate(), this._forcedFetchDue());
+                this.event_list.scroll_to_now();
             }
         }));
     }

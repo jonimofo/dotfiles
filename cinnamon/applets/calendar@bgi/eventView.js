@@ -20,6 +20,7 @@ const Interfaces = imports.misc.interfaces;
 const Constants = require('./constants');
 const DateText = require('./dateText');
 const Appearance = require('./appearance');
+const NowLine = require('./nowLine');
 const EventsHeight = require('./eventsHeight');
 
 const STATUS_UNKNOWN = 0;
@@ -713,6 +714,33 @@ class EventList {
                 accessible_role: Atk.Role.LIST
             }
         );
+        // The now line: the current time and a rule, placed among the rows of today between
+        // the started and the upcoming events, moved in place as the minutes pass.
+        this._now_line = new St.BoxLayout(
+            {
+                style_class: Constants.STYLE.nowLine,
+                visible: false
+            }
+        );
+        this._now_time = new St.Label(
+            {
+                style_class: Constants.STYLE.nowLineTime,
+                y_align: Clutter.ActorAlign.CENTER
+            }
+        );
+        this._now_line.add_actor(this._now_time);
+        this._now_line.add_actor(new St.Widget(
+            {
+                style_class: Constants.STYLE.nowLineRule,
+                x_expand: true,
+                y_align: Clutter.ActorAlign.CENTER
+            }
+        ));
+        this.events_box.add_actor(this._now_line);
+        this._show_now = true;
+        this._now_minute = null;
+        this._now_index = null;
+
         this.events_scroll_box = new St.ScrollView(
             {
                 style_class: 'calendar-events-scrollbox vfade',
@@ -748,6 +776,67 @@ class EventList {
     // Events text size and gap, and the parts of each row. The column and the list both carry
     // the size (see appearance.js). A change of parts rebuilds the rows on the next
     // set_events().
+    // Shows or hides the now line and the event states.
+    set_show_now(show_now) {
+        if (show_now === this._show_now) {
+            return;
+        }
+        this._show_now = show_now;
+        this._refresh_now(true);
+    }
+
+    // States of the rows and place of the now line, at most once a minute unless @force; only
+    // what changed is touched.
+    _refresh_now(force) {
+        let now = GLib.DateTime.new_now_local();
+        let now_ms = now.to_unix() * 1000;
+        let minute = NowLine.minuteOf(now_ms);
+        if (!force && minute === this._now_minute) {
+            return;
+        }
+        this._now_minute = minute;
+
+        let today = this._show_now && NowLine.showsToday(DateText.datePartsOf(this.selected_date),
+                                                         DateText.datePartsOf(now));
+        let states = this._rows.map(row => NowLine.eventState(row.event.start.to_unix() * 1000,
+                                                              row.event.end.to_unix() * 1000,
+                                                              row.event.all_day, now_ms));
+        this._rows.forEach((row, i) => row.set_state(today ? states[i] : null));
+
+        let index = today ? NowLine.nowLineIndex(states) : null;
+        this._now_line.visible = index !== null;
+        if (index === null) {
+            this._now_index = null;
+            return;
+        }
+        this._now_time.set_text(now.format(DateText.timeFormatFor(this.desktop_settings.get_boolean(Constants.DESKTOP_24H_KEY), false)));
+        if (force || index !== this._now_index) {
+            this.events_box.set_child_at_index(this._now_line, index);
+            this._now_index = index;
+        }
+    }
+
+    // On opening: bring the now line into view when the list scrolls.
+    scroll_to_now() {
+        if (this._now_line.visible) {
+            this._scroll_to(this._now_line);
+        }
+    }
+
+    _scroll_to(actor) {
+        if (this._scroll_to_idle_id > 0) {
+            Mainloop.source_remove(this._scroll_to_idle_id);
+        }
+        this._scroll_to_idle_id = Mainloop.idle_add(Lang.bind(this, function() {
+            let vscroll = this.events_scroll_box.get_vscroll_bar();
+            let mid_position = actor.y + (actor.height / 2) - (this.events_box.height / 2);
+            vscroll.get_adjustment().set_value(mid_position);
+
+            this._scroll_to_idle_id = 0;
+            return GLib.SOURCE_REMOVE;
+        }));
+    }
+
     set_appearance(scale, gap, show_meta) {
         this._scale = scale;
         this._apply_column_style();
@@ -783,14 +872,18 @@ class EventList {
             this._rows.forEach((row) => {
                 row.update_variations();
             });
+            this._refresh_now(false);
             return;
         }
 
         this.events_box.get_children().forEach((actor) => {
-            actor.destroy();
+            if (actor !== this._now_line) {
+                actor.destroy();
+            }
         });
 
         this._rows = [];
+        this._refresh_now(true);
 
         if (this._no_events_timeout_id > 0) {
             Mainloop.source_remove(this._no_events_timeout_id);
@@ -845,23 +938,12 @@ class EventList {
             this._rows.push(row);
         }
 
-        if (scroll_to_row == null) {
-            return;
+        this._refresh_now(true);
+        if (this._now_line.visible) {
+            this._scroll_to(this._now_line);
+        } else if (scroll_to_row !== null) {
+            this._scroll_to(scroll_to_row.actor);
         }
-
-        this._scroll_to_idle_id = Mainloop.idle_add(Lang.bind(this, function(row) {
-            let vscroll = this.events_scroll_box.get_vscroll_bar();
-
-            if (row != null) {
-                let mid_position = row.actor.y + (row.actor.height / 2) - (this.events_box.height / 2);
-                vscroll.get_adjustment().set_value(mid_position);
-            } else {
-                vscroll.get_adjustment().set_value(0);
-            }
-
-            this._scroll_to_idle_id = 0;
-            return GLib.SOURCE_REMOVE;
-        }, scroll_to_row));
     }
 }
 Signals.addSignalMethods(EventList.prototype);
@@ -968,8 +1050,24 @@ class EventRow {
 
         // The full summary, for titles or metadata cut by the ellipsis
         this._tooltip = new Tooltips.Tooltip(this.actor, this.event.summary);
+        this._state = null;
 
         this.update_variations();
+    }
+
+    // 'past', 'ongoing' or null: past cards are dimmed, the ongoing one outlined.
+    set_state(state) {
+        if (state === this._state) {
+            return;
+        }
+        let classes = Constants.EVENT_STATE_STYLES;
+        if (this._state && classes[this._state]) {
+            this.actor.remove_style_class_name(classes[this._state]);
+        }
+        this._state = state;
+        if (state && classes[state]) {
+            this.actor.add_style_class_name(classes[state]);
+        }
     }
 
     update_variations() {

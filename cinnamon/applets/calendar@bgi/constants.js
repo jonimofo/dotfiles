@@ -24,6 +24,7 @@ const ELEMENT_SWITCHES = {
     events: { key: 'show-events', label: 'Calendar events', default: true },
     headerClocks: { key: 'show-header-clocks', label: 'Clocks in the header', default: true },
     eventMeta: { key: 'show-event-meta', label: 'Metadata line', default: true },
+    nowLine: { key: 'show-now-line', label: 'Now line and event states', default: true },
     dayMarker: { key: 'show-day-marker', label: 'Dot under days', default: true },
     // The key keeps its first name (a summary card, later removed): saved settings use it.
     eventCount: { key: 'show-day-summary', label: 'Event count', default: true },
@@ -165,6 +166,14 @@ const STYLE = {
     eventTimeBlock: 'calendar-bgi-event-time-block',
     eventContent: 'calendar-bgi-event-content',
     eventMeta: 'calendar-bgi-event-meta',
+    eventPast: 'calendar-bgi-event-past',
+    eventOngoing: 'calendar-bgi-event-ongoing',
+    nowLine: 'calendar-bgi-now-line',
+    nowLineTime: 'calendar-bgi-now-line-time',
+    nowLineRule: 'calendar-bgi-now-line-rule',
     eventTitle: 'calendar-bgi-event-title',
     eventTime: 'calendar-bgi-event-time',
 };
+
+// Style class of an event card per state; upcoming events keep their look.
+const EVENT_STATE_STYLES = { past: STYLE.eventPast, ongoing: STYLE.eventOngoing };

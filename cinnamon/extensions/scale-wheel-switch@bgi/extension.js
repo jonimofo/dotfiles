@@ -89,10 +89,11 @@ function showHeader() {
 
     try {
         clock = new OverviewClock.OverviewClock();
-        search = new AppSearch.AppSearch(clock.getHeight());
+        const clockHeight = clock.getHeight();
+        search = new AppSearch.AppSearch(clockHeight);
         showDock();
         const primaryIndex = Main.layoutManager.primaryIndex;
-        const primaryTopOffset = clock.getHeight() + search.getHeight();
+        const primaryTopOffset = clockHeight + search.getHeight();
         Main.layoutManager.monitors.forEach((monitor, index) => {
             const isPrimary = index === primaryIndex;
             const topOffset = isPrimary ? primaryTopOffset : 0;

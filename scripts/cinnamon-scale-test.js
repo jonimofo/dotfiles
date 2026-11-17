@@ -221,13 +221,35 @@ function makeImports(monitorCount, primaryIndex) {
     };
 
     // The clock's time source and timers: the time is set by the test, timers fire on demand.
-    const clockState = { now: GLib.DateTime.new_local(2026, 11, 17, 9, 22, 5), use24h: true, timers: new Map(), nextTimerId: 1 };
+    const clockState = {
+        now: GLib.DateTime.new_local(2026, 11, 17, 9, 22, 5),
+        use24h: true,
+        timers: new Map(),
+        nextTimerId: 1,
+        // System bus signal subscriptions: id -> {member, callback}.
+        subscriptions: new Map(),
+        nextSubscriptionId: 1,
+    };
     const FakeGLib = { DateTime: { new_now_local: () => clockState.now } };
     const Gio = {
         Settings: class {
             get_boolean(key) {
                 return key === 'clock-use-24h' && clockState.use24h;
             }
+        },
+        DBusSignalFlags: { NONE: 0 },
+        DBus: {
+            system: {
+                signal_subscribe(sender, iface, member, path, arg0, flags, callback) {
+                    const id = clockState.nextSubscriptionId++;
+                    clockState.subscriptions.set(id, { sender, iface, member, path, callback });
+                    return id;
+                },
+                signal_unsubscribe(id) {
+                    if (!clockState.subscriptions.delete(id))
+                        throw new Error(`No subscription ${id}`);
+                },
+            },
         },
     };
     const Mainloop = {
@@ -637,6 +659,7 @@ function testClockText() {
 
     check('clock: next minute from 0 s is 60 s away', clockText.msUntilNextMinute(0, 0) === 60000);
     check('clock: next minute from 59.5 s is 500 ms away', clockText.msUntilNextMinute(59, 500000) === 500);
+    check('clock: next minute from the last microsecond is 1 ms away, never 0', clockText.msUntilNextMinute(59, 999999) === 1);
 }
 
 // The row's date must stay the calendar@bgi header date: compared over every day of 2024
@@ -669,6 +692,13 @@ function clockBarsOf(env) {
 
 function searchBarOf(env) {
     return env.Main.overview._group.children.find(actor => actor.style_class === 'scale-search-bar');
+}
+
+// logind's PrepareForSleep(@isSuspending) on the system bus.
+function sendPrepareForSleep(env, isSuspending) {
+    const parameters = { deep_unpack: () => [isSuspending] };
+    for (const { callback } of [...env.clockState.subscriptions.values()])
+        callback(null, ':1.1', '/org/freedesktop/login1', 'org.freedesktop.login1.Manager', 'PrepareForSleep', parameters);
 }
 
 function closeScale(env) {
@@ -730,9 +760,25 @@ function testClockRow() {
     fireClockTimer(env, GLib.DateTime.new_local(2027, 1, 1, 0, 0, 0));
     check('clock: midnight on 31 December changes the date and the year', label.text === 'Fri 1 Jan. 2027   ·   00:00');
 
+    const [subscription] = [...env.clockState.subscriptions.values()];
+    check('clock: one subscription to logind\'s PrepareForSleep while Scale is open',
+        env.clockState.subscriptions.size === 1 && subscription.sender === 'org.freedesktop.login1' &&
+        subscription.iface === 'org.freedesktop.login1.Manager' && subscription.member === 'PrepareForSleep' &&
+        subscription.path === '/org/freedesktop/login1');
+    const timerBeforeSleep = [...env.clockState.timers.keys()][0];
+    sendPrepareForSleep(env, true);
+    check('clock: going to sleep changes nothing', label.text === 'Fri 1 Jan. 2027   ·   00:00' &&
+        [...env.clockState.timers.keys()].join() === `${timerBeforeSleep}`);
+    env.clockState.now = GLib.DateTime.new_local(2027, 1, 1, 7, 45, 30);
+    sendPrepareForSleep(env, false);
+    check('clock: the resume shows the current minute at once', label.text === 'Fri 1 Jan. 2027   ·   07:45');
+    check('clock: the resume replaces the timer by one due at the next minute',
+        env.clockState.timers.size === 1 && !env.clockState.timers.has(timerBeforeSleep) &&
+        [...env.clockState.timers.values()][0].delay === 30000);
+
     closeScale(env);
-    check('clock: closing Scale removes the row and its timer', bar.destroyed && clockBarsOf(env).length === 0 &&
-        env.clockState.timers.size === 0);
+    check('clock: closing Scale removes the row, its timer and its subscription', bar.destroyed &&
+        clockBarsOf(env).length === 0 && env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
 
     env.clockState.use24h = false;
     env.clockState.now = GLib.DateTime.new_local(2026, 11, 17, 21, 40, 0);
@@ -740,13 +786,37 @@ function testClockRow() {
     check('clock: the 12-hour setting is read at opening', clockBarsOf(env)[0].child.text === 'Tue 17 Nov. 2026   ·   9:40 PM');
     const reopened = clockBarsOf(env)[0];
     extension.disable();
-    check('clock: disable() with Scale open removes the row and its timer', reopened.destroyed &&
-        env.clockState.timers.size === 0);
+    check('clock: disable() with Scale open removes the row, its timer and its subscription', reopened.destroyed &&
+        env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
+}
+
+// Audit L5: a clock that fails while being put on screen leaves no row, no timer and no
+// subscription.
+function testClockConstructorFailure() {
+    const env = setUp();
+    const overviewClock = env.require('./overviewClock');
+    env.Main.overview._group.insert_child_below = () => {
+        throw new Error('build failed');
+    };
+    const created = [];
+    const OriginalBin = env.imports.gi.St.Bin;
+    env.imports.gi.St.Bin = class extends OriginalBin {
+        constructor(props) {
+            super(props);
+            created.push(this);
+        }
+    };
+    check('clock L5: a failing clock constructor throws', throws(() => new overviewClock.OverviewClock()));
+    check('clock L5: it leaves no row', created.length === 1 && created[0].destroyed);
+    check('clock L5: it leaves no timer and no subscription',
+        env.clockState.timers.size === 0 && env.clockState.subscriptions.size === 0);
+    env.imports.gi.St.Bin = OriginalBin;
 }
 
 testClockText();
 testClockMatchesCalendar();
 testClockRow();
+testClockConstructorFailure();
 testSearchBlocksOtherScreens();
 testMiddleClickDoesNothing();
 testDragHighlightsClearedOnDrop();

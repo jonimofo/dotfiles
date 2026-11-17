@@ -10,13 +10,21 @@ const UiHelpers = require('./uiHelpers');
 // Desktop setting of the 12 or 24-hour clock, read at each opening of Scale.
 const DESKTOP_INTERFACE_SCHEMA = 'org.cinnamon.desktop.interface';
 const DESKTOP_24H_KEY = 'clock-use-24h';
+// logind's signal before a suspend (true) and after the resume (false): the minute timer
+// does not count the time spent suspended.
+const LOGIN1_BUS_NAME = 'org.freedesktop.login1';
+const LOGIN1_MANAGER_INTERFACE = 'org.freedesktop.login1.Manager';
+const LOGIN1_MANAGER_PATH = '/org/freedesktop/login1';
+const PREPARE_FOR_SLEEP_SIGNAL = 'PrepareForSleep';
 
 // Band at the top of the primary monitor, above the search field: the date and the local
-// time. It lives only while Scale is open, and its timer fires at each minute change.
+// time. It lives only while Scale is open; its timer fires at each minute change and after
+// a resume from suspend.
 var OverviewClock = class OverviewClock {
     constructor() {
         this._monitor = Main.layoutManager.primaryMonitor;
         this._timeoutId = 0;
+        this._sleepSubscriptionId = 0;
         this._use24h = new Gio.Settings({ schema_id: DESKTOP_INTERFACE_SCHEMA }).get_boolean(DESKTOP_24H_KEY);
 
         // Never focused, never clicked: like the other bands, it swallows the clicks so they
@@ -32,6 +40,9 @@ var OverviewClock = class OverviewClock {
 
     _show() {
         this._tick();
+        this._sleepSubscriptionId = Gio.DBus.system.signal_subscribe(LOGIN1_BUS_NAME, LOGIN1_MANAGER_INTERFACE,
+            PREPARE_FOR_SLEEP_SIGNAL, LOGIN1_MANAGER_PATH, null, Gio.DBusSignalFlags.NONE,
+            (connection, sender, path, iface, signal, parameters) => this._onPrepareForSleep(parameters));
         Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
     }
 
@@ -51,10 +62,28 @@ var OverviewClock = class OverviewClock {
         });
     }
 
-    destroy() {
+    // After a resume: the current minute at once, and a timer aligned to it again.
+    _onPrepareForSleep(parameters) {
+        const [isSuspending] = parameters.deep_unpack();
+        if (isSuspending)
+            return;
+
+        this._removeTimeout();
+        this._tick();
+    }
+
+    _removeTimeout() {
         if (this._timeoutId) {
             Mainloop.source_remove(this._timeoutId);
             this._timeoutId = 0;
+        }
+    }
+
+    destroy() {
+        this._removeTimeout();
+        if (this._sleepSubscriptionId) {
+            Gio.DBus.system.signal_unsubscribe(this._sleepSubscriptionId);
+            this._sleepSubscriptionId = 0;
         }
         this.actor.destroy();
     }

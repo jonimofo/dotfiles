@@ -162,8 +162,8 @@ Then give Super back to the Menu (see above).
   drawn until the next opening of Scale.
 - Many apps make the dock icons smaller to fit the screen's width. Untested.
 - The clock reads the 12 or 24-hour setting when Scale opens: a change while it is open, or
-  of the time zone, shows at the next opening. After a suspend with Scale open, the time can
-  lag for up to a minute: its timer does not count the time spent suspended.
+  of the time zone, shows at the next opening. After the system clock is set with Scale open,
+  the time can lag for up to a minute; after a suspend it is updated at the resume.
 
 ## How it is built
 
@@ -221,6 +221,8 @@ Assumptions about behaviour:
 - `Main.activateWindow` does not close Scale when it has to switch workspace, so the dock
   switches to the window's workspace first, then activates it.
 - `Cinnamon.AppSystem`'s `app-state-changed` signal drives the dock's live update.
+- logind emits `org.freedesktop.login1.Manager.PrepareForSleep(false)` on the system bus at
+  each resume: the clock subscribes to it while Scale is open.
 - `extension.sh reload` calls the D-Bus method `org.Cinnamon.ReloadXlet(uuid, "EXTENSION")`.
 
 ## Quick Settings: what it does

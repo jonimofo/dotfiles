@@ -43,14 +43,16 @@ the other screens, a setting, the calendar applet, new dependencies.
    (`Tue 17 Nov. 2026`: three-letter weekday, day without padding, three-letter month with a
    dot when the month's name is longer, year; English whatever the locale). The time is
    `HH:MM`, or the 12-hour form, after the desktop's `clock-use-24h`; no seconds.
-2. Look: bold, about 32px, centred, on its own band above the search field, with the same
-   vertical gap to the field as between the field and the strip. White text on the same
-   translucent dark band as the search field and the strip, like the extension's other texts.
+2. Look: bold, 18pt (reduced from the mockup's 32px after the live check), centred, on its
+   own band above the search field, with the same vertical gap to the field as between the
+   field and the strip. White text on the same translucent dark band as the search field and
+   the strip, like the extension's other texts.
 3. Not interactive: no key focus, no action on a click. Like the extension's other bands it
    swallows clicks, so a click on it does not reach Scale's background.
 4. Updates: right at opening, then once per minute change, by a timer aligned to the next
-   minute. Nothing runs while Scale is closed; the timer is removed when Scale closes and
-   when the extension is disabled.
+   minute, and at once after a resume from suspend (logind's `PrepareForSleep`). Nothing
+   runs while Scale is closed; the timer and the D-Bus subscription are removed when Scale
+   closes and when the extension is disabled.
 5. Primary screen only. The search field, the strip and Scale's windows move down by the
    band's height.
 6. No new dependency, no setting.

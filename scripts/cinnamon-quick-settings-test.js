@@ -1032,6 +1032,82 @@ async function testTopProcess() {
     check('cpu: nothing shows after destroy', changes === 3);
 }
 
+function testMediaModel() {
+    const Model = load('./mediaModel');
+    check('media: MPRIS names only', Model.isPlayerName('org.mpris.MediaPlayer2.vlc')
+        && !Model.isPlayerName('org.mpris.MediaPlayer2.') && !Model.isPlayerName('org.freedesktop.Notifications') && !Model.isPlayerName(null));
+    check(`media: player name from Identity, else the bus name (${Model.playerName('', 'org.mpris.MediaPlayer2.firefox.instance_1_2')})`,
+        Model.playerName('VLC media player', 'org.mpris.MediaPlayer2.vlc') === 'VLC media player'
+        && Model.playerName('', 'org.mpris.MediaPlayer2.firefox.instance_1_2') === 'Firefox'
+        && Model.playerName(null, 'org.mpris.MediaPlayer2.vlc-4242') === 'Vlc'
+        && Model.playerName(42, 'org.mpris.MediaPlayer2.player') === 'Player');
+    const text = Model.blockText({ 'xesam:title': 'Song title', 'xesam:artist': ['Artist'] }, 'VLC');
+    check(`media: title, then artist · player (${JSON.stringify(text)})`,
+        text.title === 'Song title' && text.subtitle === 'Artist · VLC');
+    check('media: several artists joined with a comma',
+        Model.blockText({ 'xesam:title': 'Duet', 'xesam:artist': ['First', 'Second'] }, 'VLC').subtitle === 'First, Second · VLC');
+    check('media: no artist, the player name alone',
+        Model.blockText({ 'xesam:title': 'Video title' }, 'Firefox').subtitle === 'Firefox'
+        && Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': [] }, 'Firefox').subtitle === 'Firefox'
+        && Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': ['', '  '] }, 'Firefox').subtitle === 'Firefox');
+    check('media: an artist given as a string works too',
+        Model.blockText({ 'xesam:title': 'T', 'xesam:artist': 'Channel' }, 'Firefox').subtitle === 'Channel · Firefox');
+    check('media: no title, empty title or a non-text title gives no block',
+        Model.blockText({}, 'VLC') === null && Model.blockText({ 'xesam:title': '  ' }, 'VLC') === null
+        && Model.blockText({ 'xesam:title': 7 }, 'VLC') === null && Model.blockText(null, 'VLC') === null);
+    const odd = Model.blockText({ 'xesam:title': 'Line one\nline two\t<b>x</b>', 'xesam:artist': ['A & B'] }, 'VLC');
+    check(`media: newlines and tabs become spaces, markup characters stay as text (${odd.title})`,
+        odd.title === 'Line one line two <b>x</b>' && odd.subtitle === 'A & B · VLC');
+    const long = Model.blockText({ 'xesam:title': 'T'.repeat(60), 'xesam:artist': ['A'.repeat(30)] }, 'A very long player');
+    check(`media: long texts are cut with an ellipsis (${long.subtitle})`,
+        [...long.title].length === 44 && long.title.endsWith('…')
+        && long.subtitle === `${'A'.repeat(19)}… · A very long p…`);
+
+    const states = props => Model.buttonStates(props);
+    const all = { CanControl: true, CanGoPrevious: true, CanGoNext: true, CanPlay: true, CanPause: true };
+    const playing = states({ ...all, PlaybackStatus: 'Playing' });
+    check('media: playing shows pause, every button works',
+        playing.playPause.icon === 'media-playback-pause-symbolic' && playing.playPause.label === 'Pause'
+        && playing.previous.working && playing.playPause.working && playing.next.working
+        && playing.previous.method === 'Previous' && playing.playPause.method === 'PlayPause' && playing.next.method === 'Next');
+    const paused = states({ ...all, PlaybackStatus: 'Paused' });
+    check('media: paused or stopped shows play',
+        paused.playPause.icon === 'media-playback-start-symbolic' && states({ ...all, PlaybackStatus: 'Stopped' }).playPause.label === 'Play');
+    check('media: CanGoPrevious and CanGoNext false make those buttons inactive',
+        !states({ ...all, CanGoPrevious: false, CanGoNext: false }).previous.working
+        && !states({ ...all, CanGoPrevious: false, CanGoNext: false }).next.working);
+    check('media: play needs CanPlay, pause needs CanPause',
+        !states({ ...all, CanPlay: false, PlaybackStatus: 'Paused' }).playPause.working
+        && !states({ ...all, CanPause: false, PlaybackStatus: 'Playing' }).playPause.working
+        && states({ ...all, CanPause: false, PlaybackStatus: 'Paused' }).playPause.working);
+    const noControl = states({ ...all, CanControl: false, PlaybackStatus: 'Playing' });
+    check('media: CanControl false makes every button inactive',
+        !noControl.previous.working && !noControl.playPause.working && !noControl.next.working);
+    check('media: capabilities not read yet count as false', !states({}).previous.working && !states({}).playPause.working);
+
+    const player = (busName, owner, identity, title) => ({
+        busName, owner, identity, metadata: title ? { 'xesam:title': title } : {}, properties: all,
+    });
+    const blocks = Model.visibleBlocks([
+        player('org.mpris.MediaPlayer2.vlc', ':1.10', 'VLC media player', 'Song title'),
+        player('org.mpris.MediaPlayer2.firefox.instance_1_2', ':1.20', 'Firefox', 'Video title'),
+        player('org.mpris.MediaPlayer2.firefox', ':1.20', 'Firefox', 'Video title'),
+        player('org.mpris.MediaPlayer2.idle', ':1.30', 'Idle', null),
+    ], 3);
+    check(`media: one block per player with a title, by name, a player's two names once (${blocks.map(b => b.busName)})`,
+        `${blocks.map(b => b.busName)}` === 'org.mpris.MediaPlayer2.firefox.instance_1_2,org.mpris.MediaPlayer2.vlc');
+    const same = Model.visibleBlocks([
+        player('org.mpris.MediaPlayer2.b', ':1.2', 'Same', 'x'), player('org.mpris.MediaPlayer2.a', ':1.1', 'Same', 'x'),
+    ], 3);
+    check('media: same display name, ordered by bus name', `${same.map(b => b.busName)}` === 'org.mpris.MediaPlayer2.a,org.mpris.MediaPlayer2.b');
+    const many = Model.visibleBlocks(['d', 'a', 'c', 'b'].map((n, i) => player(`org.mpris.MediaPlayer2.${n}`, `:1.${i}`, n.toUpperCase(), 't')), 3);
+    check(`media: at most three blocks, the first three by name (${many.map(b => b.name)})`, `${many.map(b => b.name)}` === 'A,B,C');
+    check('media: no player with a title, no block', Model.visibleBlocks([player('org.mpris.MediaPlayer2.idle', ':1.3', 'Idle', null)], 3).length === 0
+        && Model.visibleBlocks([], 3).length === 0);
+    check('media: unknown owners are not merged',
+        Model.visibleBlocks([player('org.mpris.MediaPlayer2.a', null, 'A', 't'), player('org.mpris.MediaPlayer2.b', null, 'B', 't')], 3).length === 2);
+}
+
 function testBatteryModel() {
     const Model = load('./batteryModel');
     const kinds = { battery: 2, unknownState: 0 };
@@ -1732,6 +1808,7 @@ async function main() {
     testKeyboardLight();
     testAirplaneMode();
     await testTopProcess();
+    testMediaModel();
     testBatteryModel();
     testMicMute();
     testSchemaMatchesDeclarations();

@@ -272,6 +272,31 @@ const CPU_TOP_COMMAND = ['top', '-b', '-n', '2', '-d', '0.5', '-o', CPU_TOP_CPU_
 const CPU_TOP_ENV = { LC_ALL: 'C' };
 const CPU_IGNORED_COMMANDS = ['top'];
 
+// Media controls under the tiles: one block per MPRIS player with a track, through the
+// session bus like the stock sound applet. Listed at the end of the Tiles tab.
+const MEDIA_ITEM = { id: 'media', name: 'Media controls' };
+const MPRIS_NAME_PREFIX = 'org.mpris.MediaPlayer2.';
+const MPRIS_PATH = '/org/mpris/MediaPlayer2';
+const MPRIS_ROOT_INTERFACE = 'org.mpris.MediaPlayer2';
+const MPRIS_PLAYER_INTERFACE = 'org.mpris.MediaPlayer2.Player';
+const MPRIS_PLAYING = 'Playing';
+const DBUS_DAEMON = { name: 'org.freedesktop.DBus', path: '/org/freedesktop/DBus', iface: 'org.freedesktop.DBus' };
+// The menu does not grow without bound: the first blocks in display-name order.
+const MEDIA_MAX_PLAYERS = 3;
+// Cut lengths, in characters; the labels also ellipsize at their width.
+const MEDIA_TITLE_MAX = 44;
+const MEDIA_ARTIST_MAX = 20;
+const MEDIA_PLAYER_NAME_MAX = 14;
+const MEDIA_ARTIST_SEPARATOR = ', ';
+const MEDIA_PLAYER_SEPARATOR = ' · ';
+// The buttons, left to right: icon, accessible name and tooltip, MPRIS method.
+const MEDIA_BUTTONS = {
+    previous: { icon: 'media-skip-backward-symbolic', label: 'Previous', method: 'Previous' },
+    play: { icon: 'media-playback-start-symbolic', label: 'Play', method: 'PlayPause' },
+    pause: { icon: 'media-playback-pause-symbolic', label: 'Pause', method: 'PlayPause' },
+    next: { icon: 'media-skip-forward-symbolic', label: 'Next', method: 'Next' },
+};
+
 // Settings dialog (settings-schema.json): one list per group, rows { show, id }.
 const LAYOUT_KEYS = {
     tiles: 'tiles',

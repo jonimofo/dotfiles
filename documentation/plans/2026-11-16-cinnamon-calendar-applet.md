@@ -148,7 +148,7 @@ copy) at the audit round. Everything else is the stock code.
 | `applet.js` | `_onSettingsChanged` | resolves the second zone, applies the appearance settings |
 | `applet.js` | `_updateClockAndDate` | panel text, clocks, header date, tooltip and event count from the pure formatters; the redundant first `reactive` line removed |
 | `applet.js` | `_has_calendars_changed` | updates the event count |
-| `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height |
+| `applet.js` | `_initContextMenu` | on opening, caps the events column from the monitor's height; forces a refresh of the events at most once per 15 s (`_forcedFetchDue`, performance round) |
 | `applet.js` | new methods | `_updateSecondZone`, `_inVerticalPanel`, `_timeFormat`, `_secondTime`, `_panelText`, `_applyAppearance`, `_buildClock`, `_updateClocks`, `_updateHeaderCount`, `_onDisplayChanged`, `_onSecondZoneChanged`, `_onZoneIdChanged` |
 | `calendar.js` | imports | `Gettext_gtk30` removed; the applet's modules required |
 | `calendar.js` | `_formatEventTime` | removed (unused, gettext) |
@@ -156,10 +156,12 @@ copy) at the audit round. Everything else is the stock code.
 | `calendar.js` | `constructor` | binds the day dot switch; GTK month/year order detection removed |
 | `calendar.js` | `_buildHeader` | one month row instead of the month and year rows; accessible names on the arrows; day heading class; column from `DayCell.weekdayColumn` |
 | `calendar.js` | `_onPrevYearButtonClicked`, `_onNextYearButtonClicked` | removed with the year row |
-| `calendar.js` | `_update` | English month title; own day state classes; `:selected` pseudo-class no longer set; week number class; column from `DayCell.weekdayColumn`; one marker instead of one dot per event |
+| `calendar.js` | new `_buildCells` | the 42 day cells and 6 week numbers, built once (performance round) |
+| `calendar.js` | `_update` | updates the cells in place instead of removing and creating them (performance round); English month title; own day state classes; `:selected` pseudo-class no longer set; week number class; column from `DayCell.weekdayColumn`; one marker instead of one dot per event |
 | `eventView.js` | imports and constants | `CinnamonDesktop`, `DATE_FORMAT_FULL`, `DAY_FORMAT`, `locale_cap` removed; `Separator` replaced by `Tooltips`; `ARROW_SEPARATOR` is ` – ` |
 | `eventView.js` | `format_timespan` | English countdown from `countdown.js` instead of gettext |
 | `eventView.js` | `EventsManager.eds_service_found`, `log_dbus_error` | log prefix |
+| `eventView.js` | `EventsManager.constructor`, `_calendar_server_ready`, new `destroy` | server signal ids kept; the proxy's handlers, bus watch and timers released on removal (performance round) |
 | `eventView.js` | new `EventsManager.get_events_for_date` | the selected day's events, for the header count |
 | `eventView.js` | `EventList.constructor` | own column class instead of `calendar-events-main-box`; own list class; English "No Events" |
 | `eventView.js` | new `EventList.set_appearance`, `EventList.set_monitor_height`, `EventList._apply_column_style` | Events size on the column and the list, gap, metadata and countdown switches; `max-height` of the column |
@@ -170,7 +172,7 @@ copy) at the audit round. Everything else is the stock code.
 
 New files: `constants.js`, `dateText.js`, `secondZone.js`, `dayMarker.js`, `eventsHeight.js`,
 `dayCell.js`, `eventCount.js`, `appearance.js`, `countdown.js`,
-`tickClock.js`, `stylesheet.css`.
+`tickClock.js`, `refresh.js`, `stylesheet.css`.
 
 ## Steps
 
@@ -633,6 +635,8 @@ Still to look at on the panel after the audit round:
 - Seconds ticking with a custom date format on and seconds shown.
 - The English "No Events", "All day", countdowns and "Date and Time Settings" with a French
   `LANGUAGE` or `LC_MESSAGES`.
+- After the performance round, once Cinnamon has restarted: the open and close times with
+  the probe given in the PR (`menu.open` time, `grid._update` time, the close's first frame).
 - After the second audit round: the darker selected violet, button edges, the Today button's
   focus border, month arrows at 160% Days, the events column at 160% Events, removing and
   adding the applet again.
@@ -715,6 +719,66 @@ LOW, 17 fixed, 2 accepted:
   70 and 160 bounds, the Shown elements order, the header count's visibility.
 - L18: `set_monitor_height` has its own comment.
 - L19: accepted by the owner: the stock Configure tooltips stay.
+
+## Performance round
+
+Owner's words, after validating the look: "ok it works but it's slow to open, and even slower
+to close back".
+
+Measured by the main session on the live applet (menu effects off, 393 actors in the menu):
+`menu.open(false)` blocks 224 to 303 ms, of which the grid's `_update` about 125 ms (18 ms
+with the menu hidden) and `actor.show()` about 84 ms; first frame 300 to 380 ms after the
+click. After each opening about 500 `events-updated` between 478 and 1256 ms; after
+`menu.close`, which returns in 19 ms, no frame for about 420 ms.
+
+Probed through Cinnamon's evaluator on the pushed code (`12586fc`; the live applet runs the
+main checkout, so the fixes below could not be measured live), four open and close cycles,
+every wrap restored:
+
+- Open, 302 to 324 ms in `menu.open`: `actor.show()` 92 ms, then about 80 ms in the other
+  `open-state-changed` handlers (stock menu machinery), then the applet's reset of today:
+  the grid `_update` 131 to 143 ms while shown (14 to 18 ms hidden), then `select_date` 1 ms.
+- Flood: 498 `EventsAddedOrUpdated` signals (561 events, one per recurring instance) reach
+  Cinnamon between 565 and 698 ms (D-Bus monitor, headers only). Handling them held the main
+  loop in one block of 630 to 740 ms; the 498 `events-updated` emissions took 35 to 39 ms,
+  the header count 22 ms of it.
+- Close: an idle at priority 1 or above queued right after `menu.close` ran 616 ms later,
+  priority 0 at once (the redraw source is priority 150). So sources at the default priority
+  kept the loop busy, without long blocks, for about 1 s after the applet's own handling had
+  ended. A plain 850 ms block without the flood caused no such wait. At each opening the
+  calendar server, restarted, received `Properties.GetAll` from Cinnamon ten times: ten
+  calendar server proxies live in Cinnamon, one per applet instance created by reloads (the
+  stock applet never releases its proxy). Each handles the same 500 signals, about 180 ms
+  each; that is the time the close waits for.
+
+Stock versus branch: the grid rebuild on every update (removed, not destroyed), the forced
+refresh on every opening and its flood, the proxy never released, and the Stack, button and
+dot box per day are all stock. The branch added the layout and header tables (3 actors),
+the tick clock (one WallClock, ticking each minute here), the header count on every
+`events-updated` (22 ms per flood), richer event rows and one tooltip per row (not hot in the
+profile). The left-over proxies came from the many reloads of the review rounds.
+
+Fixes, each tied to a measurement:
+
+1. The day grid is built once (`_buildCells`) and updated in place, setting a label or a
+   class only when it changes: the 131 to 143 ms rebuild while opening goes, and the next
+   `show()` no longer styles 168 new actors. Expected: the open drops by about 130 ms, maybe
+   more on `show()`.
+2. `EventsManager.destroy()` on removal releases the proxy's signal handlers, the bus watch
+   and the timers. Expected: the close waits only for this instance's own handling. The ten
+   proxies already in the running Cinnamon stay until it restarts.
+3. The header count runs once per burst of `events-updated` (`Refresh.Coalescer`): 22 ms per
+   flood.
+4. An opening within 15 s of the last forced refresh does not force another
+   (`Refresh.forcedFetchDue`; the server exits 20 s after its last request and pushes every
+   change while it runs). Expected: no flood at all on a quick reopen. Risk: if the server
+   is restarted by something else inside the 15 s, a change shows at the next opening after
+   them.
+
+Not fixed: `actor.show()` (about 90 ms, St styling the menu's actors on map) and the stock
+`open-state-changed` handlers (about 80 ms); the flood itself (one signal per event, the
+server's design), whose handling (about 180 ms here for one proxy) still delays a close made
+during it, about 0.5 to 0.7 s after the click.
 
 ## Out of scope
 

@@ -530,6 +530,15 @@ rm ~/.local/share/cinnamon/applets/calendar@bgi
 
 ## Calendar: known limitations
 
+- Each opening, at most once every 15 s, asks the calendar server to send the events of the
+  six weeks shown again; the server sends one D-Bus signal per event (about 500 here) and
+  handling them keeps Cinnamon busy for a fraction of a second, so a close made during that
+  time is drawn after it. Within 15 s of the last request the server, still running, sends
+  each change by itself, so the request is skipped.
+- Applets removed or reloaded before the performance round left their calendar server
+  connection running until Cinnamon restarts; each one handles the same signals again. Restart
+  Cinnamon once after updating (log out and back in) to drop them.
+
 - On a vertical panel the stock text is shown, without the second time zone.
 - The 12-hour clock's AM/PM marker still comes from the locale (GLib's `%p`).
 - Event times have one colour whether the event is past, in progress or to come; the

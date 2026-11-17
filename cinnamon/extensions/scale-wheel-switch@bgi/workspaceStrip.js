@@ -110,14 +110,15 @@ class WorkspaceThumbnail {
             () => this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS),
             () => this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS));
         this.actor.connect('destroy', () => this._dropHover.leave());
-        UiHelpers.connectClick(this.actor, [Clutter.BUTTON_PRIMARY], () => this._activateWorkspace());
+        UiHelpers.connectClick(this.actor, [Clutter.BUTTON_PRIMARY], () => this._enterWorkspace());
     }
 
-    _activateWorkspace() {
-        if (this.metaWorkspace === global.workspace_manager.get_active_workspace())
-            return;
-
-        this.metaWorkspace.activate(global.get_current_time());
+    // Switch first, then close: Scale's closing animation zooms the windows of the active
+    // workspace back into place, so it must already be this one. Same order as the dock.
+    _enterWorkspace() {
+        if (this.metaWorkspace !== global.workspace_manager.get_active_workspace())
+            this.metaWorkspace.activate(global.get_current_time());
+        Main.overview.hide();
     }
 
     _addWallpaper() {

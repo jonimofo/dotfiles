@@ -63,11 +63,12 @@ only; every other screen has its own strip at its very top.
   Escape clears the field, then closes Scale. While the field has text, a click on another
   screen's window area does nothing.
 - Each thumbnail shows the windows that workspace has on that strip's screen.
-- A click on a thumbnail switches workspace. Scale stays open.
+- A click on a thumbnail enters that workspace: Scale closes on its desktop. A click on
+  the current workspace's thumbnail closes Scale.
 - Dropping a window on a thumbnail moves it to that workspace and that screen.
 - Dropping a window anywhere on another screen's window area moves it to that screen,
   same workspace. The area is highlighted while the drop is possible.
-- The mouse wheel switches workspace.
+- The mouse wheel switches workspace. Scale stays open.
 - A middle click on a window does nothing (stock Scale closes the application).
 - A right click on a window opens it, like a left click (stock Scale shows the window menu).
 - The hot corners keep working over a fullscreen window, with Scale open or not, so the
@@ -170,7 +171,8 @@ Then give Super back to the Menu (see above).
 Design records: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](../documentation/plans/2026-11-11-cinnamon-scale-overview.md),
 then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../documentation/plans/2026-11-12-cinnamon-scale-second-screen.md) for several screens,
 then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/plans/2026-11-12-cinnamon-scale-dock.md) for the dock,
-then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time.
+then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time,
+then [`documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md`](../documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md) for entering a workspace.
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
@@ -396,7 +398,7 @@ scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
-scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, clock row, on fakes
+scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, clock row, thumbnail click, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, tick clock, day marker, stylesheet rules
 ```

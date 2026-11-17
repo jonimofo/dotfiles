@@ -201,7 +201,9 @@ function makeImports(monitorCount, primaryIndex) {
         KEY_Down: 0xff54,
         ModifierType: { CONTROL_MASK: 1 << 2, MOD1_MASK: 1 << 3, MOD4_MASK: 1 << 6, SUPER_MASK: 1 << 26 },
         ActorAlign: { CENTER: 1, END: 2 },
-        ScrollDirection: {},
+        ScrollDirection: { UP: 0, DOWN: 1, LEFT: 2, RIGHT: 3, SMOOTH: 4 },
+        EventType: { SCROLL: 1 },
+        BinLayout: class {},
     };
     const themeContext = { scale_factor: 1 };
     const St = {
@@ -286,6 +288,13 @@ function makeImports(monitorCount, primaryIndex) {
         layoutManager: { monitors, primaryIndex, primaryMonitor: monitors[primaryIndex] },
         overview,
         modalCount: 0,
+        getWorkspaceName: index => `Workspace ${index + 1}`,
+    };
+    // Scale closing: counted, and visible drops as Cinnamon's hide() does.
+    overview.hideCalls = 0;
+    overview.hide = () => {
+        overview.hideCalls++;
+        overview.visible = false;
     };
 
     // Scale's own handlers, which the extension wraps; each records its calls.
@@ -304,8 +313,18 @@ function makeImports(monitorCount, primaryIndex) {
 
     return {
         imports: {
-            gi: { Clutter, St, CMenu, Cinnamon, Gio, GLib: FakeGLib, Meta: { MotionDirection: {} } },
-            ui: { main: Main, workspace: { Workspace, WindowClone }, workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 } },
+            gi: {
+                Clutter, St, CMenu, Cinnamon, Gio, GLib: FakeGLib,
+                // Wayland: the thumbnails skip their X11 wallpaper.
+                Meta: { MotionDirection: { LEFT: 'left', RIGHT: 'right' }, is_wayland_compositor: () => true },
+            },
+            ui: {
+                main: Main,
+                workspace: { Workspace, WindowClone },
+                workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 },
+                dnd: { DragMotionResult: { CONTINUE: 0, MOVE_DROP: 1 } },
+            },
+            misc: { signalManager: { SignalManager: class {} }, windowUtils: {} },
             mainloop: Mainloop,
         },
         Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, clockState, strips: [],
@@ -813,6 +832,117 @@ function testClockConstructorFailure() {
     env.imports.gi.St.Bin = OriginalBin;
 }
 
+// Workspaces 1 to @count, the first one active. activate() records itself and makes the
+// workspace the active one, as muffin does.
+function setUpWorkspaces(count) {
+    const activations = [];
+    const workspaces = [];
+    const manager = {
+        active: null,
+        n_workspaces: count,
+        get_active_workspace: () => manager.active,
+        get_workspace_by_index: index => workspaces[index],
+    };
+    for (let i = 0; i < count; i++) {
+        const workspace = {
+            index: () => i,
+            activate() {
+                activations.push(i);
+                manager.active = workspace;
+            },
+            get_neighbor: direction => workspaces[Math.max(0, Math.min(count - 1, i + (direction === 'right' ? 1 : -1)))],
+        };
+        workspaces.push(workspace);
+    }
+    manager.active = workspaces[0];
+    global.workspace_manager = manager;
+    global.get_current_time = () => 0;
+    global.get_window_actors = () => [];
+    return { workspaces, activations, manager };
+}
+
+function clickActor(actor, button = BUTTON.PRIMARY) {
+    actor.emit('button-press-event', buttonEvent(button));
+    actor.emit('button-release-event', buttonEvent(button));
+}
+
+// Owner's choice "One click enters, always", "Everywhere": a click on a thumbnail of any
+// strip enters that workspace and closes Scale; on the current one it only closes Scale.
+function testThumbnailClickEntersWorkspace() {
+    const env = setUp(2, 0);
+    const { workspaces, activations, manager } = setUpWorkspaces(4);
+    const strip = env.require('./workspaceStrip');
+    env.Main.overview.visible = true;
+    const thumbnail = (workspaceIndex, monitorIndex) =>
+        new strip.WorkspaceThumbnail(workspaces[workspaceIndex], env.monitors[monitorIndex], monitorIndex, 0.12);
+
+    // Scale's closing animation zooms the windows of the active workspace: it must already be
+    // the clicked one when hide() runs.
+    let activeAtHide = null;
+    const countHide = env.Main.overview.hide;
+    env.Main.overview.hide = () => {
+        activeAtHide = manager.active;
+        countHide();
+    };
+    clickActor(thumbnail(2, 0).actor);
+    check('enter: the workspace is switched before Scale closes', activeAtHide === workspaces[2]);
+    check('enter: a click on workspace 3 activates it once', activations.join() === '2' && manager.active === workspaces[2]);
+    check('enter: the same click closes Scale once', env.Main.overview.hideCalls === 1);
+
+    env.Main.overview.visible = true;
+    clickActor(thumbnail(2, 0).actor);
+    check('enter: a click on the current workspace does not activate it', activations.join() === '2');
+    check('enter: a click on the current workspace closes Scale', env.Main.overview.hideCalls === 2);
+
+    env.Main.overview.visible = true;
+    clickActor(thumbnail(1, 1).actor);
+    check('enter: a thumbnail of the second screen\'s strip enters too',
+        activations.join() === '2,1' && env.Main.overview.hideCalls === 3);
+
+    env.Main.overview.visible = true;
+    const other = thumbnail(3, 0);
+    clickActor(other.actor, BUTTON.SECONDARY);
+    clickActor(other.actor, BUTTON.MIDDLE);
+    check('enter: right and middle clicks do nothing', activations.join() === '2,1' && env.Main.overview.hideCalls === 3);
+
+    // A drag ends with a release over the thumbnail, without a press on it.
+    other.actor.emit('button-release-event', buttonEvent(BUTTON.PRIMARY));
+    check('enter: a release without a press on the thumbnail (a drop) does not enter',
+        activations.join() === '2,1' && env.Main.overview.hideCalls === 3);
+
+    const draggedWindow = {
+        is_on_all_workspaces: () => false,
+        get_workspace: () => workspaces[0],
+        get_monitor: () => 0,
+        changedTo: null,
+        change_workspace(workspace) {
+            this.changedTo = workspace;
+        },
+        move_to_monitor() {},
+    };
+    const source = Object.assign(new env.WindowClone(), { metaWindow: draggedWindow, _draggable: new FakeSignals() });
+    check('enter: a window dropped on a thumbnail moves there', other.acceptDrop(source) && draggedWindow.changedTo === workspaces[3]);
+    check('enter: the drop does not close Scale or switch workspace',
+        env.Main.overview.hideCalls === 3 && activations.join() === '2,1');
+}
+
+// The wheel keeps switching with Scale open.
+function testWheelKeepsScaleOpen() {
+    const env = setUp();
+    const { workspaces, activations, manager } = setUpWorkspaces(4);
+    const extension = env.loadExtension();
+    extension.enable();
+    openScale(env);
+    env.Main.modalCount = 1;
+    const scroll = { type: () => env.Clutter.EventType.SCROLL, get_scroll_direction: () => env.Clutter.ScrollDirection.DOWN };
+    const stopped = global.stage.emit('captured-event', scroll);
+    check('enter: the wheel switches to the next workspace', stopped && activations.join() === '1' && manager.active === workspaces[1]);
+    check('enter: the wheel does not close Scale', env.Main.overview.hideCalls === 0 && env.Main.overview.visible);
+    extension.disable();
+}
+
+testThumbnailClickEntersWorkspace();
+testWheelKeepsScaleOpen();
 testClockText();
 testClockMatchesCalendar();
 testClockRow();

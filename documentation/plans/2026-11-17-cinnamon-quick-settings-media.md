@@ -115,8 +115,11 @@ Wanted:
 | Artist · VLC media player    (<<)(||)(>>)  |      smaller buttons, player name in italic
 ```
 
-- Media buttons: own classes, 28 px round with 12 px icons (the header's are 36 px with
-  16 px icons), 6 px apart (header 8 px); same colours, shared with the header's rules.
+- Media buttons: own classes, 28 px round with 12 px icons at first. Second review round,
+  owner's words: "les icones des boutons doivent etre centrées dans les boutons !!! en fait
+  supprime meme les ronds, garde juste les << || et >> , ça doit être aligné avec le label
+  VLC media... etc". Now bare 16 px icons with 4 px of padding, 6 px apart, centred on the
+  player name's line; only the hover keeps the header buttons' tint.
 - Line 2 in two labels: `artist · ` normal, the player name in italic (`font-style`). The
   model returns both parts; without an artist only the player name shows. Too long: the
   artist ellipsizes first, the player name (at most 16 characters) is not cut by the label.

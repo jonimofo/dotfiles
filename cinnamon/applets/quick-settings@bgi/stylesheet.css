@@ -44,12 +44,11 @@
     border-radius: 18px;
 }
 
-/* The media buttons share the header buttons' colours, at three quarters of their size. */
-.quick-settings-header-button,
-.quick-settings-media-button {
+.quick-settings-header-button {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
+/* The media buttons are bare icons: only their hover shares the header buttons' tint. */
 .quick-settings-header-button:hover,
 .quick-settings-media-button:hover {
     background-color: rgba(255, 255, 255, 0.18);
@@ -176,14 +175,14 @@
     spacing: 6px;
 }
 
+/* No disc behind the icons: they sit on the player name's line, centred on it. */
 .quick-settings-media-button {
-    width: 28px;
-    height: 28px;
-    border-radius: 14px;
+    padding: 4px;
+    border-radius: 6px;
 }
 
 .quick-settings-media-icon {
-    icon-size: 12px;
+    icon-size: 16px;
 }
 
 /* In-place list, under the row whose arrow opened it */

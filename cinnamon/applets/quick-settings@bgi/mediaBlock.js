@@ -7,8 +7,8 @@ const UiHelpers = require('./uiHelpers');
 const BUTTON_KEYS = ['previous', 'playPause', 'next'];
 
 // One player's block: a separator line, the title in bold, then "artist · " and the player
-// name in italic, and the previous, play or pause, next buttons: round like the header's,
-// smaller. The texts come from the player: they are set as plain text (St.Label.text), never
+// name in italic, and the previous, play or pause, next buttons: bare icons on that
+// line. The texts come from the player: they are set as plain text (St.Label.text), never
 // as markup; italic and bold come from style classes. When line 2 is too long the artist
 // gives way first (it ellipsizes; the player name, at most 16 characters, does not), so the
 // player name stays readable. @onButton(method) runs on a click of a working button.

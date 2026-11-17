@@ -288,8 +288,8 @@ the menu:
 - Media controls, under the tiles: one block per media player that has a track (any
   MPRIS player: VLC, a browser playing a video...), at most three, by player name. The
   title in bold, then `artist · player` with the player name in italic (the player alone
-  without an artist; a long artist is cut first), and small round previous, play or pause,
-  next buttons. A button the player does not offer is dimmed. No player
+  without an artist; a long artist is cut first), and previous, play or pause, next as bare
+  icons on that line. A button the player does not offer is dimmed. No player
   with a track: no block. Followed live over D-Bus, like the stock sound applet.
 - '>' on a tile or a slider opens its list under that row, in the menu: networks, paired
   devices, VPN profiles, NordVPN countries, power profiles, output and input devices. The

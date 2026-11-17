@@ -380,17 +380,21 @@ NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon, the ses
 manager and the session bus (media players) come with the desktop.
 
 Cinnamon internals the media controls rely on, read from Cinnamon 6.4: `Cinnamon.AppSystem`
-`lookup_app('<DesktopEntry>.desktop')` and the app's `get_windows()` (most recently used
-first), `global.get_window_actors()` with each `meta_window`'s `get_pid()`, `get_title()`
-and `get_user_time()`, and `Main.activateWindow(window, time, workspace)`, which the stock
-window list uses on a click.
+`lookup_app('<DesktopEntry>.desktop')` and the app's `get_windows()` (its interesting
+windows, in Cinnamon's own order; the applet picks by `get_user_time()` itself),
+`global.get_window_actors()` with each `meta_window`'s `get_pid()`, `get_title()` and
+`get_user_time()`, filtered with `Main.isInteresting()`, and
+`Main.activateWindow(window, time)`, the call of the stock window list on a click.
 
 ## Quick Settings: known limitations
 
 - A click on a media block brings a window forward, never a browser tab: no browser lets
   another program switch its tabs. Among a browser's windows, the one whose title holds the
-  track title (its active tab plays) wins, else the one used last. A player with no window
-  found and no MPRIS Raise does nothing; the journal says so once.
+  track title (its active tab plays) wins, else the one used last. Only a window of the
+  player's own process is brought forward. A player with no window found and no MPRIS Raise
+  does nothing; the journal says so once.
+- Sandboxed players (Flatpak, Snap): their bus owner is a proxy without windows, so they
+  come forward only through MPRIS Raise, when they offer it.
 
 - Microphone and Mic mute are dimmed while there is no input source (the internal microphone
   is disabled on this machine).

@@ -1,12 +1,15 @@
 const MediaModel = require('./mediaModel');
 
-// Brings @busName's player forward, in this order: a window of the application its
-// DesktopEntry names, else a window of its process, else MPRIS Raise when the player offers
-// it, else nothing (players.noWindow logs it once). Among several windows,
-// MediaModel.chooseWindow() picks one. The window part is only reached through @windows, so
-// this runs on fakes in the tests.
+// Brings @busName's player forward, only through a window of the player's own process: the
+// process id is read first (GetConnectionUnixProcessID), then, in this order, the windows of
+// the application its DesktopEntry names that belong to that process, else the process's
+// windows. A player cannot bring another application's window forward by naming it. Unknown
+// process (the call failed, or a sandboxed player whose bus owner is a proxy without
+// windows) or no window: MPRIS Raise when the player offers it, else nothing
+// (players.noWindow logs it once). Among the kept windows, MediaModel.chooseWindow() picks
+// one. The window part is only reached through @windows, so this runs on fakes in the tests.
 // @players: MediaPlayers (focusInfo, processId, raise, noWindow).
-// @windows: { ofApp(desktopEntry), ofPid(pid), describe(window) -> { title, userTime },
+// @windows: { ofApp(desktopEntry), ofPid(pid), describe(window) -> { title, userTime, pid },
 //             activate(window, time) }.
 // @time: the click's event time, read during the click: the window found after the
 // asynchronous process id reply is still activated with it, as the window manager wants for
@@ -28,10 +31,12 @@ function focusPlayer(busName, players, windows, time) {
         else
             players.noWindow(busName);
     };
-    if (info.desktopEntry && activateAmong(windows.ofApp(info.desktopEntry)))
-        return;
     players.processId(busName, pid => {
-        if (!activateAmong(windows.ofPid(pid)))
-            fallBack();
+        const ownWindows = info.desktopEntry
+            ? windows.ofApp(info.desktopEntry).filter(window => windows.describe(window).pid === pid)
+            : [];
+        if (activateAmong(ownWindows) || activateAmong(windows.ofPid(pid)))
+            return;
+        fallBack();
     }, fallBack);
 }

@@ -1445,17 +1445,35 @@ function testMediaFocus() {
         Focus.focusPlayer('org.mpris.MediaPlayer2.vlc', players, windowApi, 1234);
         return `${done}`;
     };
-    const vlcWindow = { title: 'Song - VLC media player', userTime: 1 };
-    check(`media focus: the window of the DesktopEntry application first (${run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, appWindows: { vlc: [vlcWindow] } })})`,
-        run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, appWindows: { vlc: [vlcWindow] }, pid: 42 }) === 'app vlc,activate Song - VLC media player');
-    check('media focus: no application window, a window of the process',
+    const vlcWindow = { title: 'Song - VLC media player', userTime: 1, pid: 42 };
+    const vlc = { desktopEntry: 'vlc', canRaise: false, title: 'Song' };
+    check(`media focus: VLC-like, the DesktopEntry window of the player's process (${run({ info: vlc, appWindows: { vlc: [vlcWindow] }, pid: 42 })})`,
+        run({ info: vlc, appWindows: { vlc: [vlcWindow] }, pid: 42 }) === 'app vlc,activate Song - VLC media player');
+    const browserWindows = [
+        { title: 'Mail - Browser', userTime: 90, pid: 50 },
+        { title: 'Video title - Site - Browser', userTime: 10, pid: 50 },
+        { title: 'Other profile - Browser', userTime: 99, pid: 51 },
+    ];
+    check('media focus: Firefox-like, among the process windows the one playing the track',
+        run({ info: { desktopEntry: 'firefox-esr', canRaise: true, title: 'Video title' }, appWindows: { 'firefox-esr': browserWindows }, pid: 50 })
+            === 'app firefox-esr,activate Video title - Site - Browser');
+    check('media focus: no title match, the process window used last, whatever the order given',
+        run({ info: { desktopEntry: 'firefox-esr', canRaise: true, title: 'Nothing' }, appWindows: { 'firefox-esr': browserWindows }, pid: 50 })
+            === 'app firefox-esr,activate Mail - Browser');
+    const otherApp = [{ title: 'Passwords', userTime: 5, pid: 99 }];
+    check(`media focus: a player naming another application's DesktopEntry raises nothing of it (${run({ info: { desktopEntry: 'org.example.Passwords', canRaise: false, title: 'Song' }, appWindows: { 'org.example.Passwords': otherApp }, pid: 42 })})`,
+        run({ info: { desktopEntry: 'org.example.Passwords', canRaise: false, title: 'Song' }, appWindows: { 'org.example.Passwords': otherApp }, pid: 42 })
+            === 'app org.example.Passwords,pid 42,none org.mpris.MediaPlayer2.vlc');
+    check('media focus: no application window of the process, a window of the process',
         run({ info: { desktopEntry: 'vlc', canRaise: true, title: 'Song' }, pidWindows: { 42: [vlcWindow] }, pid: 42 }) === 'app vlc,pid 42,activate Song - VLC media player');
     check('media focus: no DesktopEntry, straight to the process',
         run({ info: { desktopEntry: null, canRaise: false, title: 'Song' }, pidWindows: { 42: [vlcWindow] }, pid: 42 }) === 'pid 42,activate Song - VLC media player');
     check('media focus: no window at all, MPRIS Raise when the player offers it',
         run({ info: { desktopEntry: 'vlc', canRaise: true, title: 'Song' }, pid: 42 }) === 'app vlc,pid 42,raise org.mpris.MediaPlayer2.vlc');
-    check('media focus: no process id, Raise too',
-        run({ info: { desktopEntry: null, canRaise: true, title: 'Song' } }) === 'raise org.mpris.MediaPlayer2.vlc');
+    check('media focus: process id unknown, no unverified application window, Raise',
+        run({ info: { desktopEntry: 'vlc', canRaise: true, title: 'Song' }, appWindows: { vlc: [vlcWindow] } }) === 'raise org.mpris.MediaPlayer2.vlc');
+    check('media focus: process id unknown and no Raise, only the log',
+        run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, appWindows: { vlc: [vlcWindow] } }) === 'none org.mpris.MediaPlayer2.vlc');
     check('media focus: nothing found and no Raise, only the log',
         run({ info: { desktopEntry: 'vlc', canRaise: false, title: 'Song' }, pid: 42 }) === 'app vlc,pid 42,none org.mpris.MediaPlayer2.vlc');
     check('media focus: a player no longer listed does nothing', run({ info: null }) === '');
@@ -1472,16 +1490,19 @@ function testMediaFocus() {
         noWindow: () => {},
     };
     const timedWindows = {
-        ofApp: entry => (entry === 'app' ? [{ title: 'App', userTime: 1 }] : []),
-        ofPid: () => [{ title: 'Process window', userTime: 1 }],
+        ofApp: entry => (entry === 'app' ? [{ title: 'App', userTime: 1, pid: 42 }] : []),
+        ofPid: () => [{ title: 'Process window', userTime: 1, pid: 42 }],
         describe: window => window,
         activate: (window, time) => times.push(`${window.title}@${time}`),
     };
     Focus.focusPlayer('org.mpris.MediaPlayer2.vlc', slowPlayers, timedWindows, 777);
     check('media focus: nothing activated before the pid reply', times.length === 0);
     answerPid();
-    Focus.focusPlayer('org.mpris.MediaPlayer2.app', { ...slowPlayers, focusInfo: () => ({ desktopEntry: 'app', canRaise: false, title: '' }) },
-        timedWindows, 888);
+    Focus.focusPlayer('org.mpris.MediaPlayer2.app', {
+        ...slowPlayers,
+        focusInfo: () => ({ desktopEntry: 'app', canRaise: false, title: '' }),
+        processId: (busName, onPid) => onPid(42),
+    }, timedWindows, 888);
     check(`media focus: the click's time is used after the asynchronous pid reply and for application windows (${times})`,
         `${times}` === 'Process window@777,App@888');
 }

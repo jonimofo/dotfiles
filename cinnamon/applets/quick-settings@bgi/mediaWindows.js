@@ -3,9 +3,11 @@ const Main = imports.ui.main;
 const Constants = require('./constants');
 
 // The windows MediaFocus.focusPlayer() picks from, through Cinnamon: an application's windows
-// from Cinnamon.AppSystem (most recently used first, as Cinnamon sorts them), a process's
-// windows from the window actors, and activation with Main.activateWindow(), as the stock
-// window list does on a click (switches workspace, unminimises, focuses).
+// from Cinnamon.AppSystem (its toplevel, interesting windows, in Cinnamon's own order: the
+// caller sorts by user time), a process's windows from the window actors, kept only when
+// Main.isInteresting() (the filter of Alt-Tab and Expo), and activation with
+// Main.activateWindow(window, time), the call of the stock window list: the window manager
+// switches to the window's workspace, unminimises and focuses it.
 const CINNAMON_WINDOWS = {
     ofApp(desktopEntry) {
         const app = Cinnamon.AppSystem.get_default().lookup_app(`${desktopEntry}${Constants.MEDIA_DESKTOP_FILE_SUFFIX}`);
@@ -14,17 +16,15 @@ const CINNAMON_WINDOWS = {
 
     ofPid(pid) {
         return global.get_window_actors().map(actor => actor.meta_window)
-            .filter(window => window && window.get_pid() === pid);
+            .filter(window => window && window.get_pid() === pid && Main.isInteresting(window));
     },
 
     describe(window) {
-        return { title: window.get_title() || '', userTime: window.get_user_time() };
+        return { title: window.get_title() || '', userTime: window.get_user_time(), pid: window.get_pid() };
     },
 
-    // @time: the click's event time. A window on every workspace has none of its own: no
-    // workspace switch then.
+    // @time: the click's event time.
     activate(window, time) {
-        const workspace = window.get_workspace();
-        Main.activateWindow(window, time, workspace ? workspace.index() : undefined);
+        Main.activateWindow(window, time);
     },
 };

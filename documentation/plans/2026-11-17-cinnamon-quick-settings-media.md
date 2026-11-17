@@ -161,12 +161,21 @@ already the active tab of a window, that window is the one chosen.
   false, so its window comes from `DesktopEntry` `vlc`.
 - Among several windows (`MediaModel.chooseWindow`): one whose title holds the track title,
   else the one used last (`get_user_time`).
-- Activation: `Main.activateWindow(window, time, workspace)`, as the stock window list does,
-  after the menu closes.
+- Activation: `Main.activateWindow(window, time)`, the stock window list's call, after the
+  menu closes, with the click's event time.
 - The text is one `St.Button`, focusable, with the list entries' hover and focus tint and the
   accessible name `Show <player>`; the icons are outside it.
 - Limits: a window, not a tab; a browser window whose active tab is not the playing one can
   only be told apart by being used last.
+
+### Delta audit: only the player's own process
+
+Owner's choice for the finding that a player could name another application's
+`DesktopEntry`: "Corriger les 8, avec vérification du processus". The process id is read
+first; the `DesktopEntry` application's windows are kept only when their pid is the player's;
+none kept: the process's interesting windows (`Main.isInteresting`); pid unknown: no
+unverified window, MPRIS `Raise` when `CanRaise`, else the single log. `get_windows()` is not
+sorted by last use: `MediaModel.chooseWindow` takes the highest user time itself.
 
 ## Alternate backgrounds for several players (review round)
 

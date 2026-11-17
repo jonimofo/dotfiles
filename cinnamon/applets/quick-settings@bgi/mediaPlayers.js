@@ -73,7 +73,7 @@ class MediaPlayers {
         AsyncHelpers.callDbus(this._bus, Constants.DBUS_DAEMON, 'GetConnectionUnixProcessID',
             new GLib.Variant('(s)', [player.owner]), this._cancellable, `finding the process of ${this._logName(player)}`,
             reply => onPid(reply.deepUnpack()[0]), onNone,
-            { replyType: TYPES.processId, stillWanted: () => this._isCurrent(player) });
+            { replyType: TYPES.processId, stillWanted: () => this._isCurrent(player), errorTextMax: Constants.MEDIA_ERROR_TEXT_MAX });
     }
 
     raise(busName) {

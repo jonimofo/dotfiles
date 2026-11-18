@@ -1,5 +1,6 @@
 const Clutter = imports.gi.Clutter;
 const St = imports.gi.St;
+const DND = imports.ui.dnd;
 const Main = imports.ui.main;
 const Workspace = imports.ui.workspace;
 
@@ -19,7 +20,8 @@ function swallowClicks(actor) {
 }
 
 // A click on @actor: press and release of one of @buttons, both on @actor. @onClick gets
-// the button. Every click on @actor is swallowed, as with swallowClicks.
+// the button. Every click on @actor is swallowed, as with swallowClicks. Returns a function
+// that forgets a press already seen, for a press that turned into a drag.
 function connectClick(actor, buttons, onClick) {
     let pressedButton = NO_BUTTON;
     actor.connect('button-press-event', (source, event) => {
@@ -38,6 +40,31 @@ function connectClick(actor, buttons, onClick) {
         pressedButton = NO_BUTTON;
         return Clutter.EVENT_PROPAGATE;
     });
+    return () => {
+        pressedButton = NO_BUTTON;
+    };
+}
+
+// dnd's draggable for @actor, whose _delegate gives the drag picture (getDragActor,
+// getDragActorSource). The picture is shown at @dragActorOpacity; while it is dragged, @actor
+// is shown at @sourceOpacity, then opaque again unless it was destroyed by the drop.
+function makeDraggable(actor, dragActorOpacity, sourceOpacity) {
+    const draggable = DND.makeDraggable(actor, { dragActorOpacity });
+    draggable.connect('drag-begin', () => {
+        actor.opacity = sourceOpacity;
+    });
+    draggable.connect('drag-end', () => {
+        if (!actor.is_finalized())
+            actor.opacity = OPAQUE;
+    });
+    return draggable;
+}
+
+// A live picture of @actor at its place and size on the stage, for a drag.
+function createDragClone(actor) {
+    const [x, y] = actor.get_transformed_position();
+    const [width, height] = actor.get_transformed_size();
+    return new Clutter.Clone({ source: actor, x, y, width, height });
 }
 
 // A constructor that puts @object's actors on screen calls this for that part: when it

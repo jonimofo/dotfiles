@@ -76,6 +76,9 @@ class FakeActor extends FakeSignals {
         this.themeLengths = {};
         this.naturalHeight = NATURAL_HEIGHTS[props.style_class] || 0;
         this.naturalWidth = 0;
+        // St.Bin's child is its child actor, as set_child() makes it.
+        if (props.child)
+            this.add_actor(props.child);
     }
 
     set_text(text) {
@@ -113,6 +116,19 @@ class FakeActor extends FakeSignals {
         child.parent = this;
         const index = this.children.indexOf(sibling);
         this.children.splice(index === -1 ? 0 : index, 0, child);
+    }
+
+    insert_child_above(child, sibling) {
+        child.parent = this;
+        this.children.splice(this.children.indexOf(sibling) + 1, 0, child);
+    }
+
+    is_finalized() {
+        return this.destroyed;
+    }
+
+    get_size() {
+        return [this.width, this.height];
     }
 
     raise_top() {
@@ -157,6 +173,14 @@ class FakeActor extends FakeSignals {
         Object.assign(this, { width, height });
     }
 
+    set_pivot_point(pivotX, pivotY) {
+        this.pivot = [pivotX, pivotY];
+    }
+
+    set_scale(scaleX, scaleY) {
+        Object.assign(this, { scale_x: scaleX, scale_y: scaleY });
+    }
+
     set_width(width) {
         this.width = width;
     }
@@ -173,9 +197,28 @@ class FakeActor extends FakeSignals {
         return { get_length: property => this.themeLengths[property] || 0, get_padding: () => 0 };
     }
 
-    add_style_pseudo_class() {}
+    add_style_pseudo_class(name) {
+        this.pseudo_classes = [...(this.pseudo_classes || []), name];
+    }
 
-    remove_style_pseudo_class() {}
+    remove_style_pseudo_class(name) {
+        this.pseudo_classes = (this.pseudo_classes || []).filter(pseudoClass => pseudoClass !== name);
+    }
+}
+
+// dnd's Draggable: it sees the actor's button presses (when no earlier handler stops them)
+// and emits 'drag-begin', 'drag-cancelled' and 'drag-end' when the test does.
+class FakeDraggable extends FakeSignals {
+    constructor(actor, params) {
+        super();
+        this.actor = actor;
+        this.params = params;
+        this.pressesSeen = 0;
+        actor.connect('button-press-event', () => {
+            this.pressesSeen++;
+            return false;
+        });
+    }
 }
 
 // Only Clutter.Actor makes this kind: the search's click blockers.
@@ -246,6 +289,7 @@ function makeImports(monitorCount, primaryIndex) {
     const Cinnamon = {
         AppSystem: { get_default: () => ({ get_tree: () => ({ get_root_directory: () => emptyMenu }) }) },
         get_event_state: () => 0,
+        util_set_hidden_from_pick: (actor, hidden) => (actor.hiddenFromPick = hidden),
     };
 
     // Main loop timeouts: recorded, fired by the test.
@@ -266,6 +310,7 @@ function makeImports(monitorCount, primaryIndex) {
         },
     };
 
+    const tweenRemovals = [];
     const monitors = [];
     for (let i = 0; i < monitorCount; i++)
         monitors.push({ x: i * 1920, y: 0, width: 1920, height: 1080 });
@@ -327,12 +372,18 @@ function makeImports(monitorCount, primaryIndex) {
                 main: Main,
                 workspace: { Workspace, WindowClone },
                 workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 },
-                dnd: { DragMotionResult: { CONTINUE: 0, MOVE_DROP: 1 } },
+                // Tweener: the objects whose animations were removed, in order.
+                tweener: { removeTweens: scope => tweenRemovals.push(scope) > 0 },
+                dnd: {
+                    DragMotionResult: { CONTINUE: 0, MOVE_DROP: 1 },
+                    makeDraggable: (actor, params) => new FakeDraggable(actor, params),
+                },
             },
             misc: { signalManager: { SignalManager: class {} }, windowUtils: {} },
             mainloop: Mainloop,
         },
         Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, strips: [], timers,
+        tweenRemovals,
     };
 }
 
@@ -921,6 +972,337 @@ function testWheelKeepsScaleOpen() {
     extension.disable();
 }
 
+// Live stage coordinates carry float noise (thumbnails at x 412.000122 and the like).
+const FLOAT_TOLERANCE = 0.01;
+const THUMBNAIL_WIDTH = 230.4;
+const THUMBNAIL_SPACING = 16;
+// Where the fake strips start their row, from the left edge of their screen.
+const ROW_LEFT = 412.000122;
+
+function near(a, b) {
+    return Math.abs(a - b) < FLOAT_TOLERANCE;
+}
+
+// The [x, width] of 4 thumbnails of a row, with live-like float noise.
+function noisySpans(left = ROW_LEFT) {
+    return [0, 1, 2, 3].map(i => [left + i * (THUMBNAIL_WIDTH + THUMBNAIL_SPACING) + (i % 2 ? -0.00009 : 0.00012),
+        THUMBNAIL_WIDTH + (i % 2 ? 0.0000001 : -0.00001)]);
+}
+
+// Owner's choice "Insertion bar": where a dragged thumbnail lands, from the pointer.
+function testReorderIndex() {
+    const env = setUp();
+    const { findInsertionSlot, getReorderIndex, getInsertionBarX } = env.require('./workspaceStrip');
+    const spans = noisySpans();
+    const middle = ([x, width]) => x + width / 2;
+
+    check('reorder: left of the first thumbnail is slot 0', findInsertionSlot(ROW_LEFT - 5, spans) === 0);
+    check('reorder: right of the last thumbnail is slot 4', findInsertionSlot(1600, spans) === 4);
+    check('reorder: right half of thumbnail 3 is slot 3', findInsertionSlot(middle(spans[2]) + 1, spans) === 3);
+    check('reorder: left half of thumbnail 3 is slot 2', findInsertionSlot(middle(spans[2]) - 1, spans) === 2);
+
+    check('reorder: workspace 2 dropped after workspace 3 gets index 2 (position 3)', getReorderIndex(1, 3) === 2);
+    check('reorder: workspace 2 dropped after the last gets the last index', getReorderIndex(1, 4) === 3);
+    check('reorder: workspace 3 dropped before the first gets index 0', getReorderIndex(2, 0) === 0);
+    check('reorder: workspace 4 dropped between 1 and 2 gets index 1', getReorderIndex(3, 1) === 1);
+    check('reorder: the gap just before its own thumbnail changes nothing', getReorderIndex(1, 1) === null);
+    check('reorder: the gap just after its own thumbnail changes nothing', getReorderIndex(1, 2) === null);
+    check('reorder: the first workspace dropped before itself changes nothing', getReorderIndex(0, 0) === null);
+
+    const noise = [-0.0002, -0.0000001, 0, 0.0000001, 0.0002];
+    check('reorder: a drop on its own thumbnail\'s middle, with float noise, changes nothing',
+        [0, 1, 2, 3].every(source => noise.every(delta =>
+            getReorderIndex(source, findInsertionSlot(middle(spans[source]) + delta, spans)) === null)));
+    check('reorder: a drop anywhere on its own thumbnail changes nothing',
+        [spans[1][0] + 0.5, middle(spans[1]), spans[1][0] + spans[1][1] - 0.5].every(x =>
+            getReorderIndex(1, findInsertionSlot(x, spans)) === null));
+
+    const gapMiddle = spans[0][0] + THUMBNAIL_WIDTH + THUMBNAIL_SPACING / 2;
+    check('reorder: the bar is in the middle of the gap between two thumbnails', near(getInsertionBarX(1, spans), gapMiddle));
+    check('reorder: before the first thumbnail, the bar is half a gap left of it',
+        near(getInsertionBarX(0, spans), ROW_LEFT - THUMBNAIL_SPACING / 2));
+    check('reorder: after the last thumbnail, the bar is half a gap right of it',
+        near(getInsertionBarX(4, spans), spans[3][0] + spans[3][1] + THUMBNAIL_SPACING / 2));
+    const single = [[ROW_LEFT, THUMBNAIL_WIDTH]];
+    check('reorder: one thumbnail: the bar sits on its edges',
+        near(getInsertionBarX(0, single), ROW_LEFT) && near(getInsertionBarX(1, single), ROW_LEFT + THUMBNAIL_WIDTH));
+}
+
+// SignalManager of imports.misc: connects through the object's own connect().
+class FakeSignalManager {
+    constructor() {
+        this._connections = [];
+    }
+
+    connect(object, name, callback, scope) {
+        this._connections.push([object, object.connect(name, (emitter, ...args) => callback.call(scope, emitter, ...args))]);
+    }
+
+    disconnectAllSignals() {
+        for (const [object, id] of this._connections)
+            object.disconnect(id);
+        this._connections = [];
+    }
+}
+
+// Workspaces A to D, B active, that muffin can reorder: index() follows the list, and
+// reorder_workspace emits 'workspaces-reordered' as muffin does, with no workspace switch.
+function setUpReorderableWorkspaces() {
+    const { workspaces, activations, manager } = setUpWorkspaces(4);
+    const order = [];
+    workspaces.forEach((workspace, i) => {
+        Object.assign(workspace, new FakeSignals(), { name: 'ABCD'[i], index: () => order.indexOf(workspace) });
+        Object.setPrototypeOf(workspace, FakeSignals.prototype);
+        order.push(workspace);
+    });
+    const signals = new FakeSignals();
+    const reorders = [];
+    Object.assign(manager, {
+        active: workspaces[1],
+        get_workspace_by_index: index => order[index],
+        get_active_workspace_index: () => order.indexOf(manager.active),
+        connect: (...args) => signals.connect(...args),
+        disconnect: id => signals.disconnect(id),
+        reorder_workspace(workspace, index) {
+            reorders.push([workspace.name, index]);
+            order.splice(order.indexOf(workspace), 1);
+            order.splice(index, 0, workspace);
+            signals.emit('workspaces-reordered');
+        },
+    });
+    global.display = new FakeSignals();
+    global.window_manager = new FakeSignals();
+    return { workspaces, activations, manager, order, reorders };
+}
+
+// Scale's big view, its workspaces in the order of their indexes at opening.
+function fakeBigView(env, order) {
+    const view = {
+        actor: env.Main.overview.workspacesView.actor,
+        _animatingScroll: false,
+        layouts: [],
+        _updateWorkspaceActors(animate) {
+            view.layouts.push({ animate, names: view._workspaces.map(workspace => workspace.metaWorkspace.name).join('') });
+        },
+    };
+    view._workspaces = order.map(metaWorkspace => ({
+        metaWorkspace,
+        _monitors: env.monitors.map(() => ({ _windows: [], _margin: 0, setGeometry() {}, positionWindows() {}, _updateEmptyPlaceholder() {} })),
+    }));
+    let scrollValue = global.workspace_manager.get_active_workspace_index();
+    view.scrollSets = [];
+    view._scrollAdjustment = {
+        get value() {
+            return scrollValue;
+        },
+        set value(value) {
+            view.scrollSets.push({ value, guarded: view._animatingScroll,
+                stopped: env.tweenRemovals.includes(view._scrollAdjustment) });
+            scrollValue = value;
+        },
+    };
+    env.Main.overview.workspacesView = view;
+    return view;
+}
+
+// What the real layout gives: each strip's thumbnails in a row with spacing, float noise.
+function layOutRow(strip, monitor) {
+    noisySpans(monitor.x + ROW_LEFT).forEach(([x, width], i) => {
+        Object.assign(strip._thumbnails[i].actor, { x, y: 12.0001, width, height: 129.6 });
+    });
+}
+
+// The stage x of the gap before thumbnail @slot of a laid-out strip, as the strip's own x.
+function gapX(strip, slot) {
+    const [x, width] = noisySpans(strip.actor.x + ROW_LEFT)[Math.min(slot, 3)];
+    return (slot > 3 ? x + width + THUMBNAIL_SPACING / 2 : x - THUMBNAIL_SPACING / 2) - strip.actor.x;
+}
+
+// dnd's search for a target (dnd.js _updateDragHover, _dragActorDropped): from the actor
+// picked under the pointer at stage @stageX, up its parents, the first delegate whose
+// handleDragOver answers MOVE_DROP, or whose acceptDrop takes @source. Coordinates are
+// given local to each actor, as transform_stage_point does.
+function findDropTarget(picked, stageX, takes) {
+    for (let actor = picked; actor; actor = actor.parent) {
+        const [actorX] = actor.get_transformed_position();
+        if (actor._delegate && takes(actor._delegate, stageX - actorX))
+            return actor;
+    }
+    return null;
+}
+
+function dragOverAt(picked, source, stageX) {
+    return findDropTarget(picked, stageX, (delegate, x) =>
+        Boolean(delegate.handleDragOver) && delegate.handleDragOver(source, null, x, 0) === 1);
+}
+
+function dropAt(picked, source, stageX) {
+    return findDropTarget(picked, stageX, (delegate, x) =>
+        Boolean(delegate.acceptDrop) && delegate.acceptDrop(source, null, x, 0));
+}
+
+function stripState(strip) {
+    return strip._thumbnails.map(thumbnail => `${thumbnail.metaWorkspace.name}:${thumbnail._label.text}`).join(' ');
+}
+
+function isShownActive(thumbnail) {
+    return (thumbnail.actor.pseudo_classes || []).includes('selected');
+}
+
+// Owner's choice "Insertion bar": dragging a thumbnail moves its workspace, with its
+// windows, to the slot marked by a bar; the overview stays open on the same workspace.
+// The window drag shares its draggable with the thumbnails (uiHelpers.makeDraggable): same
+// opacities and drag picture as before the sharing.
+function testWindowDragUnchanged() {
+    const env = setUp();
+    global.get_pointer = () => [500, 350];
+    const windowDrag = env.require('./windowDrag');
+    const windowClone = Object.assign(new env.WindowClone(), { actor: new FakeActor({ x: 100, y: 50, width: 800, height: 600 }) });
+    windowDrag.makeDraggable(windowClone);
+    const draggable = windowClone._draggable;
+    check('window drag: the picture is shown at 80 % opacity', draggable.params.dragActorOpacity === Math.round(255 * 0.8));
+    draggable.emit('drag-begin');
+    check('window drag: the window left in Scale is at 40 % while dragged', windowClone.actor.opacity === Math.round(255 * 0.4));
+    draggable.emit('drag-end');
+    check('window drag: opaque again after the drag', windowClone.actor.opacity === 255);
+    draggable.emit('drag-begin');
+    windowClone.actor.destroy();
+    draggable.emit('drag-end');
+    check('window drag: a window destroyed by the drop is left alone', windowClone.actor.opacity === Math.round(255 * 0.4));
+
+    const picture = windowClone.getDragActor();
+    const scale = 1080 * 0.12 * 0.9 / 800;
+    check('window drag: the picture is a clone at the window\'s place, shrunk around the pointer',
+        picture instanceof env.Clutter.Clone && picture.source === windowClone.actor && picture.x === 100 &&
+        picture.width === 800 && near(picture.scale_x, scale) && near(picture.pivot[0], 0.5) && near(picture.pivot[1], 0.5));
+    check('window drag: the picture snaps back to the window', windowClone.getDragActorSource() === windowClone.actor);
+}
+
+function testThumbnailDragReordersWorkspaces() {
+    const env = setUp(2, 0);
+    env.imports.misc.signalManager.SignalManager = FakeSignalManager;
+    const { workspaces, activations, manager, order, reorders } = setUpReorderableWorkspaces();
+    const view = fakeBigView(env, order);
+    env.Main.overview.visible = true;
+    const stripModule = env.require('./workspaceStrip');
+    const strips = [0, 1].map(index => new stripModule.WorkspaceStrip(index));
+    strips.forEach((strip, index) => layOutRow(strip, env.monitors[index]));
+    const bars = strips.map(strip => strip._insertionBar);
+    // The stylesheet's bar width, which the strip centres on the gap.
+    bars.forEach(bar => (bar.naturalWidth = 4));
+    const group = env.Main.overview._group;
+    const [first, second] = strips;
+
+    const source = first._thumbnails[1];
+    check('drag: a press on a thumbnail reaches dnd (the click handler does not stop it first)',
+        (clickActor(source.actor), source._draggable.pressesSeen === 1));
+    env.Main.overview.visible = true;
+    env.Main.overview.hideCalls = 0;
+    activations.length = 0;
+    check('drag: the copy that follows the pointer is half transparent',
+        source._draggable.params.dragActorOpacity === Math.round(255 * 0.5));
+    const dragActor = source.getDragActor();
+    check('drag: the copy is a clone of the thumbnail at its place and size',
+        dragActor instanceof env.Clutter.Clone && dragActor.source === source.actor && near(dragActor.x, source.actor.x) &&
+        near(dragActor.width, source.actor.width) && source.getDragActorSource() === source.actor);
+    source.actor.emit('button-press-event', buttonEvent(BUTTON.PRIMARY));
+    source._draggable.emit('drag-begin');
+    check('drag: the dragged thumbnail\'s slot stays empty (transparent, still in the row)',
+        source.actor.opacity === 0 && first._row.children.includes(source.actor));
+
+    check('drag: the bars are never picked, so a drop over one reaches the strip',
+        bars.every(bar => bar.hiddenFromPick && bar.visible === false));
+    const overGap = first.handleDragOver(source, null, gapX(first, 3));
+    check('drag: over the gap between workspaces 3 and 4, the strip takes the drop', overGap === 1);
+    const barMiddle = env.monitors[0].x + ROW_LEFT + 3 * (THUMBNAIL_WIDTH + THUMBNAIL_SPACING) - THUMBNAIL_SPACING / 2;
+    check('drag: the bar shows in that gap, as high as the thumbnails',
+        bars[0].visible && Math.abs(bars[0].x + 2 - barMiddle) <= 0.5 && near(bars[0].height, 129.6));
+    check('wiring: each bar is in Scale\'s group, right above its strip',
+        bars.every((bar, i) => bar.parent === group &&
+            group.children.indexOf(bar) === group.children.indexOf(strips[i].actor) + 1));
+    first.handleDragOut();
+    // Over the right half of thumbnail 3, dnd picks the thumbnail's label.
+    const label3 = first._thumbnails[2]._label;
+    const rightHalf3 = first._thumbnails[2].actor.x + THUMBNAIL_WIDTH * 0.75;
+    check('wiring: from a thumbnail\'s label, dnd\'s parent walk reaches the strip, which shows the bar',
+        dragOverAt(label3, source, rightHalf3) === first.actor && bars[0].visible);
+    check('drag: the other screen\'s bar stays hidden', !bars[1].visible);
+    check('drag: the bar is the violet insertion bar style', bars[0].style_class === 'scale-strip-insertion-bar');
+
+    check('drag: over its own thumbnail, no bar and no drop',
+        first.handleDragOver(source, null, source.actor.x + THUMBNAIL_WIDTH / 2 - first.actor.x) === 0 && !bars[0].visible);
+    check('drag: over the gap right before its own thumbnail, no bar', first.handleDragOver(source, null, gapX(first, 1)) === 0 &&
+        !bars[0].visible);
+    first.handleDragOver(source, null, gapX(first, 3));
+    first.handleDragOut();
+    check('drag: leaving the strip hides the bar', !bars[0].visible);
+
+    const windowSource = Object.assign(new env.WindowClone(), {
+        metaWindow: { is_on_all_workspaces: () => false, get_workspace: () => workspaces[0], get_monitor: () => 0 },
+        _draggable: new FakeSignals(),
+    });
+    check('drag: a window dragged over the strip shows no bar', first.handleDragOver(windowSource, null, gapX(first, 3)) === 0 &&
+        !bars[0].visible && !first.acceptDrop(windowSource, null, gapX(first, 3)));
+    check('drag: a thumbnail dropped on a thumbnail is never taken as a window',
+        first._thumbnails[3].acceptDrop(source) === false && first._thumbnails[3].handleDragOver(source) === 0);
+
+    check('drag: a drop on its own thumbnail is refused (dnd snaps it back) and changes nothing',
+        !first.acceptDrop(source, null, source.actor.x + 3 - first.actor.x) && reorders.length === 0);
+
+    dragOverAt(label3, source, rightHalf3);
+    const taken = dropAt(label3, source, rightHalf3) === first.actor;
+    check('drop: workspace 2 dropped after workspace 3 moves to index 2, once', taken && reorders.length === 1 &&
+        reorders[0].join() === 'B,2' && order.map(workspace => workspace.name).join('') === 'ACBD');
+    check('drop: every strip is rebuilt in the new order, labels by position',
+        strips.every(strip => stripState(strip) === 'A:Workspace 1 C:Workspace 2 B:Workspace 3 D:Workspace 4'));
+    check('drop: the dragged thumbnail is replaced (dnd ends on a destroyed source)', source.actor.destroyed);
+    check('drop: the bars are hidden', bars.every(bar => !bar.visible));
+    check('drop: the active workspace is still B, highlighted at its new place on every strip',
+        manager.active === workspaces[1] && strips.every(strip =>
+            strip._thumbnails.every(thumbnail => isShownActive(thumbnail) === (thumbnail.metaWorkspace === workspaces[1]))));
+    check('drop: Scale stays open, no workspace switch', env.Main.overview.visible && env.Main.overview.hideCalls === 0 &&
+        activations.length === 0);
+    check('drop: Scale\'s big view is sorted to the new order once, without animation',
+        view._workspaces.map(workspace => workspace.metaWorkspace.name).join('') === 'ACBD' &&
+        view.layouts.length === 1 && view.layouts[0].animate === false && view.layouts[0].names === 'ACBD');
+    check('drop: its scroll follows the active index without switching (guarded as Scale does)',
+        view.scrollSets.length === 1 && view.scrollSets[0].value === 2 && view.scrollSets[0].guarded && !view._animatingScroll);
+    check('drop: a running scroll animation (wheel switch just before) is stopped before the scroll is set',
+        view.scrollSets[0].stopped);
+    check('drop: each thumbnail reads its windows at its workspace\'s new index',
+        strips.every(strip => strip._thumbnails.every((thumbnail, i) => thumbnail.metaWorkspace.index() === i)));
+
+    strips.forEach((strip, index) => layOutRow(strip, env.monitors[index]));
+    const fromFirst = first._thumbnails[3];
+    check('drop: a thumbnail dropped on the other screen\'s strip moves too',
+        second.acceptDrop(fromFirst, null, gapX(second, 0)) && reorders[1].join() === 'D,0' &&
+        stripState(second).startsWith('D:Workspace 1'));
+
+    strips.forEach((strip, index) => layOutRow(strip, env.monitors[index]));
+    const cancelled = first._thumbnails[0];
+    cancelled.actor.emit('button-press-event', buttonEvent(BUTTON.PRIMARY));
+    cancelled._draggable.emit('drag-begin');
+    second.handleDragOver(cancelled, null, gapX(second, 3));
+    cancelled._draggable.emit('drag-cancelled');
+    check('cancel: a drop outside the strips hides the bar at once', bars.every(bar => !bar.visible));
+    cancelled._draggable.emit('drag-end');
+    check('cancel: the thumbnail is shown again once it is back, nothing moved',
+        cancelled.actor.opacity === 255 && reorders.length === 2);
+    // dnd keeps the drag's release away from the thumbnail; a later release alone on it
+    // (press in a gap, release on the thumbnail) must not complete the drag's press.
+    cancelled.actor.emit('button-release-event', buttonEvent(BUTTON.PRIMARY));
+    check('cancel: a release on the thumbnail after a finished drag does not enter the workspace',
+        activations.length === 0 && env.Main.overview.hideCalls === 0);
+    clickActor(cancelled.actor);
+    check('cancel: the next short click enters again', activations.length === 1 && env.Main.overview.hideCalls === 1);
+
+    for (const strip of strips)
+        strip.destroy();
+    check('destroy: the bars go with their strips', bars.every(bar => bar.destroyed));
+    manager.reorder_workspace(workspaces[0], 3);
+    check('destroy: a reorder after Scale closed rebuilds nothing', stripState(first) === '');
+}
+
 testPanelChoice();
 testPanelCopy();
 testPanelFallbacks();
@@ -932,6 +1314,9 @@ testDragHighlightsClearedOnDrop();
 testIconSizeAtDisplayScale();
 testConstructorFailureDestroys();
 testFittingItemWidth();
+testReorderIndex();
+testThumbnailDragReordersWorkspaces();
+testWindowDragUnchanged();
 
 if (failures > 0) {
     print(`${failures} failure(s)`);

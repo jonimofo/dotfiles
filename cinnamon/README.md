@@ -69,6 +69,11 @@ every other screen has its own strip at its very top.
 - A click on a thumbnail enters that workspace: Scale closes on its desktop. A click on
   the current workspace's thumbnail closes Scale.
 - Dropping a window on a thumbnail moves it to that workspace and that screen.
+- Dragging a thumbnail moves its workspace, with its windows: past a few pixels a half
+  transparent copy follows the pointer, its slot stays empty, and a violet bar marks where
+  it lands between two thumbnails, on any screen's strip. On release the workspace takes that
+  place and the labels renumber by position; Scale stays open on the same workspace. Released
+  outside the strips or on its own slot, the thumbnail snaps back and nothing changes.
 - Dropping a window anywhere on another screen's window area moves it to that screen,
   same workspace. The area is highlighted while the drop is possible.
 - The mouse wheel switches workspace. Scale stays open.
@@ -154,6 +159,8 @@ Then give Super back to the Menu (see above).
 - Tested on two monitors side by side. Three or more are untested.
 - Thumbnails follow windows opening, closing, changing workspace and changing screen, not a
   window being moved within its screen or resized while Scale is open. Workspace renames show at the next opening.
+- Custom workspace names are stored by position (`workspace-names`): after a reorder a
+  name stays at its position, it does not follow its workspace. Untested: no custom names here.
 - With the extension disabled, Super does nothing until the Menu shortcut is set back.
 - The dock is drawn on the primary monitor only.
 - Windows with no `.desktop` application are left out of the dock.
@@ -178,7 +185,8 @@ Design records: [`documentation/plans/2026-11-11-cinnamon-scale-overview.md`](..
 then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../documentation/plans/2026-11-12-cinnamon-scale-second-screen.md) for several screens,
 then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/plans/2026-11-12-cinnamon-scale-dock.md) for the dock,
 then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time, then the top panel,
-then [`documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md`](../documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md) for entering a workspace.
+then [`documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md`](../documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md) for entering a workspace,
+then [`documentation/plans/2026-11-18-cinnamon-scale-reorder-workspaces.md`](../documentation/plans/2026-11-18-cinnamon-scale-reorder-workspaces.md) for reordering workspaces.
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
@@ -197,12 +205,14 @@ Private fields and methods read, called or written:
 |---|---|---|
 | `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the panel's click blocker, the header and the dock are inserted, close animation in progress |
 | `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written) | reach each workspace, hide the windows during a search |
+| `Main.overview.workspacesView` | `_workspaces` (sorted in place), `_updateWorkspaceActors(false)`, `_scrollAdjustment.value` and `_animatingScroll` (written) | keeping Scale's big view on the active workspace after a reorder |
 | `Workspace` | `_monitors` | the per-monitor objects, one per screen |
 | `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
 | `WorkspaceMonitor` | `_x`, `_y`, `_width`, `_height`, `monitorIndex` | each screen's window area, as a drop target |
 | `imports.ui.workspace` | `WindowClone` (exported constructor, checked with `instanceof`) | telling Scale's windows from other drags |
 | `WindowClone` | `getDragActor`, `getDragActorSource`, `_draggable` (added to each instance) | the drag picture |
 | dnd `Draggable` | `buttonPressEventId`, `destroyEventId` | removing the drag handlers on disable |
+| `imports.ui.dnd` | `makeDraggable` on each strip thumbnail, `drag-begin`, `drag-cancelled`, `drag-end`; the strip as drop target (`handleDragOver`, `handleDragOut`, `acceptDrop`) | dragging a thumbnail to reorder workspaces |
 | `imports.ui.dnd` | `addDragMonitor`, `removeDragMonitor`, a monitor's `dragMotion(event)` with `event.x`, `event.y`, `event.source` | seeing every drag motion, to highlight a screen's window area |
 | `imports.ui.dnd` | a monitor's `dragDrop(event)` with `event.targetActor`, returning `DragDropResult.CONTINUE` | clearing the highlights of the targets that do not take a drop |
 | `Main` | `modalCount` | is Scale the only modal |
@@ -216,6 +226,16 @@ Assumptions about behaviour:
 - Handlers of the overview's `showing` signal run in connection order, so the header shrinks
   the big view before Scale lays its windows out.
 - `WorkspacesView.updateWindowPositions()` is broken in 6.4, so it is not used.
+- `reorder_workspace` emits `workspaces-reordered` and no workspace switch. Scale's big
+  view listens to neither, keeps its workspaces in their order at opening and picks the
+  shown one by the active index: the strip sorts it again, or Scale would show, and zoom
+  back on close, another workspace's windows.
+- dnd's drag starts past GTK's drag threshold (8 px here), a press that never passes it
+  is a click. dnd needs the press: the thumbnail's draggable is connected before its click
+  handler, which stops the press. A drag ends without a release on the thumbnail, so it never
+  counts as a click.
+- dnd picks the actor under the pointer with `Clutter.PickMode.ALL`, which includes actors
+  that take no input: the insertion bar is hidden from pick, or a drop over it would miss the strip.
 - Scale's view actor is added to `global.overlay_group` each time Scale opens, so the screen
   drop highlight raises itself in that group to stay above the windows.
 - A reactive actor at opacity 0 still takes the pointer, as the overview's own cover pane
@@ -456,7 +476,7 @@ scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
-scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, panel copy, thumbnail click, on fakes
+scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, panel copy, thumbnail click, workspace reorder, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, tick clock, day marker, stylesheet rules
 ```

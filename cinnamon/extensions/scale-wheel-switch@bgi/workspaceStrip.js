@@ -1,4 +1,5 @@
 const Clutter = imports.gi.Clutter;
+const Cinnamon = imports.gi.Cinnamon;
 const Mainloop = imports.mainloop;
 const Meta = imports.gi.Meta;
 const St = imports.gi.St;
@@ -18,6 +19,11 @@ const WINDOW_GAP_PROPERTY = '-scale-window-gap';
 const NO_INSETS = { top: 0, bottom: 0 };
 // Flags value of WorkspaceMonitor.positionWindows (its flag names are private to workspace.js).
 const POSITION_WITHOUT_ANIMATION = 0;
+// A thumbnail dragged to a new place: its picture follows the pointer half transparent,
+// its own slot stays empty. The drag starts past dnd's threshold (GTK's drag threshold).
+const THUMBNAIL_DRAG_OPACITY = Math.round(UiHelpers.OPAQUE * 0.5);
+// Width and color of the bar marking where the dragged thumbnail lands: stylesheet.css.
+const INSERTION_BAR_STYLE_CLASS = 'scale-strip-insertion-bar';
 
 // Same rule as Scale's big view, so a thumbnail shows exactly the windows Scale shows
 // (a sticky drop-down terminal would otherwise cover every thumbnail).
@@ -62,8 +68,68 @@ function computeGridCells(count, width, height) {
     return cells;
 }
 
+// Where a dragged thumbnail lands, from @thumbnails, the [x, width] of each thumbnail of a
+// strip in order, in stage coordinates: the number of thumbnails whose middle is left of
+// @pointerX. Slot 0 is before the first thumbnail, slot thumbnails.length after the last.
+function findInsertionSlot(pointerX, thumbnails) {
+    return thumbnails.filter(([x, width]) => x + width / 2 < pointerX).length;
+}
+
+// The index the workspace at @sourceIndex gets when dropped in @slot, or null when the slot
+// is on either side of its own thumbnail: it would stay where it is.
+function getReorderIndex(sourceIndex, slot) {
+    if (slot === sourceIndex || slot === sourceIndex + 1)
+        return null;
+
+    return slot > sourceIndex ? slot - 1 : slot;
+}
+
+// Middle of the gap at @slot (see findInsertionSlot). The two ends take half the gap
+// between the first two thumbnails, outside the row; a single thumbnail has no gap.
+function getInsertionBarX(slot, thumbnails) {
+    const count = thumbnails.length;
+    const rightOf = ([x, width]) => x + width;
+    const halfGap = count > 1 ? (thumbnails[1][0] - rightOf(thumbnails[0])) / 2 : 0;
+    if (slot <= 0)
+        return thumbnails[0][0] - halfGap;
+    if (slot >= count)
+        return rightOf(thumbnails[count - 1]) + halfGap;
+
+    return (rightOf(thumbnails[slot - 1]) + thumbnails[slot][0]) / 2;
+}
+
+// Scale's big view keeps its workspaces in the order of their indexes when it opened, and
+// picks the shown one by the active index: after a reorder it would show and close on
+// another workspace's windows. Sorted again here, then laid out around the active one.
+// Its scroll adjustment follows the active index; setting it as Scale itself does
+// (_animatingScroll) keeps it from switching workspace.
+function syncBigViewOrder() {
+    const view = Main.overview.workspacesView;
+    if (!view)
+        return;
+
+    const sorted = [...view._workspaces].sort((a, b) => a.metaWorkspace.index() - b.metaWorkspace.index());
+    if (sorted.every((workspace, i) => workspace === view._workspaces[i]))
+        return;
+
+    view._workspaces.splice(0, sorted.length, ...sorted);
+    view._updateWorkspaceActors(false);
+    view._animatingScroll = true;
+    view._scrollAdjustment.value = global.workspace_manager.get_active_workspace_index();
+    view._animatingScroll = false;
+}
+
 // The strips of the Scale view currently open, one per monitor.
 const activeStrips = new Set();
+
+function isThumbnailDrag(source) {
+    return source instanceof WorkspaceThumbnail;
+}
+
+function hideInsertionBars() {
+    for (const strip of activeStrips)
+        strip.hideInsertionBar();
+}
 
 // Height of the smallest strip thumbnail, for the modules that size things after it:
 // what fits in it fits in every strip.
@@ -105,12 +171,41 @@ class WorkspaceThumbnail {
 
         this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
         this.actor._delegate = this;
+        // Connected before the click: connectClick stops the press, which dnd needs too.
+        this._makeDraggable();
         this._dropHover = new UiHelpers.DragHover(
             this.actor,
             () => this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS),
             () => this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS));
         this.actor.connect('destroy', () => this._dropHover.leave());
         UiHelpers.connectClick(this.actor, [Clutter.BUTTON_PRIMARY], () => this._enterWorkspace());
+    }
+
+    // dnd ends a drag without a release on the thumbnail, so connectClick never sees a drag
+    // as a click.
+    _makeDraggable() {
+        this._draggable = DND.makeDraggable(this.actor, { dragActorOpacity: THUMBNAIL_DRAG_OPACITY });
+        this._draggable.connect('drag-begin', () => {
+            this.actor.opacity = UiHelpers.TRANSPARENT;
+        });
+        this._draggable.connect('drag-cancelled', hideInsertionBars);
+        this._draggable.connect('drag-end', () => {
+            hideInsertionBars();
+            if (!this.actor.is_finalized())
+                this.actor.opacity = UiHelpers.OPAQUE;
+        });
+    }
+
+    // Draggable interface of imports.ui.dnd: a copy follows the pointer, the thumbnail
+    // stays in the row as the place it snaps back to.
+    getDragActor() {
+        const [x, y] = this.actor.get_transformed_position();
+        const [width, height] = this.actor.get_transformed_size();
+        return new Clutter.Clone({ source: this.actor, x, y, width, height });
+    }
+
+    getDragActorSource() {
+        return this.actor;
     }
 
     // Switch first, then close: Scale's closing animation zooms the windows of the active
@@ -256,7 +351,11 @@ var WorkspaceStrip = class WorkspaceStrip {
         // Reactive, so a click in the gaps around the thumbnails is swallowed too.
         this._row = new St.BoxLayout({ style_class: 'scale-strip-row' });
         this.actor = new St.Bin({ style_class: 'scale-strip', child: this._row, reactive: true });
+        this.actor._delegate = this;
         UiHelpers.swallowClicks(this.actor);
+        // Never under the pointer for dnd: a drop over the bar reaches the strip below it.
+        this._insertionBar = new St.Widget({ style_class: INSERTION_BAR_STYLE_CLASS, visible: false });
+        Cinnamon.util_set_hidden_from_pick(this._insertionBar, true);
         this.actor.set_position(this._monitor.x, this._monitor.y + topOffset);
         this.actor.set_width(this._monitor.width);
 
@@ -266,6 +365,7 @@ var WorkspaceStrip = class WorkspaceStrip {
     _show() {
         // Below the cover pane, which blocks input during the Scale open and close animations.
         Main.overview._group.insert_child_below(this.actor, Main.overview._coverPane);
+        Main.overview._group.insert_child_above(this._insertionBar, this.actor);
 
         this._buildThumbnails();
         this._insetBigView(this._getInsets());
@@ -277,6 +377,7 @@ var WorkspaceStrip = class WorkspaceStrip {
         this._signals.connect(display, 'window-left-monitor', this._queueRefresh, this);
         this._signals.connect(global.window_manager, 'switch-workspace', this._syncActive, this);
         this._signals.connect(global.workspace_manager, 'notify::n-workspaces', this._onWorkspacesChanged, this);
+        this._signals.connect(global.workspace_manager, 'workspaces-reordered', this._onWorkspacesReordered, this);
     }
 
     getThumbnailHeight() {
@@ -358,6 +459,81 @@ var WorkspaceStrip = class WorkspaceStrip {
         this._insetBigView(this._getInsets());
     }
 
+    // Every strip rebuilds itself; the first one also sorts Scale's big view. The thumbnails
+    // read their label and windows from their workspace's new index.
+    _onWorkspacesReordered() {
+        this.hideInsertionBar();
+        syncBigViewOrder();
+        this._buildThumbnails();
+    }
+
+    // The [x, width] of each thumbnail, in stage coordinates.
+    _getThumbnailSpans() {
+        return this._thumbnails.map(thumbnail => {
+            const [x] = thumbnail.actor.get_transformed_position();
+            const [width] = thumbnail.actor.get_transformed_size();
+            return [x, width];
+        });
+    }
+
+    // Where a dragged thumbnail dropped at @x of the strip lands: its slot, and its new
+    // index, null on its own slot.
+    _getDropPlace(source, x) {
+        const [stripX] = this.actor.get_transformed_position();
+        const slot = findInsertionSlot(stripX + x, this._getThumbnailSpans());
+        return { slot, index: getReorderIndex(source.metaWorkspace.index(), slot) };
+    }
+
+    // Drop target interface of imports.ui.dnd, for a thumbnail dragged over the strip, from
+    // this strip or another one: they all show the same workspaces. Window drags are left
+    // to the thumbnails.
+    handleDragOver(source, actor, x) {
+        if (!isThumbnailDrag(source))
+            return DND.DragMotionResult.CONTINUE;
+
+        const { slot, index } = this._getDropPlace(source, x);
+        if (index === null) {
+            this.hideInsertionBar();
+            return DND.DragMotionResult.CONTINUE;
+        }
+        this._showInsertionBar(slot);
+        return DND.DragMotionResult.MOVE_DROP;
+    }
+
+    handleDragOut() {
+        this.hideInsertionBar();
+    }
+
+    // Refused on its own slot: dnd snaps the thumbnail back. The reorder rebuilds every
+    // strip, the dragged thumbnail included, before dnd ends the drag.
+    acceptDrop(source, actor, x) {
+        if (!isThumbnailDrag(source))
+            return false;
+
+        hideInsertionBars();
+        const { index } = this._getDropPlace(source, x);
+        if (index === null)
+            return false;
+
+        global.workspace_manager.reorder_workspace(source.metaWorkspace, index);
+        return true;
+    }
+
+    _showInsertionBar(slot) {
+        const firstThumbnail = this._thumbnails[0].actor;
+        const [, y] = firstThumbnail.get_transformed_position();
+        const [, height] = firstThumbnail.get_transformed_size();
+        const x = getInsertionBarX(slot, this._getThumbnailSpans());
+        this._insertionBar.set_height(height);
+        this._insertionBar.show();
+        const width = UiHelpers.getNaturalWidth(this._insertionBar);
+        this._insertionBar.set_position(Math.round(x - width / 2), Math.round(y));
+    }
+
+    hideInsertionBar() {
+        this._insertionBar.hide();
+    }
+
     // Several window signals fire for one change: refresh once, when idle.
     _queueRefresh() {
         if (this._refreshIdleId)
@@ -409,6 +585,7 @@ var WorkspaceStrip = class WorkspaceStrip {
         }
 
         this._thumbnails = [];
+        this._insertionBar.destroy();
         this.actor.destroy();
 
         // Scale destroys its view when it closes; this only matters when the strip goes first.

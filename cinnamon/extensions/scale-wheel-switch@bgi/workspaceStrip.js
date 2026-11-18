@@ -1,6 +1,7 @@
 const Clutter = imports.gi.Clutter;
 const Cinnamon = imports.gi.Cinnamon;
 const Mainloop = imports.mainloop;
+const Tweener = imports.ui.tweener;
 const Meta = imports.gi.Meta;
 const St = imports.gi.St;
 const DND = imports.ui.dnd;
@@ -20,7 +21,7 @@ const NO_INSETS = { top: 0, bottom: 0 };
 // Flags value of WorkspaceMonitor.positionWindows (its flag names are private to workspace.js).
 const POSITION_WITHOUT_ANIMATION = 0;
 // A thumbnail dragged to a new place: its picture follows the pointer half transparent,
-// its own slot stays empty. The drag starts past dnd's threshold (GTK's drag threshold).
+// its own slot stays empty.
 const THUMBNAIL_DRAG_OPACITY = Math.round(UiHelpers.OPAQUE * 0.5);
 // Width and color of the bar marking where the dragged thumbnail lands: stylesheet.css.
 const INSERTION_BAR_STYLE_CLASS = 'scale-strip-insertion-bar';
@@ -102,7 +103,8 @@ function getInsertionBarX(slot, thumbnails) {
 // picks the shown one by the active index: after a reorder it would show and close on
 // another workspace's windows. Sorted again here, then laid out around the active one.
 // Its scroll adjustment follows the active index; setting it as Scale itself does
-// (_animatingScroll) keeps it from switching workspace.
+// (_animatingScroll) keeps it from switching workspace. A wheel switch less than a slide
+// before animates that adjustment: stopped first, or it would switch on its next step.
 function syncBigViewOrder() {
     const view = Main.overview.workspacesView;
     if (!view)
@@ -114,6 +116,7 @@ function syncBigViewOrder() {
 
     view._workspaces.splice(0, sorted.length, ...sorted);
     view._updateWorkspaceActors(false);
+    Tweener.removeTweens(view._scrollAdjustment);
     view._animatingScroll = true;
     view._scrollAdjustment.value = global.workspace_manager.get_active_workspace_index();
     view._animatingScroll = false;
@@ -172,36 +175,29 @@ class WorkspaceThumbnail {
         this.actor = new St.Bin({ style_class: 'scale-strip-thumbnail', child: content, reactive: true });
         this.actor._delegate = this;
         // Connected before the click: connectClick stops the press, which dnd needs too.
+        // The drag starts past dnd's threshold (GTK's drag threshold).
         this._makeDraggable();
         this._dropHover = new UiHelpers.DragHover(
             this.actor,
             () => this.actor.add_style_class_name(DROP_TARGET_STYLE_CLASS),
             () => this.actor.remove_style_class_name(DROP_TARGET_STYLE_CLASS));
         this.actor.connect('destroy', () => this._dropHover.leave());
-        UiHelpers.connectClick(this.actor, [Clutter.BUTTON_PRIMARY], () => this._enterWorkspace());
+        const forgetPress = UiHelpers.connectClick(this.actor, [Clutter.BUTTON_PRIMARY], () => this._enterWorkspace());
+        // dnd ends a drag without a release on the thumbnail: the press is forgotten, or a
+        // later release alone on the thumbnail would count as a click.
+        this._draggable.connect('drag-begin', forgetPress);
     }
 
-    // dnd ends a drag without a release on the thumbnail, so connectClick never sees a drag
-    // as a click.
     _makeDraggable() {
-        this._draggable = DND.makeDraggable(this.actor, { dragActorOpacity: THUMBNAIL_DRAG_OPACITY });
-        this._draggable.connect('drag-begin', () => {
-            this.actor.opacity = UiHelpers.TRANSPARENT;
-        });
+        this._draggable = UiHelpers.makeDraggable(this.actor, THUMBNAIL_DRAG_OPACITY, UiHelpers.TRANSPARENT);
         this._draggable.connect('drag-cancelled', hideInsertionBars);
-        this._draggable.connect('drag-end', () => {
-            hideInsertionBars();
-            if (!this.actor.is_finalized())
-                this.actor.opacity = UiHelpers.OPAQUE;
-        });
+        this._draggable.connect('drag-end', hideInsertionBars);
     }
 
     // Draggable interface of imports.ui.dnd: a copy follows the pointer, the thumbnail
     // stays in the row as the place it snaps back to.
     getDragActor() {
-        const [x, y] = this.actor.get_transformed_position();
-        const [width, height] = this.actor.get_transformed_size();
-        return new Clutter.Clone({ source: this.actor, x, y, width, height });
+        return UiHelpers.createDragClone(this.actor);
     }
 
     getDragActorSource() {

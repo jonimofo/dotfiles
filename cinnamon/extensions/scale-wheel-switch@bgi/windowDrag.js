@@ -1,5 +1,3 @@
-const Clutter = imports.gi.Clutter;
-const DND = imports.ui.dnd;
 const Main = imports.ui.main;
 const Workspace = imports.ui.workspace;
 const UiHelpers = require('./uiHelpers');
@@ -26,7 +24,7 @@ function createDragActor(windowClone) {
     const maxSize = WorkspaceStrip.getThumbnailHeight() * DRAG_ACTOR_THUMBNAIL_FRACTION;
     const scale = Math.min(1, maxSize / Math.max(width, height));
 
-    const dragActor = new Clutter.Clone({ source: windowClone.actor, x, y, width, height });
+    const dragActor = UiHelpers.createDragClone(windowClone.actor);
     dragActor.set_pivot_point(clampUnit((pointerX - x) / width), clampUnit((pointerY - y) / height));
     dragActor.set_scale(scale, scale);
     return dragActor;
@@ -42,16 +40,7 @@ function makeDraggable(windowClone) {
 
     windowClone.getDragActor = () => createDragActor(windowClone);
     windowClone.getDragActorSource = () => windowClone.actor;
-    const draggable = DND.makeDraggable(windowClone.actor, { dragActorOpacity: DRAG_ACTOR_OPACITY });
-    windowClone._draggable = draggable;
-
-    draggable.connect('drag-begin', () => {
-        windowClone.actor.opacity = DRAG_SOURCE_OPACITY;
-    });
-    draggable.connect('drag-end', () => {
-        if (!windowClone.actor.is_finalized())
-            windowClone.actor.opacity = UiHelpers.OPAQUE;
-    });
+    windowClone._draggable = UiHelpers.makeDraggable(windowClone.actor, DRAG_ACTOR_OPACITY, DRAG_SOURCE_OPACITY);
     const destroyId = windowClone.actor.connect('destroy', () => draggableClones.delete(windowClone));
     draggableClones.set(windowClone, destroyId);
 }

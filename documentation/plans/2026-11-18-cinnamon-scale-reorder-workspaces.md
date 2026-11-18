@@ -87,12 +87,16 @@ and the active workspace stays the same one."
 |---|---|
 | `workspaceStrip.js` | Draggable thumbnails, the strip as drop target, insertion bar, `findInsertionSlot`, `getReorderIndex`, `getInsertionBarX`, `syncBigViewOrder` |
 | `stylesheet.css` | `.scale-strip-insertion-bar` |
-| `scripts/cinnamon-scale-test.js` | Slot and index rules with float noise, drag, bar, drop on both screens, own slot, cancel, window drops, big view order |
+| `uiHelpers.js` | `makeDraggable` and `createDragClone`, shared by the window drag and the thumbnails; `connectClick` returns a function forgetting a press that turned into a drag |
+| `windowDrag.js` | Uses the shared draggable, same behaviour |
+| `scripts/cinnamon-scale-test.js` | Slot and index rules with float noise, dnd's parent walk from a thumbnail's label, drag, bar, drop on both screens, own slot, cancel, release after a drag, window drops, window drag opacities, big view order and scroll animation |
+| `scripts/cinnamon-scale-test.sh` | Header lists the workspace reorder |
 | `cinnamon/README.md` | Behaviour, limitation on custom names, private members, assumptions |
 
 ## Checked by hand
 
-Nothing could be tried live while writing it. To check after a Cinnamon restart (Alt+F2 r):
+Tried live by the owner on 2026-11-18 after a Cinnamon restart: "ok working as expected".
+The list below is what to check again after a change here (Alt+F2 r):
 
 1. Super, a short click on a thumbnail enters its workspace.
 2. Drag thumbnail 2 right of thumbnail 3: the copy is half transparent, slot 2 is empty, the

@@ -204,15 +204,19 @@ Private fields and methods read, called or written:
 | Object | Members | Used for |
 |---|---|---|
 | `Main.overview` | `_group`, `_coverPane`, `_hideInProgress` | where the panel's click blocker, the header and the dock are inserted, close animation in progress |
+| `Main.overview` | `_group` (insertion bar added right above each strip) | the bar marking where a dragged thumbnail lands |
 | `Main.overview.workspacesView` | `_workspaces`, `actor` (opacity written) | reach each workspace, hide the windows during a search |
 | `Main.overview.workspacesView` | `_workspaces` (sorted in place), `_updateWorkspaceActors(false)`, `_scrollAdjustment.value` and `_animatingScroll` (written) | keeping Scale's big view on the active workspace after a reorder |
+| `imports.ui.tweener` | `removeTweens(view._scrollAdjustment)` | stopping the scroll animation of a wheel switch before a reorder sets the scroll |
 | `Workspace` | `_monitors` | the per-monitor objects, one per screen |
 | `WorkspaceMonitor` | `_windows`, `_margin`, `_monitor` (written), `setGeometry`, `positionWindows` with flags `0`, `_updateEmptyPlaceholder` | window list and order, pushing the windows below the header |
 | `WorkspaceMonitor` | `_x`, `_y`, `_width`, `_height`, `monitorIndex` | each screen's window area, as a drop target |
 | `imports.ui.workspace` | `WindowClone` (exported constructor, checked with `instanceof`) | telling Scale's windows from other drags |
 | `WindowClone` | `getDragActor`, `getDragActorSource`, `_draggable` (added to each instance) | the drag picture |
 | dnd `Draggable` | `buttonPressEventId`, `destroyEventId` | removing the drag handlers on disable |
-| `imports.ui.dnd` | `makeDraggable` on each strip thumbnail, `drag-begin`, `drag-cancelled`, `drag-end`; the strip as drop target (`handleDragOver`, `handleDragOut`, `acceptDrop`) | dragging a thumbnail to reorder workspaces |
+| `imports.ui.dnd` | `makeDraggable` with `dragActorOpacity` (in `uiHelpers.makeDraggable`, for windows and thumbnails), the delegate's `getDragActor` and `getDragActorSource`, signals `drag-begin`, `drag-cancelled`, `drag-end` | the drag picture of a window or a thumbnail and its source's opacity |
+| `imports.ui.dnd` | the strip as drop target (`handleDragOver`, `handleDragOut`, `acceptDrop`) | dragging a thumbnail to reorder workspaces |
+| dnd `Draggable` | `disconnectAll()` when its actor is destroyed | a reorder rebuilds the strips inside `acceptDrop`: the dragged thumbnail's `drag-end` handlers never run, so the drop hides the bars itself |
 | `imports.ui.dnd` | `addDragMonitor`, `removeDragMonitor`, a monitor's `dragMotion(event)` with `event.x`, `event.y`, `event.source` | seeing every drag motion, to highlight a screen's window area |
 | `imports.ui.dnd` | a monitor's `dragDrop(event)` with `event.targetActor`, returning `DragDropResult.CONTINUE` | clearing the highlights of the targets that do not take a drop |
 | `Main` | `modalCount` | is Scale the only modal |

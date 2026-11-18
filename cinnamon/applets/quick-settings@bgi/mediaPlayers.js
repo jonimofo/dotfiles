@@ -14,7 +14,8 @@ const TYPES = Constants.MPRIS_TYPES;
 // signal and reply is checked against its D-Bus type before it is read: anything else from
 // a player is ignored, logged once per player, and a player's error text is cut in the log.
 // A player that leaves the bus has its subscription released at once, and its late replies
-// are dropped without a log; destroy() releases everything and nothing runs after.
+// are dropped without a log; destroy() releases everything and nothing runs after. A player
+// without a track title can get its window's title (setWindowTitle, from MediaWindowTitles).
 // @bus: the session bus, or a fake in the tests.
 class MediaPlayers {
     constructor(onChange, bus = Gio.DBus.session) {
@@ -39,6 +40,23 @@ class MediaPlayers {
 
     get blocks() {
         return MediaModel.visibleBlocks([...this._players.values()], Constants.MEDIA_MAX_PLAYERS);
+    }
+
+    // The bus names of the players whose metadata has no track title.
+    get untitled() {
+        return [...this._players.values()].filter(player => !MediaModel.hasTrackTitle(player.metadata))
+            .map(player => player.busName);
+    }
+
+    // @title: the title of the player's own window (untrusted text), or null for none. Kept
+    // cleaned; the blocks update only when it changes.
+    setWindowTitle(busName, title) {
+        const player = this._players.get(busName);
+        const cleaned = MediaModel.plainText(title) || null;
+        if (!player || player.windowTitle === cleaned)
+            return;
+        player.windowTitle = cleaned;
+        this._notify();
     }
 
     // @method: a MediaModel button's method (Previous, PlayPause, Next).
@@ -117,8 +135,8 @@ class MediaPlayers {
         if (this._destroyed || this._players.has(busName) || !owner)
             return;
         const player = {
-            busName, owner, identity: null, root: {}, metadata: {}, properties: {}, signalId: 0, warned: false,
-            noWindowLogged: false,
+            busName, owner, identity: null, root: {}, metadata: {}, properties: {}, windowTitle: null, signalId: 0,
+            warned: false, noWindowLogged: false,
         };
         player.signalId = this._bus.signal_subscribe(busName, Constants.DBUS_PROPERTIES_INTERFACE, 'PropertiesChanged',
             Constants.MPRIS_PATH, null, Gio.DBusSignalFlags.NONE, (connection, sender, path, iface, signal, parameters) => {

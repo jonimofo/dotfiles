@@ -9,6 +9,11 @@ function toCss(color, opacity = MAX_CHANNEL) {
     return `rgba(${color.red}, ${color.green}, ${color.blue}, ${alpha.toFixed(3)})`;
 }
 
+// @color with its alpha ignored: { red, green, blue } out of 255.
+function opaqueCss(color) {
+    return toCss({ red: color.red, green: color.green, blue: color.blue, alpha: MAX_CHANNEL });
+}
+
 function lookupColor(themeNode, property) {
     const [found, color] = themeNode.lookup_color(property, false);
     return found ? color : null;
@@ -16,8 +21,9 @@ function lookupColor(themeNode, property) {
 
 // The tile colours of the current theme, read from @sliderActor (a styled slider on the
 // stage): its track for a tile that is off, its filled part for a tile that is on.
-// Returns { normal: { tile, checked }, dimmed: { tile, checked } } as CSS colours, or null
-// when the actor has no style yet or the theme sets neither colour.
+// Returns { normal: { tile, checked }, dimmed: { tile, checked }, accent } as CSS colours, or
+// null when the actor has no style yet or the theme sets neither colour. @accent is the
+// checked colour made opaque: the media blocks' playing bar, solid on any background.
 function readTileColors(sliderActor) {
     if (!sliderActor.get_stage())
         return null;
@@ -30,5 +36,6 @@ function readTileColors(sliderActor) {
     return {
         normal: { tile: toCss(tile), checked: toCss(checked) },
         dimmed: { tile: toCss(tile, Constants.INACTIVE_OPACITY), checked: toCss(checked, Constants.INACTIVE_OPACITY) },
+        accent: opaqueCss(checked),
     };
 }

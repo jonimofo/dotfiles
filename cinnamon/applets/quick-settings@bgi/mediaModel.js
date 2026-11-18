@@ -35,21 +35,32 @@ function playerName(identity, busName) {
     return plainText(identity) || fallbackName(busName);
 }
 
-// { title, artist, player } for a block, or null when the metadata has no title. Line 2 is
-// artist then player: artist ends with the separator ("Artist · "), or is empty without an
-// artist, so the player name shows alone. @metadata: the unpacked Metadata map; @name: from
-// playerName().
-function blockText(metadata, name) {
-    const title = plainText(metadata ? metadata['xesam:title'] : null);
-    if (!title)
-        return null;
-    const artist = plainText(metadata['xesam:artist']);
+// Whether the metadata has a track title (xesam:title, once cleaned).
+function hasTrackTitle(metadata) {
+    return plainText(metadata ? metadata['xesam:title'] : null) !== '';
+}
+
+// { title, artist, player } for a block. Line 1 is the track title (xesam:title), else
+// @windowTitle (the title of the player's own window, for a player that publishes no track
+// title), else empty: the player name then shows alone on line 2. Line 2 is artist then
+// player: artist ends with the separator ("Artist · "), or is empty without an artist, so
+// the player name shows alone. @metadata: the unpacked Metadata map; @name: from
+// playerName(); @windowTitle: untrusted text, cleaned and cut like a track title.
+function blockText(metadata, name, windowTitle = null) {
+    const title = plainText(metadata ? metadata['xesam:title'] : null) || plainText(windowTitle);
+    const artist = metadata ? plainText(metadata['xesam:artist']) : '';
     const player = PanelText.cutText(name, Constants.MEDIA_PLAYER_NAME_MAX);
     return {
-        title: PanelText.cutText(title, Constants.MEDIA_TITLE_MAX),
+        title: title ? PanelText.cutText(title, Constants.MEDIA_TITLE_MAX) : '',
         artist: artist ? `${PanelText.cutText(artist, Constants.MEDIA_ARTIST_MAX)}${Constants.MEDIA_PLAYER_SEPARATOR}` : '',
         player,
     };
+}
+
+// Whether the Player properties say it plays now (PlaybackStatus Playing): the block's
+// accent bar shows only then.
+function isPlaying(properties) {
+    return Boolean(properties) && properties.PlaybackStatus === Constants.MPRIS_PLAYING;
 }
 
 // The three buttons from the Player properties: { previous, playPause, next }, each
@@ -65,10 +76,10 @@ function buttonStates(player) {
         [key, { ...definitions[key], working: control && capable[key] === true }]));
 }
 
-// The blocks to show. @players: [{ busName, owner, identity, metadata, properties }]. Two
-// names of one owner (a player and its instance name) count once, the longer name kept;
-// players without a title are left out; order by display name, then bus name; at most @max.
-// Returns [{ busName, name, text, buttons }].
+// The blocks to show. @players: [{ busName, owner, identity, metadata, properties,
+// windowTitle }]. Two names of one owner (a player and its instance name) count once, the
+// longer name kept; every announced player gets a block, titled as blockText() says; order by
+// display name, then bus name; at most @max. Returns [{ busName, name, text, buttons, playing }].
 function visibleBlocks(players, max) {
     const byOwner = new Map();
     for (const player of players) {
@@ -80,9 +91,15 @@ function visibleBlocks(players, max) {
     return [...byOwner.values()]
         .map(player => {
             const name = playerName(player.identity, player.busName);
-            return { busName: player.busName, name, text: blockText(player.metadata, name), buttons: buttonStates(player.properties || {}) };
+            const properties = player.properties || {};
+            return {
+                busName: player.busName,
+                name,
+                text: blockText(player.metadata, name, player.windowTitle),
+                buttons: buttonStates(properties),
+                playing: isPlaying(properties),
+            };
         })
-        .filter(block => block.text)
         .sort((one, two) => one.name.localeCompare(two.name) || one.busName.localeCompare(two.busName))
         .slice(0, max);
 }

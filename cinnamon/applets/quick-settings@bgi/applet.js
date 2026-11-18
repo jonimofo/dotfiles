@@ -41,6 +41,7 @@ const ChargeLimit = require('./chargeLimit');
 const ChargeModel = require('./chargeModel');
 const MediaFocus = require('./mediaFocus');
 const MediaWindows = require('./mediaWindows');
+const MediaWindowTitles = require('./mediaWindowTitles');
 
 class QuickSettingsApplet extends Applet.Applet {
     constructor(metadata, orientation, panelHeight, instanceId) {
@@ -66,6 +67,7 @@ class QuickSettingsApplet extends Applet.Applet {
                     this._nordvpn.refresh();
                 if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'charge-limit'))
                     this._chargeLimit.refresh();
+                this._followMediaTitles();
             } else {
                 this._content.lists.close();
             }
@@ -90,6 +92,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpChargeLimit();
         this._setUpMicMute();
         this._media = null;
+        this._mediaTitles = null;
         this._content.setOnMediaButton((busName, method) => this._media && this._media.call(busName, method),
             busName => this._focusMediaPlayer(busName));
         this._setUpHeader();
@@ -508,10 +511,23 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     // Hidden media controls watch no player: the players are followed only while they show.
+    // The window titles of the players without a track title follow the players.
     _startMedia() {
         if (this._media)
             return;
-        this._media = new MediaPlayers.MediaPlayers(() => this._content.setMediaBlocks(this._media.blocks));
+        this._media = new MediaPlayers.MediaPlayers(() => this._onMediaChange());
+        this._mediaTitles = new MediaWindowTitles.MediaWindowTitles(this._media, MediaWindows.CINNAMON_WINDOWS);
+    }
+
+    _onMediaChange() {
+        this._followMediaTitles();
+        this._content.setMediaBlocks(this._media.blocks);
+    }
+
+    // Also on each menu opening: a player's window may have appeared since.
+    _followMediaTitles() {
+        if (this._mediaTitles)
+            this._mediaTitles.follow(this._media.untitled);
     }
 
     // The player's window comes forward once the menu is closed.
@@ -527,6 +543,8 @@ class QuickSettingsApplet extends Applet.Applet {
     _stopMedia() {
         if (!this._media)
             return;
+        this._mediaTitles.destroy();
+        this._mediaTitles = null;
         this._media.destroy();
         this._media = null;
         this._content.setMediaBlocks([]);

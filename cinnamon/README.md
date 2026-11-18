@@ -321,15 +321,20 @@ the menu:
     short power cut counts as that change.
   - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
     dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
-- Media controls, under the tiles: one block per media player that has a track (any
-  MPRIS player: VLC, a browser playing a video...), at most three, by player name. The
-  title in bold, then `artist · player` with the player name in italic (the player alone
-  without an artist; a long artist is cut first), and previous, play or pause, next as bare
-  icons on that line. A button the player does not offer is dimmed. No player
-  with a track: no block. One line separates them from the tiles; with several players,
-  every second block has the lists' faint background. Followed live over D-Bus, like the stock sound applet. A click
-  on the title or the player line closes the menu and brings the player's window to the
-  front: a browser's window, not its tab.
+- Media controls, under the tiles: one block per media player on the session bus (any
+  MPRIS player: VLC, GNOME Videos, a browser playing a video...), at most three, by player
+  name. The title in bold, then `artist · player` with the player name in italic (the
+  player alone without an artist; a long artist is cut first), and previous, play or pause,
+  next as bare icons on that line. A player that publishes no track title (GNOME Videos
+  playing a file without a title tag) shows the title of its own window instead, which for
+  Videos is the file name, and follows its changes; without a window either, the player
+  name alone. A button the player does not offer is dimmed. While a player plays, a thin
+  bar in the checked tiles' accent colour runs down the left of its block; paused or
+  stopped, the bar is clear, its space kept so the text never moves. No player: no block (a
+  browser with no media does not announce itself). One line separates them from the tiles;
+  with several players, every second block has the lists' faint background. Followed live
+  over D-Bus, like the stock sound applet. A click on the title or the player line closes
+  the menu and brings the player's window to the front: a browser's window, not its tab.
 - '>' on a tile or a slider opens its list under that row, in the menu: networks, paired
   devices, VPN profiles, NordVPN countries, power profiles, output and input devices. The
   active entry has a check mark; a click switches to that entry. The last entry opens the
@@ -424,7 +429,9 @@ Cinnamon internals the media controls rely on, read from Cinnamon 6.4: `Cinnamon
 windows, in Cinnamon's own order; the applet picks by `get_user_time()` itself),
 `global.get_window_actors()` with each `meta_window`'s `get_pid()`, `get_title()` and
 `get_user_time()`, filtered with `Main.isInteresting()`, and
-`Main.activateWindow(window, time)`, the call of the stock window list on a click.
+`Main.activateWindow(window, time)`, the call of the stock window list on a click. A
+player's window title is followed with the window's `notify::title` and `unmanaged`
+signals, the ones Cinnamon's own overview and window menu use.
 
 ## Quick Settings: known limitations
 
@@ -441,7 +448,14 @@ windows, in Cinnamon's own order; the applet picks by `get_user_time()` itself),
   player's own process is brought forward. A player with no window found and no MPRIS Raise
   does nothing; the journal says so once.
 - Sandboxed players (Flatpak, Snap): their bus owner is a proxy without windows, so they
-  come forward only through MPRIS Raise, when they offer it.
+  come forward only through MPRIS Raise, when they offer it, and a sandboxed player without
+  a track title shows its name alone.
+- A player without a track title takes the title of the window click-to-focus would bring
+  forward (the one used last among several), chosen when the player appears or its window
+  shows up, and kept until that window closes. A window opened after the player is found at
+  the next player change or menu opening.
+- Every player on the bus now has a block, also one that is stopped with nothing loaded: it
+  shows its name alone, with the play button.
 
 - Microphone and Mic mute are dimmed while there is no input source (the internal microphone
   is disabled on this machine).
@@ -498,7 +512,8 @@ NetworkManager, BlueZ, UPower, session manager or media players.
 Design records:
 [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md),
 [`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md),
-[`documentation/plans/2026-11-17-cinnamon-quick-settings-media.md`](../documentation/plans/2026-11-17-cinnamon-quick-settings-media.md).
+[`documentation/plans/2026-11-17-cinnamon-quick-settings-media.md`](../documentation/plans/2026-11-17-cinnamon-quick-settings-media.md),
+[`documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md`](../documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md).
 
 ## Calendar: what it does
 

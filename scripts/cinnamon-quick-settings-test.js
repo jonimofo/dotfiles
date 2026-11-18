@@ -986,9 +986,26 @@ function testMediaModel() {
         && line2(Model.blockText({ 'xesam:title': 'Video title', 'xesam:artist': ['', '  '] }, 'Firefox')) === 'Firefox');
     check('media: an artist given as a string works too',
         line2(Model.blockText({ 'xesam:title': 'T', 'xesam:artist': 'Channel' }, 'Firefox')) === 'Channel · Firefox');
-    check('media: no title, empty title or a non-text title gives no block',
-        Model.blockText({}, 'VLC') === null && Model.blockText({ 'xesam:title': '  ' }, 'VLC') === null
-        && Model.blockText({ 'xesam:title': 7 }, 'VLC') === null && Model.blockText(null, 'VLC') === null);
+    const nameAlone = '{"title":"","artist":"","player":"Videos"}';
+    check('media: no title, empty title or a non-text title, and no window title: the player name alone',
+        [{}, { 'xesam:title': '  ' }, { 'xesam:title': 7 }, null].every(metadata => JSON.stringify(Model.blockText(metadata, 'Videos')) === nameAlone)
+        && JSON.stringify(Model.blockText({}, 'Videos', '  \u200E ')) === nameAlone && JSON.stringify(Model.blockText({}, 'Videos', 42)) === nameAlone);
+    // Regression: GNOME Videos publishes no xesam:title; its block takes its window's title.
+    const windowTitled = Model.blockText({ 'mpris:length': 1000 }, 'Videos', 'A holiday clip.mkv');
+    check(`media: no track title, line 1 is the window title, line 2 the player name (${JSON.stringify(windowTitled)})`,
+        JSON.stringify(windowTitled) === '{"title":"A holiday clip.mkv","artist":"","player":"Videos"}');
+    check('media: a track title wins over the window title',
+        Model.blockText({ 'xesam:title': 'Song' }, 'VLC', 'Song - VLC media player').title === 'Song');
+    const oddWindow = Model.blockText({}, 'Videos', `\u202Eclip\u0007\n${'w'.repeat(60)}`);
+    check(`media: the window title is cleaned and cut like a track title (${oddWindow.title})`,
+        oddWindow.title.startsWith('clip w') && !/[\u0000-\u001F\u202E]/.test(oddWindow.title)
+        && [...oddWindow.title].length === 44 && oddWindow.title.endsWith('…'));
+    check('media: playing only while PlaybackStatus is Playing',
+        Model.isPlaying({ PlaybackStatus: 'Playing' }) && !Model.isPlaying({ PlaybackStatus: 'Paused' })
+        && !Model.isPlaying({ PlaybackStatus: 'Stopped' }) && !Model.isPlaying({}) && !Model.isPlaying(null));
+    check('media: a track title, once cleaned, is what counts as one',
+        Model.hasTrackTitle({ 'xesam:title': 'Song' }) && !Model.hasTrackTitle({ 'xesam:title': ' \u200E' })
+        && !Model.hasTrackTitle({ 'xesam:title': 7 }) && !Model.hasTrackTitle({}) && !Model.hasTrackTitle(null));
     const odd = Model.blockText({ 'xesam:title': 'Line one\nline two\t<b>x</b>', 'xesam:artist': ['A & B'] }, 'VLC');
     const hidden = Model.blockText({ 'xesam:title': 'Song\u202Eeltit\u202C\u0007 one\u2066x\u2069\u200E', 'xesam:artist': ['\u200FArtist\u001B'] }, Model.playerName('VLC\u0000', 'org.mpris.MediaPlayer2.vlc'));
     check(`media: control and bidi characters are removed from every text (${JSON.stringify(hidden)})`,
@@ -1040,8 +1057,15 @@ function testMediaModel() {
         player('org.mpris.MediaPlayer2.firefox', ':1.20', 'Firefox', 'Video title'),
         player('org.mpris.MediaPlayer2.idle', ':1.30', 'Idle', null),
     ], 3);
-    check(`media: one block per player with a title, by name, a player's two names once (${blocks.map(b => b.busName)})`,
-        `${blocks.map(b => b.busName)}` === 'org.mpris.MediaPlayer2.firefox.instance_1_2,org.mpris.MediaPlayer2.vlc');
+    check(`media: one block per player, with or without a title, by name, a player's two names once (${blocks.map(b => b.busName)})`,
+        `${blocks.map(b => b.busName)}` === 'org.mpris.MediaPlayer2.firefox.instance_1_2,org.mpris.MediaPlayer2.idle,org.mpris.MediaPlayer2.vlc');
+    const untitled = Model.visibleBlocks([{ ...player('org.mpris.MediaPlayer2.totem', ':1.40', 'Videos', null), windowTitle: 'A holiday clip.mkv' },
+        { ...player('org.mpris.MediaPlayer2.other', ':1.41', 'Other', null), properties: { ...all, PlaybackStatus: 'Playing' } }], 3);
+    check(`media: regression, a player without xesam:title is shown, titled with its window, else its name alone (${untitled.map(b => JSON.stringify(b.text))})`,
+        untitled.length === 2 && untitled[1].text.title === 'A holiday clip.mkv' && untitled[1].text.player === 'Videos'
+        && untitled[0].text.title === '' && untitled[0].text.player === 'Other');
+    check('media: a block is playing only while its player plays',
+        untitled[0].playing === true && untitled[1].playing === false && blocks.every(block => block.playing === false));
     const same = Model.visibleBlocks([
         player('org.mpris.MediaPlayer2.b', ':1.2', 'Same', 'x'), player('org.mpris.MediaPlayer2.a', ':1.1', 'Same', 'x'),
     ], 3);
@@ -1126,8 +1150,7 @@ function testMediaModel() {
     check('media moves: applied, they always give the new order',
         [[['a', 'b', 'c'], ['b', 'd', 'a']], [['x'], ['y', 'x']], [['a', 'b', 'c'], ['c', 'b', 'a']], [['a'], ['a']]]
             .every(([before, after]) => apply(before, after) === `${after}`));
-    check('media: no player with a title, no block', Model.visibleBlocks([player('org.mpris.MediaPlayer2.idle', ':1.3', 'Idle', null)], 3).length === 0
-        && Model.visibleBlocks([], 3).length === 0);
+    check('media: no player, no block', Model.visibleBlocks([], 3).length === 0);
     check('media: unknown owners are not merged',
         Model.visibleBlocks([player('org.mpris.MediaPlayer2.a', null, 'A', 't'), player('org.mpris.MediaPlayer2.b', null, 'B', 't')], 3).length === 2);
 }
@@ -1276,7 +1299,20 @@ async function testMediaPlayers() {
         players.blocks[1].text.title === 'Next song' && line2(players.blocks[1].text) === 'VLC media player');
     bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player',
         { Metadata: new GLib.Variant('a{sv}', {}) });
-    check('media players: a player that loses its track loses its block', players.blocks.length === 1);
+    check(`media players: a player that loses its track keeps its block, its name alone (${JSON.stringify(players.blocks[1].text)})`,
+        players.blocks.length === 2 && players.blocks[1].text.title === '' && players.blocks[1].text.player === 'VLC media player');
+    check(`media players: the players without a track title are listed for their window (${players.untitled})`,
+        `${players.untitled}` === 'org.mpris.MediaPlayer2.vlc');
+    const beforeTitle = changes;
+    players.setWindowTitle('org.mpris.MediaPlayer2.vlc', 'A clip\u0007 - VLC media player');
+    await nextIdle();
+    check(`media players: a window title, cleaned, titles the block and updates it once (${players.blocks[1].text.title})`,
+        players.blocks[1].text.title === 'A clip - VLC media player' && changes === beforeTitle + 1);
+    players.setWindowTitle('org.mpris.MediaPlayer2.vlc', 'A clip - VLC media player');
+    players.setWindowTitle('org.mpris.MediaPlayer2.gone', 'Other');
+    await nextIdle();
+    check('media players: the same window title again, or one for an unknown player, changes nothing', changes === beforeTitle + 1);
+    players.setWindowTitle('org.mpris.MediaPlayer2.vlc', null);
 
     bus.properties.get('org.mpris.MediaPlayer2.vlc')['org.mpris.MediaPlayer2.Player'] = mprisPlayer('Back', null, 'Playing');
     bus.emitPropertiesChanged('org.mpris.MediaPlayer2.vlc', 'org.mpris.MediaPlayer2.Player', {}, ['Metadata']);
@@ -1417,7 +1453,8 @@ async function testMediaPlayers() {
     errors = [];
     const oddPlayers = new MediaPlayers.MediaPlayers(() => {}, typed);
     check(`media players: a GetAll reply of another type is refused by its reply type, logged without stack (${errors.length})`,
-        oddPlayers.blocks.length === 0 && errors.length === 2 && errors.every(line => line.includes('wrong reply type (s)'))
+        oddPlayers.blocks.length === 1 && oddPlayers.blocks[0].text.title === '' && !oddPlayers.blocks[0].buttons.playPause.working
+        && errors.length === 2 && errors.every(line => line.includes('wrong reply type (s)'))
         && typed.calls.some(call => call.includes('GetAll')));
     oddPlayers.destroy();
     errors = [];
@@ -1573,6 +1610,104 @@ function testMediaFocus() {
     }, timedWindows, 888);
     check(`media focus: the click's time is used after the asynchronous pid reply and for application windows (${times})`,
         `${times}` === 'Process window@777,App@888');
+}
+
+// The window titles of players without a track title, on fake players and fake windows
+// whose title signals are fired by hand.
+function testMediaWindowTitles() {
+    const Focus = load('./mediaFocus');
+    const found = [];
+    const finder = {
+        focusInfo: busName => (busName === 'gone' ? null : { desktopEntry: 'videos', canRaise: false, title: '' }),
+        processId: (busName, onPid, onNone) => (busName === 'nopid' ? onNone() : onPid(42)),
+    };
+    const own = { title: 'Own', userTime: 5, pid: 42 };
+    const finderWindows = {
+        ofApp: () => [{ title: 'Other process', userTime: 99, pid: 7 }, own],
+        ofPid: () => [],
+        describe: window => window,
+    };
+    for (const busName of ['videos', 'nopid', 'gone'])
+        Focus.findPlayerWindow(busName, finder, finderWindows, window => found.push(window.title), () => found.push('none'));
+    check(`media window: found only among the player's own process, else none (${found})`, `${found}` === 'Own,none,none');
+
+    const Titles = load('./mediaWindowTitles');
+    const set = [];
+    let pidAnswers = [];
+    const players = {
+        focusInfo: () => ({ desktopEntry: null, canRaise: false, title: '' }),
+        processId: (busName, onPid, onNone) => pidAnswers.push({ busName, onPid, onNone }),
+        setWindowTitle: (busName, title) => set.push(`${busName}=${title}`),
+    };
+    const watched = [];
+    const byPid = { 42: [{ title: 'First clip', userTime: 3, pid: 42 }, { title: 'Second clip', userTime: 8, pid: 42 }], 43: [] };
+    const windows = {
+        ofApp: () => [],
+        ofPid: pid => byPid[pid] || [],
+        describe: window => window,
+        watchTitle: (window, onTitle, onGone) => {
+            const watch = { window, onTitle, onGone, released: false };
+            watched.push(watch);
+            return () => {
+                watch.released = true;
+            };
+        },
+    };
+    const answer = pids => {
+        const pending = pidAnswers;
+        pidAnswers = [];
+        for (const { busName, onPid, onNone } of pending) {
+            if (pids[busName] === undefined)
+                onNone();
+            else
+                onPid(pids[busName]);
+        }
+    };
+    const titles = new Titles.MediaWindowTitles(players, windows);
+    titles.follow(['videos', 'nowindow']);
+    titles.follow(['videos', 'nowindow']);
+    check(`media window titles: one process lookup per player while one is pending (${pidAnswers.length})`, pidAnswers.length === 2);
+    answer({ videos: 42, nowindow: 43 });
+    check(`media window titles: the window used last gives the title, no window gives none (${set})`,
+        `${set}` === 'videos=Second clip,nowindow=null' && watched.length === 1 && watched[0].window.title === 'Second clip');
+    set.length = 0;
+    watched[0].window.title = 'Renamed clip';
+    watched[0].onTitle();
+    check(`media window titles: a title change reaches the block (${set})`, `${set}` === 'videos=Renamed clip');
+    set.length = 0;
+    titles.follow(['videos', 'nowindow']);
+    check(`media window titles: a followed window is not looked up again, a player without one is (${pidAnswers.map(a => a.busName)})`,
+        `${pidAnswers.map(a => a.busName)}` === 'nowindow');
+    byPid[43] = [{ title: 'Late window', userTime: 1, pid: 43 }];
+    answer({ nowindow: 43 });
+    check(`media window titles: a window that appeared later is found at the next follow (${set})`, `${set}` === 'nowindow=Late window');
+    set.length = 0;
+    const videosWatch = watched[0];
+    titles.follow(['nowindow']);
+    check('media window titles: a player that got a track title (or left) has its window released',
+        videosWatch.released && !watched[1].released);
+    titles.follow(['nowindow', 'videos']);
+    answer({ videos: 42 });
+    set.length = 0;
+    const closing = watched[watched.length - 1];
+    closing.onGone();
+    check(`media window titles: a window that goes away clears the title (${set})`, `${set}` === 'videos=null');
+    set.length = 0;
+    const closedWindow = closing.window;
+    byPid[42] = [closedWindow];
+    titles.follow(['nowindow', 'videos']);
+    answer({ videos: 42 });
+    check(`media window titles: the window gone is not taken again (${set})`, `${set}` === 'videos=null' && watched[watched.length - 1] === closing);
+    titles.follow(['nowindow', 'videos']);
+    titles.destroy();
+    const watchCount = watched.length;
+    set.length = 0;
+    byPid[42] = [{ title: 'After destroy', userTime: 1, pid: 42 }];
+    answer({ videos: 42 });
+    titles.follow(['videos']);
+    check(`media window titles: destroy releases every window, late replies and follows do nothing (${set})`,
+        watched.every(watch => watch.released || watch === closing) && watched.length === watchCount && set.length === 0
+        && pidAnswers.length === 0);
 }
 
 async function testChargeLimit() {
@@ -2474,6 +2609,7 @@ async function main() {
     await testChargeLimit();
     testChargeHelperAgrees();
     testMediaFocus();
+    testMediaWindowTitles();
     await testMediaPlayers();
     testBatteryModel();
     testMicMute();

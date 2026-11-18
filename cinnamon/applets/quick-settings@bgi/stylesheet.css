@@ -109,7 +109,9 @@
     background-color: rgba(255, 255, 255, 0.063);
 }
 
-.quick-settings-tile:checked {
+/* Also the media blocks' playing bar: the checked tiles' accent. */
+.quick-settings-tile:checked,
+.quick-settings-media-bar-playing {
     background-color: rgba(120, 174, 237, 0.6);
 }
 
@@ -159,6 +161,17 @@
 .quick-settings-media-block {
     padding: 6px 4px;
     border-radius: 12px;
+}
+
+/* The bar, then the text: the bar is on every block, coloured only while the player plays
+   (the accent set above), so the text never moves. */
+.quick-settings-media-row {
+    spacing: 4px;
+}
+
+.quick-settings-media-bar {
+    width: 3px;
+    border-radius: 2px;
 }
 
 /* The title and the artist and player line: one clickable area, 4 px in from the block's

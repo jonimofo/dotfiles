@@ -111,11 +111,12 @@ function createClickBlocker({ x, y, width, height }) {
     return blocker;
 }
 
-// Search field above the workspace strip, and the application grid that takes the place
-// of Scale's windows while the field has text. Scale keeps the keyboard focus: keys arrive
-// through handleKeyPress (see enable()), so typing needs no click.
+// Search field above the workspace strip, @topOffset pixels below the top of the primary
+// monitor, and the application grid that takes the place of Scale's windows while the field
+// has text. Scale keeps the keyboard focus: keys arrive through handleKeyPress (see
+// enable()), so typing needs no click.
 var AppSearch = class AppSearch {
-    constructor() {
+    constructor(topOffset = 0) {
         this._monitor = Main.layoutManager.primaryMonitor;
         this._index = null;
         this._apps = [];
@@ -136,7 +137,7 @@ var AppSearch = class AppSearch {
 
         this.actor = new St.Bin({ style_class: 'scale-search-bar', child: this._entry, reactive: true });
         UiHelpers.swallowClicks(this.actor);
-        this.actor.set_position(this._monitor.x, this._monitor.y);
+        this.actor.set_position(this._monitor.x, this._monitor.y + topOffset);
         this.actor.set_width(this._monitor.width);
 
         this._results = new St.BoxLayout({ style_class: 'scale-search-grid', vertical: true, reactive: true });
@@ -309,8 +310,15 @@ var AppSearch = class AppSearch {
         case Clutter.KEY_Escape:
             this._entry.set_text('');
             break;
-        case Clutter.KEY_BackSpace:
-            this._entry.set_text(Array.from(this._getText()).slice(0, -1).join(''));
+        case Clutter.KEY_BackSpace: {
+            const shorter = Array.from(this._getText()).slice(0, -1).join('');
+            this._entry.set_text(this._isClearShortcut(event) ? '' : shorter);
+            break;
+        }
+        case Clutter.KEY_Delete:
+        case Clutter.KEY_KP_Delete:
+            if (this._isClearShortcut(event))
+                this._entry.set_text('');
             break;
         case Clutter.KEY_Return:
         case Clutter.KEY_KP_Enter:
@@ -332,6 +340,12 @@ var AppSearch = class AppSearch {
             this._appendCharacter(event, true);
         }
         return true;
+    }
+
+    // Ctrl with Backspace or Delete empties the field: it has no caret, so there is no word
+    // before or after it to delete.
+    _isClearShortcut(event) {
+        return Boolean(Cinnamon.get_event_state(event) & Clutter.ModifierType.CONTROL_MASK);
     }
 
     // A leading space is not text: Scale uses the space bar to activate the selected window.
@@ -359,6 +373,24 @@ var AppSearch = class AppSearch {
     }
 };
 
+// The search sees the key before Scale; when the search fails on it, the failure is logged.
+// While the field has text the key stays taken: Scale's handler could open a window hidden
+// by the search (Return, Space, Escape). With an empty field Scale's handler gets the key.
+function wrapOnKeyPress(original) {
+    return function(actor, event) {
+        const searching = Boolean(activeSearch) && activeSearch._isSearching();
+        try {
+            if (activeSearch && activeSearch.handleKeyPress(event))
+                return true;
+        } catch (e) {
+            UiHelpers.logFailure('search: handling a key', e);
+            if (searching)
+                return true;
+        }
+        return original.call(this, actor, event);
+    };
+}
+
 // Scale's key handling starts in Workspace._onKeyPress, looked up on each key: wrap it so
 // the search sees the key first. Undone in disable().
 function enable() {
@@ -366,13 +398,8 @@ function enable() {
     if (originalOnKeyPress)
         return;
 
-    const prototype = Workspace.Workspace.prototype;
-    originalOnKeyPress = prototype._onKeyPress;
-    prototype._onKeyPress = function(actor, event) {
-        if (activeSearch && activeSearch.handleKeyPress(event))
-            return true;
-        return originalOnKeyPress.call(this, actor, event);
-    };
+    originalOnKeyPress = UiHelpers.patchMethod(Workspace.Workspace.prototype,
+        '_onKeyPress', wrapOnKeyPress, 'search');
 }
 
 function disable() {

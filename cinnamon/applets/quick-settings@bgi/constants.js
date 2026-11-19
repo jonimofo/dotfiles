@@ -27,15 +27,26 @@ const PANEL_ICONS = {
     vpn: 'network-vpn-symbolic',
     volume: 'audio-volume-high-symbolic',
 };
+// Names after a panel icon and on a tile (VPN, Bluetooth device): each name longer than the
+// limit is cut, ending in the ellipsis; several Bluetooth devices show the first and "+N".
+const PANEL_NAME_MAX = 16;
+const PANEL_NAME_ELLIPSIS = '…';
+const PANEL_NAME_MORE_PREFIX = ' +';
+// The VPN name after its panel icon: NordVPN's country, the NetworkManager profile's name,
+// both joined by this when both are up (NordVPN first).
+const PANEL_VPN_NAME_SEPARATOR = ' + ';
 // Shown alone when every panel icon is hidden or absent, so the button never disappears.
 const PANEL_FALLBACK_ICON = 'preferences-system-symbolic';
 
 // Panel icons, left to right: this array is the only place that sets their order.
 const PANEL_ICON_ITEMS = [
     { id: 'wifi', name: 'Wi-Fi' },
-    { id: 'bluetooth', name: 'Bluetooth' },
+    // The VPN icon, then the name of the VPN that is up.
     { id: 'vpn', name: 'VPN' },
+    { id: 'bluetooth', name: 'Bluetooth' },
     { id: 'volume', name: 'Volume' },
+    // The battery icon and level ("87%"), the header's figure.
+    { id: 'battery', name: 'Battery' },
 ];
 
 // Header elements as the settings dialog lists them: the battery figure (always on the
@@ -57,7 +68,41 @@ const SLIDERS = [
     { id: 'output', label: 'Sound', name: 'Sound', icon: 'audio-volume-high-symbolic', hasMenu: true },
     { id: 'input', label: 'Microphone', name: 'Microphone', icon: 'audio-input-microphone-symbolic', hasMenu: true },
     { id: 'monitors', label: 'Brightness', name: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
+    // The Night Light temperature, its value as text, and on the right a switch for Night
+    // Light (switchLabel: what it toggles, for screen readers).
+    { id: 'warmth', label: 'Warmth', name: 'Warmth', icon: 'night-light-symbolic', hasMenu: false, hasSwitch: true,
+        switchLabel: 'Night Light' },
 ];
+
+// After a percentage: the battery level, the Charge tile's labels.
+const PERCENT_SUFFIX = '%';
+
+// Charge limit: the battery's charge mode in sysfs (Dell dell_laptop driver), read as files
+// and switched by the root helper system/battery-charge-limit, run with sudo -n (never a
+// password prompt). The limit state is the Custom mode with the end threshold below; the
+// values must match the helper's constants (a test compares them).
+const CHARGE_BATTERY_DIR = '/sys/class/power_supply/BAT0';
+const CHARGE_TYPES_FILE = `${CHARGE_BATTERY_DIR}/charge_types`;
+const CHARGE_START_FILE = `${CHARGE_BATTERY_DIR}/charge_control_start_threshold`;
+const CHARGE_END_FILE = `${CHARGE_BATTERY_DIR}/charge_control_end_threshold`;
+const CHARGE_LIMIT_MODE = 'Custom';
+const CHARGE_FULL_MODE = 'Adaptive';
+const CHARGE_LIMIT_START = 75;
+const CHARGE_LIMIT_END = 80;
+const CHARGE_HELPER = '/usr/local/sbin/battery-charge-limit';
+const CHARGE_HELPER_WORDS = { limit: 'limit', full: 'full' };
+// Absolute, so the session's PATH plays no part.
+const CHARGE_SUDO = ['/usr/bin/sudo', '-n'];
+const CHARGE_FULL_PERCENT = 100;
+const CHARGE_LABEL_PREFIX = 'Charge';
+const CHARGE_LABELS = {
+    limit: `${CHARGE_LABEL_PREFIX} ${CHARGE_LIMIT_END}${PERCENT_SUFFIX}`,
+    full: `${CHARGE_LABEL_PREFIX} ${CHARGE_FULL_PERCENT}${PERCENT_SUFFIX}`,
+};
+// A helper run that does not end within this long is given up on (logged, the tile usable).
+const CHARGE_HELPER_TIMEOUT_MS = 10000;
+// The helper's or sudo's error text in the log is cut to this many characters.
+const CHARGE_ERROR_TEXT_MAX = 200;
 
 // Tiles, left to right then top to bottom, two per row: this array is the only place that
 // sets their order.
@@ -67,7 +112,9 @@ const TILES = [
     { id: 'vpn', label: 'VPN', name: 'VPN', icon: 'network-vpn-symbolic', hasMenu: true },
     { id: 'nordvpn', label: 'NordVPN', name: 'NordVPN', icon: 'globe-symbolic', hasMenu: true },
     { id: 'power-profile', label: 'Balanced', name: 'Power profile', icon: 'power-profile-balanced-symbolic', hasMenu: true },
-    { id: 'night-light', label: 'Night Light', name: 'Night Light', icon: 'night-light-symbolic', hasMenu: false },
+    { id: 'airplane-mode', label: 'Airplane mode', name: 'Airplane mode', icon: 'airplane-mode-symbolic', hasMenu: false },
+    { id: 'keyboard-light', label: 'Keyboard', name: 'Keyboard light', icon: 'keyboard-brightness-symbolic', hasMenu: false },
+    { id: 'charge-limit', label: CHARGE_LABELS.limit, name: 'Charge limit', icon: 'battery-level-80-charging-symbolic', hasMenu: false },
     { id: 'dark-style', label: 'Dark style', name: 'Dark style', icon: 'dark-mode-symbolic', hasMenu: false },
     { id: 'do-not-disturb', label: 'Do Not Disturb', name: 'Do Not Disturb', icon: 'notifications-disabled-symbolic', hasMenu: false },
     { id: 'keep-awake', label: 'Keep awake', name: 'Keep awake', icon: 'my-caffeine-on-symbolic', hasMenu: false },
@@ -84,7 +131,6 @@ const DARK_STYLE_OFF = 'default';
 
 // Battery, from cinnamon-settings-daemon like the stock power applet.
 const POWER_PROXY = 'org.cinnamon.SettingsDaemon.Power';
-const BATTERY_LABEL_SUFFIX = '%';
 
 // Brightness of the external monitors, through DDC/CI. Buses are detected at runtime: they
 // change with the dock.
@@ -164,6 +210,7 @@ const BLUEZ_DEVICE_INTERFACE = 'org.bluez.Device1';
 const DBUS_PROPERTIES_INTERFACE = 'org.freedesktop.DBus.Properties';
 const BLUETOOTH_ON_ICON = 'bluetooth-active-symbolic';
 const BLUETOOTH_IDLE_ICON = 'bluetooth-symbolic';
+// The tile while off, and the panel while airplane mode holds the adapter off.
 const BLUETOOTH_OFF_ICON = 'bluetooth-disabled-symbolic';
 const BLUETOOTH_DEVICE_ICON = 'bluetooth-symbolic';
 
@@ -206,9 +253,26 @@ const POWER_PROFILE_FIRST_OTHER = 'power-saver';
 const POWER_PROFILE_ICON_PREFIX = 'power-profile-';
 const POWER_SETTINGS_COMMAND = ['cinnamon-settings', 'power'];
 
-// Night Light: the key of Cinnamon Settings > Night Light.
+// Night Light: the keys of Cinnamon Settings > Night Light.
 const NIGHT_LIGHT_SCHEMA = 'org.cinnamon.settings-daemon.plugins.color';
 const NIGHT_LIGHT_KEY = 'night-light-enabled';
+const NIGHT_LIGHT_TEMPERATURE_KEY = 'night-light-temperature';
+// The Warmth row, wider than Cinnamon's Night Light page (1700 K to 4700 K): from 6500 K, no
+// tint, to 1000 K, the deepest red. Warmer is fewer kelvin, so the slider runs from
+// WARMTH_MAX_KELVIN on the left to WARMTH_MIN_KELVIN on the right.
+const WARMTH_MIN_KELVIN = 1000;
+const WARMTH_MAX_KELVIN = 6500;
+const WARMTH_STEP_KELVIN = 100;
+const WARMTH_UNIT_SUFFIX = ' K';
+
+// Keyboard light, through UPower on the system bus. The tile shows "Keyboard" and the level's
+// word: Off at 0, On for a light with one level, High at the maximum, Low up to half of it,
+// Medium above.
+const UPOWER_NAME = 'org.freedesktop.UPower';
+const KBD_BACKLIGHT_PATH = '/org/freedesktop/UPower/KbdBacklight';
+const KBD_BACKLIGHT_INTERFACE = 'org.freedesktop.UPower.KbdBacklight';
+const KBD_BACKLIGHT_SIGNAL = 'BrightnessChanged';
+const KBD_LEVEL_WORDS = { off: 'Off', on: 'On', low: 'Low', medium: 'Medium', high: 'High' };
 
 // Do Not Disturb: the key Cinnamon's message tray reads (Settings > Notifications >
 // Enable notifications). The tile is on when notifications are off.
@@ -223,6 +287,65 @@ const SESSION_MANAGER_INTERFACE = 'org.gnome.SessionManager';
 const INHIBIT_IDLE_FLAG = 8;
 const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming';
 
+// Media controls under the tiles: one block per MPRIS player on the session bus, found like
+// the stock sound applet does. Listed at the end of the Tiles tab.
+const MEDIA_ITEM = { id: 'media', name: 'Media controls' };
+const MPRIS_NAME_PREFIX = 'org.mpris.MediaPlayer2.';
+const MPRIS_PATH = '/org/mpris/MediaPlayer2';
+const MPRIS_ROOT_INTERFACE = 'org.mpris.MediaPlayer2';
+const MPRIS_PLAYER_INTERFACE = 'org.mpris.MediaPlayer2.Player';
+const MPRIS_PLAYING = 'Playing';
+const MPRIS_PAUSED = 'Paused';
+const DBUS_DAEMON = { name: 'org.freedesktop.DBus', path: '/org/freedesktop/DBus', iface: 'org.freedesktop.DBus' };
+// The D-Bus types the media code reads; anything else from a player is ignored.
+const MPRIS_TYPES = {
+    nameOwnerChanged: '(sss)',
+    propertiesChanged: '(sa{sv}as)',
+    listNames: '(as)',
+    nameOwner: '(s)',
+    processId: '(u)',
+    getAll: '(a{sv})',
+    properties: {
+        Identity: 's',
+        Metadata: 'a{sv}',
+        PlaybackStatus: 's',
+        CanControl: 'b',
+        CanGoPrevious: 'b',
+        CanGoNext: 'b',
+        CanPlay: 'b',
+        CanPause: 'b',
+        CanRaise: 'b',
+        DesktopEntry: 's',
+    },
+};
+// A click on a block's text brings the player's window to the front: the window of the
+// application named by DesktopEntry (this suffix makes its desktop file id), else a window
+// of the player's process, else MPRIS Raise. The text's accessible name: this, then the
+// player name.
+const MEDIA_DESKTOP_FILE_SUFFIX = '.desktop';
+const MEDIA_RAISE_METHOD = 'Raise';
+const MEDIA_FOCUS_LABEL = 'Show';
+// A player's error text in the log is cut to this many characters.
+const MEDIA_ERROR_TEXT_MAX = 120;
+// The menu does not grow without bound: the first blocks in display-name order.
+const MEDIA_MAX_PLAYERS = 3;
+// Cut lengths, in characters; the labels also ellipsize at their width.
+const MEDIA_TITLE_MAX = 44;
+const MEDIA_ARTIST_MAX = 20;
+const MEDIA_PLAYER_NAME_MAX = 16;
+const MEDIA_ARTIST_SEPARATOR = ', ';
+const MEDIA_PLAYER_SEPARATOR = ' · ';
+// The buttons, left to right: the keys of MediaModel.buttonStates().
+const MEDIA_BUTTON_ORDER = ['previous', 'playPause', 'next'];
+// Each button's icon, accessible name and tooltip, MPRIS method (play and pause share the
+// middle place).
+const MEDIA_BUTTONS = {
+    previous: { icon: 'media-skip-backward-symbolic', label: 'Previous', method: 'Previous' },
+    play: { icon: 'media-playback-start-symbolic', label: 'Play', method: 'PlayPause' },
+    pause: { icon: 'media-playback-pause-symbolic', label: 'Pause', method: 'PlayPause' },
+    next: { icon: 'media-skip-forward-symbolic', label: 'Next', method: 'Next' },
+};
+
 // Settings dialog (settings-schema.json): one list per group, rows { show, id }.
 const LAYOUT_KEYS = {
     tiles: 'tiles',
@@ -233,3 +356,7 @@ const LAYOUT_KEYS = {
 
 // The header as the settings dialog lists it.
 const HEADER_ITEMS = [HEADER_BATTERY_ITEM, ...HEADER_BUTTONS];
+
+// The Tiles tab: the tiles, then the media controls. They stay under the tiles whatever
+// their place in the list, as the battery stays on the left of the header.
+const TILE_LAYOUT_ITEMS = [...TILES, MEDIA_ITEM];

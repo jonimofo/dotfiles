@@ -1,8 +1,9 @@
 const Gio = imports.gi.Gio;
-const Constants = require('./constants');
+const GsettingsWrite = require('./gsettingsWrite');
 
-// A tile backed by one boolean GSettings key: Night Light, Do Not Disturb. With @inverted,
-// the tile is on while the key is false (Do Not Disturb is on while notifications are off).
+// One boolean GSettings key: the Do Not Disturb tile, Night Light on the Warmth row. With
+// @inverted, it is on while the key is false (Do Not Disturb is on while notifications are
+// off).
 // @onChange runs on every change of the key, made here or anywhere else.
 class BooleanSetting {
     constructor(schema, key, inverted, onChange) {
@@ -17,9 +18,7 @@ class BooleanSetting {
     }
 
     toggle() {
-        const value = this.enabled === this._inverted;
-        if (!this._settings.set_boolean(this._key, value))
-            global.logError(`${Constants.LOG_PREFIX}: setting ${this._key} to ${value} failed`);
+        GsettingsWrite.writeSetting(this._settings, 'set_boolean', this._key, this.enabled === this._inverted);
     }
 
     destroy() {

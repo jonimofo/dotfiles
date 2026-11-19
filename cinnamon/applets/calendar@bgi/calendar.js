@@ -1,0 +1,492 @@
+// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+
+const Clutter = imports.gi.Clutter;
+const Gio = imports.gi.Gio;
+const GLib = imports.gi.GLib;
+const Lang = imports.lang;
+const St = imports.gi.St;
+const Signals = imports.signals;
+const Pango = imports.gi.Pango;
+const Cinnamon = imports.gi.Cinnamon;
+const Settings = imports.ui.settings;
+const Mainloop = imports.mainloop;
+const Constants = require('./constants');
+const DateText = require('./dateText');
+const DayMarker = require('./dayMarker');
+const DayCell = require('./dayCell');
+
+const MSECS_IN_DAY = 24 * 60 * 60 * 1000;
+const THURSDAY = 4;
+const WEEKDATE_HEADER_WIDTH_DIGITS = 3;
+const SHOW_WEEKDATE_KEY = 'show-week-numbers';
+const FIRST_WEEKDAY_KEY = 'first-day-of-week';
+const DESKTOP_SCHEMA = 'org.cinnamon.desktop.interface';
+
+// in org.cinnamon.desktop.interface
+const CLOCK_FORMAT_KEY        = 'clock-format';
+
+function _sameDay(dateA, dateB) {
+    return (dateA.getDate() == dateB.getDate() &&
+            dateA.getMonth() == dateB.getMonth() &&
+            dateA.getYear() == dateB.getYear());
+}
+
+function _today(date) {
+    let today = new Date();
+    return (date.getDate() == today.getDate() &&
+            date.getMonth() == today.getMonth() &&
+            date.getYear() == today.getYear());
+}
+
+function _sameYear(dateA, dateB) {
+    return (dateA.getYear() == dateB.getYear());
+}
+
+/* TODO: maybe needs config - right now we assume that Saturday and
+ * Sunday are non-work days (not true in e.g. Israel, it's Sunday and
+ * Monday there)
+ */
+function _isWorkDay(date) {
+    return date.getDay() != 0 && date.getDay() != 6;
+}
+
+function _getBeginningOfDay(date) {
+    let ret = new Date(date.getTime());
+    ret.setHours(0);
+    ret.setMinutes(0);
+    ret.setSeconds(0);
+    ret.setMilliseconds(0);
+    return ret;
+}
+
+function _getEndOfDay(date) {
+    let ret = new Date(date.getTime());
+    ret.setHours(23);
+    ret.setMinutes(59);
+    ret.setSeconds(59);
+    ret.setMilliseconds(999);
+    return ret;
+}
+
+function _getDigitWidth(actor){
+    let context = actor.get_pango_context();
+    let themeNode = actor.get_theme_node();
+    let font = themeNode.get_font();
+    let metrics = context.get_metrics(font, context.get_language());
+    let width = metrics.get_approximate_digit_width();
+    return width;
+}
+
+// English abbreviation of a day, Sunday being 0, whatever the locale: "Mon".
+function _getCalendarDayAbbreviation(dayNumber) {
+    return Constants.WEEKDAY_ABBREVIATIONS[dayNumber];
+}
+
+// Abstraction for an appointment/event in a calendar
+
+class CalendarEvent {
+    constructor(date, end, summary, allDay) {
+        this.date = date;
+        this.end = end;
+        this.summary = summary;
+        this.allDay = allDay;
+    }
+}
+
+function _datesEqual(a, b) {
+    if (a < b)
+        return false;
+    else if (a > b)
+        return false;
+    return true;
+}
+
+function _dateIntervalsOverlap(a0, a1, b0, b1)
+{
+    if (a1 <= b0)
+        return false;
+    else if (b1 <= a0)
+        return false;
+    else
+        return true;
+}
+
+class Calendar {
+    constructor(settings, events_manager) {
+        this.events_manager = events_manager;
+        this._weekStart = Cinnamon.util_get_week_start();
+        this._weekdate = NaN;
+        this._digitWidth = NaN;
+        this.settings = settings;
+
+        this._update_id = 0;
+        this._set_date_idle_id = 0;
+
+        this.settings.bindWithObject(this, "show-week-numbers", "show_week_numbers", this._onSettingsChange);
+        this.settings.bindWithObject(this, Constants.ELEMENT_SWITCHES.dayMarker.key, "show_day_marker", this._onSettingsChange);
+        this.desktop_settings = new Gio.Settings({ schema_id: DESKTOP_SCHEMA });
+        this.desktop_settings.connect("changed::" + FIRST_WEEKDAY_KEY, Lang.bind(this, this._onSettingsChange));
+
+        this.events_enabled = false;
+        this.events_manager.connect("events-updated", this._events_updated.bind(this));
+        this.events_manager.connect("events-manager-ready", this._update_events_enabled.bind(this));
+        this.events_manager.connect("has-calendars-changed", this._update_events_enabled.bind(this));
+
+        // Start off with the current date
+        this._selectedDate = new Date();
+
+        this.actor = new St.Table({ homogeneous: false,
+                                    style_class: 'calendar',
+                                    reactive: true });
+
+        this.actor.connect('scroll-event',
+                           Lang.bind(this, this._onScroll));
+
+        this._buildHeader ();
+    }
+
+    _events_updated(events_manager) {
+        this._queue_update();
+    }
+
+    _cancel_update() {
+        if (this._update_id > 0) {
+            Mainloop.source_remove(this._update_id);
+            this._update_id = 0;
+        }
+    }
+
+    _queue_update() {
+        this._cancel_update();
+
+        this._update_id = Mainloop.idle_add(Lang.bind(this, this._idle_do_update));
+    }
+
+    _idle_do_update() {
+        this._update_id = 0;
+        this._update();
+
+        return GLib.SOURCE_REMOVE;
+    }
+
+    _queue_set_date_idle(date) {
+        this.setDate(date, false);
+        this._set_date_idle_id = 0;
+
+        return GLib.SOURCE_REMOVE;
+     }
+
+    queue_set_date(date) {
+        if (this._set_date_idle_id > 0) {
+            return;
+        }
+
+        this._set_date_idle_id = Mainloop.timeout_add(25, this._queue_set_date_idle.bind(this, date));
+    }
+
+    _update_events_enabled(em) {
+        this.events_enabled = this.events_manager.is_active();
+        this._queue_update();
+    }
+
+    _onSettingsChange(object, key, old_val, new_val) {
+        if (key == FIRST_WEEKDAY_KEY) this._weekStart = Cinnamon.util_get_week_start();
+        this._buildHeader();
+        this._update(false);
+    }
+
+    // Sets the calendar to show a specific date
+    setDate(date, forceReload) {
+        if (!_sameDay(date, this._selectedDate)) {
+            this._selectedDate = date;
+            this.emit('selected-date-changed', this._selectedDate);
+            this._update(forceReload);
+        } else {
+            if (forceReload)
+                this._update(forceReload);
+        }
+    }
+
+    getSelectedDate() {
+        return this._selectedDate;
+    }
+
+    todaySelected() {
+        let today = new Date();
+
+        return this._selectedDate.getDate() == today.getDate() &&
+               this._selectedDate.getMonth() == today.getMonth() &&
+               this._selectedDate.getYear() == today.getYear();
+    }
+
+    _buildHeader() {
+        let offsetCols = this.show_week_numbers ? 1 : 0;
+        this.actor.destroy_all_children();
+
+        // Top line of the calendar '<  September 2009  >', one month per arrow
+        this._topBoxMonth = new St.BoxLayout({ style_class: Constants.STYLE.monthRow });
+        this.actor.add(this._topBoxMonth,
+                       {row: 0, col: 0, col_span: offsetCols + 7});
+
+        this.actor.connect('style-changed', Lang.bind(this, this._onStyleChange));
+
+        // The applet's own arrows: the theme's are 16px images that do not scale.
+        let [back_icon, forward_icon] = DayCell.monthArrowIcons(
+            Clutter.get_default_text_direction() == Clutter.TextDirection.RTL);
+        let back = this._monthArrow(back_icon, Constants.TEXT.previousMonth);
+        this._topBoxMonth.add(back);
+        back.connect('clicked', Lang.bind(this, this._onPrevMonthButtonClicked));
+
+        this._monthLabel = new St.Label({style_class: Constants.STYLE.monthLabel});
+        // Centred on the arrows' line: the arrow buttons are taller than the label.
+        this._topBoxMonth.add(this._monthLabel, { expand: true, x_fill: false, x_align: St.Align.MIDDLE,
+                                                  y_fill: false, y_align: St.Align.MIDDLE });
+
+        let forward = this._monthArrow(forward_icon, Constants.TEXT.nextMonth);
+        this._topBoxMonth.add(forward);
+        forward.connect('clicked', Lang.bind(this, this._onNextMonthButtonClicked));
+
+        // Add weekday labels: the English abbreviations of the next 7 days, each in its
+        // column after the first day of the week. It doesn't matter if we add them in order
+        let iter = new Date(this._selectedDate);
+        iter.setSeconds(0); // Leap second protection. Hah!
+        iter.setHours(12);
+        for (let i = 0; i < 7; i++) {
+            let styleClass = Constants.STYLE.dayHeading;
+
+            let customDayAbbrev = _getCalendarDayAbbreviation(iter.getDay());
+            let label = new St.Label({ style_class: styleClass, text: customDayAbbrev });
+            this.actor.add(label,
+                           { row: 1,
+                             col: offsetCols + DayCell.weekdayColumn(iter.getDay(), this._weekStart),
+                             x_fill: true });
+            iter.setTime(iter.getTime() + MSECS_IN_DAY);
+        }
+
+        this._buildCells(offsetCols);
+    }
+
+    // One cell per day of the six weeks shown, and one week number per row, built once here
+    // and updated in place by _update(): rebuilding them on each update cost about 125 ms
+    // while the menu was shown, most of it styling the new actors.
+    _buildCells(offsetCols) {
+        this._cells = [];
+        for (let i = 0; i < Constants.GRID_DAYS; i++) {
+            let group = new Cinnamon.Stack();
+
+            let button = new St.Button({ label: "" });
+            group.add_actor(button);
+
+            let dot_box = new Cinnamon.GenericContainer(
+                {
+                    style_class: Constants.STYLE.dayMarkerBox,
+                }
+            );
+            dot_box.connect('allocate', this._allocate_dot_box.bind(this));
+            group.add_actor(dot_box);
+
+            let marker = new St.Label(
+                {
+                    style_class: Constants.STYLE.dayMarker,
+                    text: Constants.DAY_MARKER_TEXT,
+                    visible: false
+                }
+            );
+            dot_box.add_actor(marker);
+
+            let cell = { button: button, marker: marker, date: null };
+            button.connect('clicked', Lang.bind(this, function(b) {
+                if (!this.events_enabled) {
+                    return;
+                }
+                this.setDate(new Date(cell.date.getTime()), false);
+            }));
+
+            let [row, col] = DayCell.cellPosition(i);
+            this.actor.add(group, { row: row, col: offsetCols + col });
+            this._cells.push(cell);
+        }
+
+        this._weekNumbers = [];
+        if (this.show_week_numbers) {
+            for (let week = 0; week < Constants.GRID_WEEKS; week++) {
+                let label = new St.Label({ style_class: Constants.STYLE.weekNumber });
+                this.actor.add(label,
+                               { row: DayCell.cellPosition(week * Constants.DAYS_IN_WEEK)[0], col: 0, y_align: St.Align.MIDDLE });
+                this._weekNumbers.push(label);
+            }
+        }
+    }
+
+    _monthArrow(icon_name, accessible_name) {
+        return new St.Button(
+            {
+                style_class: Constants.STYLE.monthArrow,
+                accessible_name: accessible_name,
+                reactive: true,
+                track_hover: true,
+                child: new St.Icon(
+                    {
+                        style_class: Constants.STYLE.monthArrowIcon,
+                        icon_name: icon_name,
+                        icon_type: St.IconType.SYMBOLIC
+                    }
+                )
+            }
+        );
+    }
+
+    _onStyleChange(actor, event) {
+        // width of a digit in pango units
+        this._digitWidth = _getDigitWidth(this.actor) / Pango.SCALE;
+        this._setWeekdateHeaderWidth();
+    }
+
+    _setWeekdateHeaderWidth() {
+        if (!isNaN(this._digitWidth) && this.show_week_numbers && this._weekdateHeader) {
+            this._weekdateHeader.set_width (this._digitWidth * WEEKDATE_HEADER_WIDTH_DIGITS);
+        }
+    }
+
+    _onScroll (actor, event) {
+        switch (event.get_scroll_direction()) {
+        case Clutter.ScrollDirection.UP:
+        case Clutter.ScrollDirection.LEFT:
+            this._onPrevMonthButtonClicked();
+            break;
+        case Clutter.ScrollDirection.DOWN:
+        case Clutter.ScrollDirection.RIGHT:
+            this._onNextMonthButtonClicked();
+            break;
+        }
+    }
+
+    _applyDateBrowseAction(yearChange, monthChange) {
+        let oldDate = this._selectedDate;
+        let newMonth = oldDate.getMonth() + monthChange;
+
+        if (newMonth> 11) {
+            yearChange = yearChange + 1;
+            newMonth = 0;
+        } else if (newMonth < 0) {
+            yearChange = yearChange - 1;
+            newMonth = 11;
+        }
+        let newYear = oldDate.getFullYear() + yearChange;
+
+        let newDayOfMonth = oldDate.getDate();
+        let daysInMonth = 32 - new Date(newYear, newMonth, 32).getDate();
+        if (newDayOfMonth > daysInMonth) {
+            newDayOfMonth = daysInMonth;
+        }
+
+        let newDate = new Date();
+        newDate.setFullYear(newYear, newMonth, newDayOfMonth);
+        this.queue_set_date(newDate);
+    }
+
+    _onPrevMonthButtonClicked() {
+        this._applyDateBrowseAction(0, -1);
+    }
+
+    _onNextMonthButtonClicked() {
+        this._applyDateBrowseAction(0, +1);
+    }
+
+    _update(forceReload) {
+        let now = new Date();
+
+        this._monthLabel.text = DateText.formatMonthHeading(this._selectedDate.getMonth() + 1,
+                                                            this._selectedDate.getFullYear());
+
+        let dates = DayCell.gridDates(this._selectedDate, this._weekStart);
+        let show_markers = this.events_enabled && this.show_day_marker;
+
+        dates.forEach((date, i) => {
+            let cell = this._cells[i];
+            cell.date = date;
+
+            let label = date.getDate().toString();
+            if (cell.button.label !== label) {
+                cell.button.label = label;
+            }
+
+            // The applet's own state classes only: theme day classes would mix their
+            // colours and borders with the applet's palette.
+            let styleClass = DayCell.dayStyleClass({
+                today: _today(date),
+                selected: _sameDay(this._selectedDate, date),
+                outside: date.getMonth() != this._selectedDate.getMonth(),
+                weekend: !_isWorkDay(date),
+                marked: this.show_day_marker
+            });
+            if (cell.button.style_class !== styleClass) {
+                cell.button.style_class = styleClass;
+            }
+
+            let color_set = this.events_manager.get_colors_for_date(date);
+            cell.marker.visible = DayMarker.dayMarkerCount(show_markers, color_set) > 0;
+        });
+
+        // The ISO week number of each row's Thursday
+        this._weekNumbers.forEach((label, week) => {
+            let thursday = dates[week * Constants.DAYS_IN_WEEK + DayCell.weekdayColumn(THURSDAY, this._weekStart)];
+            label.text = thursday.toLocaleFormat('%V');
+        });
+    }
+
+    _allocate_dot_box (actor, box, flags) {
+        let children = actor.get_children();
+
+        if (children.length == 0) {
+            return;
+        }
+
+        let a_dot = children[0];
+
+        let box_width = box.x2 - box.x1;
+        let box_height = box.y2 - box.y1;
+        let [mw, nw] = a_dot.get_preferred_width(-1);
+        let [mh, nh] = a_dot.get_preferred_height(-1);
+
+        let max_children_per_row = Math.trunc(box_width / nw);
+
+        let [found, max_rows] = actor.get_theme_node().lookup_double("max-rows", false);
+
+        if (found) {
+            max_rows = Math.trunc(max_rows);
+        } else {
+            max_rows = 2;
+        }
+
+        let n_rows = Math.min(max_rows, Math.ceil(children.length / max_children_per_row));
+
+        let dots_left = children.length;
+        let i = 0;
+        for (let dot_row = 0; dot_row < n_rows; dot_row++, dots_left -= max_children_per_row) {
+            let dots_this_row = Math.min(dots_left, max_children_per_row);
+            let total_child_width = nw * dots_this_row;
+
+            let start_x = Math.floor((box_width - total_child_width) / 2);
+
+            let cbox = new Clutter.ActorBox();
+            cbox.x1 = start_x;
+            cbox.y1 = dot_row * nh;
+            cbox.x2 = cbox.x1 + nw;
+            cbox.y2 = cbox.y1 + nh;
+
+            while (i < ((dot_row * max_children_per_row) + dots_this_row)) {
+                children[i].allocate(cbox, flags);
+
+                cbox.x1 += nw;
+                cbox.x2 += nw;
+
+                i++;
+            }
+        }
+    }
+}
+
+Signals.addSignalMethods(Calendar.prototype);
+
+

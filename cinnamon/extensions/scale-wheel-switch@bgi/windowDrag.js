@@ -1,5 +1,3 @@
-const Clutter = imports.gi.Clutter;
-const DND = imports.ui.dnd;
 const Main = imports.ui.main;
 const Workspace = imports.ui.workspace;
 const UiHelpers = require('./uiHelpers');
@@ -26,7 +24,7 @@ function createDragActor(windowClone) {
     const maxSize = WorkspaceStrip.getThumbnailHeight() * DRAG_ACTOR_THUMBNAIL_FRACTION;
     const scale = Math.min(1, maxSize / Math.max(width, height));
 
-    const dragActor = new Clutter.Clone({ source: windowClone.actor, x, y, width, height });
+    const dragActor = UiHelpers.createDragClone(windowClone.actor);
     dragActor.set_pivot_point(clampUnit((pointerX - x) / width), clampUnit((pointerY - y) / height));
     dragActor.set_scale(scale, scale);
     return dragActor;
@@ -36,32 +34,36 @@ function clampUnit(value) {
     return Math.min(1, Math.max(0, value));
 }
 
+// Only a clone registered in draggableClones is undone by disable(): a failure half way
+// undoes what was already added, so no clone stays draggable outside it.
 function makeDraggable(windowClone) {
     if (draggableClones.has(windowClone))
         return;
 
-    windowClone.getDragActor = () => createDragActor(windowClone);
-    windowClone.getDragActorSource = () => windowClone.actor;
-    const draggable = DND.makeDraggable(windowClone.actor, { dragActorOpacity: DRAG_ACTOR_OPACITY });
-    windowClone._draggable = draggable;
-
-    draggable.connect('drag-begin', () => {
-        windowClone.actor.opacity = DRAG_SOURCE_OPACITY;
-    });
-    draggable.connect('drag-end', () => {
-        if (!windowClone.actor.is_finalized())
-            windowClone.actor.opacity = UiHelpers.OPAQUE;
-    });
-    const destroyId = windowClone.actor.connect('destroy', () => draggableClones.delete(windowClone));
-    draggableClones.set(windowClone, destroyId);
+    try {
+        windowClone.getDragActor = () => createDragActor(windowClone);
+        windowClone.getDragActorSource = () => windowClone.actor;
+        windowClone._draggable = UiHelpers.makeDraggable(windowClone.actor, DRAG_ACTOR_OPACITY, DRAG_SOURCE_OPACITY);
+        const destroyId = windowClone.actor.connect('destroy', () => draggableClones.delete(windowClone));
+        draggableClones.set(windowClone, destroyId);
+    } catch (e) {
+        clearDraggable(windowClone);
+        throw e;
+    }
 }
 
 function removeDraggable(windowClone, destroyId) {
-    const draggable = windowClone._draggable;
     windowClone.actor.disconnect(destroyId);
-    windowClone.actor.disconnect(draggable.buttonPressEventId);
-    windowClone.actor.disconnect(draggable.destroyEventId);
-    draggable.disconnectAll();
+    clearDraggable(windowClone);
+}
+
+function clearDraggable(windowClone) {
+    const draggable = windowClone._draggable;
+    if (draggable) {
+        windowClone.actor.disconnect(draggable.buttonPressEventId);
+        windowClone.actor.disconnect(draggable.destroyEventId);
+        draggable.disconnectAll();
+    }
     delete windowClone._draggable;
     delete windowClone.getDragActor;
     delete windowClone.getDragActorSource;
@@ -78,20 +80,30 @@ function forEachOpenClone(callback) {
     }
 }
 
+// Scale's own clone comes first and is always returned: a failure to make it draggable is
+// logged, and Scale goes on with a window that cannot be dragged.
+function wrapAddWindowClone(original) {
+    return function(win) {
+        const windowClone = original.call(this, win);
+        try {
+            makeDraggable(windowClone);
+        } catch (e) {
+            UiHelpers.logFailure('window drag: making a window draggable', e);
+        }
+        return windowClone;
+    };
+}
+
 // Scale builds its window clones in WorkspaceMonitor._addWindowClone: wrap it, undo in disable().
 function enable() {
     // Already patched: saving the wrapper as the original would make it permanent.
     if (originalAddWindowClone)
         return;
 
-    const prototype = Workspace.WorkspaceMonitor.prototype;
-    originalAddWindowClone = prototype._addWindowClone;
-    prototype._addWindowClone = function(win) {
-        const windowClone = originalAddWindowClone.call(this, win);
-        makeDraggable(windowClone);
-        return windowClone;
-    };
-    forEachOpenClone(makeDraggable);
+    originalAddWindowClone = UiHelpers.patchMethod(Workspace.WorkspaceMonitor.prototype,
+        '_addWindowClone', wrapAddWindowClone, 'window drag');
+    if (originalAddWindowClone)
+        forEachOpenClone(makeDraggable);
 }
 
 function disable() {

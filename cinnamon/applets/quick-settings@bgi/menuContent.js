@@ -7,9 +7,12 @@ const ThemeColors = require('./themeColors');
 const ListPanel = require('./listPanel');
 const ListHost = require('./listHost');
 const LayoutModel = require('./layoutModel');
+const MediaBlock = require('./mediaBlock');
+const MediaModel = require('./mediaModel');
 
-// Everything inside the menu, top to bottom: header, sliders, tile grid. Every tile and
-// slider row is built once; applyLayout() picks which ones show and in which order.
+// Everything inside the menu, top to bottom: header, sliders, tile grid, media blocks. Every
+// tile and slider row is built once; applyLayout() picks which ones show and in which order.
+// Media blocks come and go with the players (setMediaBlocks).
 class MenuContent {
     constructor() {
         this.actor = new St.BoxLayout({ style_class: 'quick-settings-content', vertical: true });
@@ -31,6 +34,19 @@ class MenuContent {
         this._grid = new St.BoxLayout({ style_class: 'quick-settings-grid', vertical: true });
         this.actor.add_child(this._grid);
 
+        // One line under the tiles, then the blocks; the whole section hides with no block.
+        this._mediaSection = new St.BoxLayout({ style_class: 'quick-settings-media-section', vertical: true, visible: false });
+        this._mediaSection.add_child(new St.Widget({ style_class: 'quick-settings-list-separator' }));
+        this._mediaBox = new St.BoxLayout({ style_class: 'quick-settings-media', vertical: true });
+        this._mediaSection.add_child(this._mediaBox);
+        this._mediaBlocks = new Map();
+        this._mediaAccent = null;
+        this._mediaBlockData = [];
+        this._mediaShown = true;
+        this._onMediaButton = () => {};
+        this._onMediaFocus = () => {};
+        this.actor.add_child(this._mediaSection);
+
         // One in-place list at a time, moved under the row whose arrow opened it.
         this.listPanel = new ListPanel.ListPanel();
         this.lists = new ListHost.ListHost(this.listPanel);
@@ -39,13 +55,16 @@ class MenuContent {
         for (const row of Object.values(this.sliders))
             row.slider.actor.connect('style-changed', () => this.refreshColors());
 
-        this.applyLayout(Constants.SLIDERS.map(item => item.id), Constants.TILES.map(item => item.id));
+        this.applyLayout(Constants.SLIDERS.map(item => item.id), Constants.TILE_LAYOUT_ITEMS.map(item => item.id));
     }
 
-    // @sliderIds, @tileIds: the ones to show, in order. Hidden rows leave no gap; tiles
-    // reflow two per row, an odd last tile on the left. An open list is closed first: its
-    // row may be gone.
-    applyLayout(sliderIds, tileIds) {
+    // @sliderIds, @tileLayoutIds: the ones to show, in order; @tileLayoutIds may hold the media
+    // controls' id. Hidden rows leave no gap; tiles reflow two per row, an odd last tile on the
+    // left. An open list is closed first: its row may be gone.
+    applyLayout(sliderIds, tileLayoutIds) {
+        const { tileIds, media } = LayoutModel.splitTileLayout(tileLayoutIds, Constants.MEDIA_ITEM.id);
+        this._mediaShown = media;
+        this._syncMediaVisibility();
         this.lists.close();
         this._detach(this.listPanel.actor);
 
@@ -67,6 +86,40 @@ class MenuContent {
         this._grid.visible = tileIds.length > 0;
     }
 
+    // @onButton(busName, method): a media button was clicked; @onFocus(busName): a block's
+    // text was clicked.
+    setOnMediaButton(onButton, onFocus) {
+        this._onMediaButton = onButton;
+        this._onMediaFocus = onFocus;
+    }
+
+    // @blocks: from MediaModel.visibleBlocks(), in order. A block stays in place while its
+    // player stays (MediaModel.blockMoves), so focus and hover survive; one is created when a
+    // player appears, destroyed when it goes; none hides the section.
+    setMediaBlocks(blocks) {
+        this._mediaBlockData = blocks;
+        const onScreen = this._mediaBox.get_children().map(actor => this._busNameOf(actor));
+        MediaModel.syncBlockViews(this._mediaBlocks, onScreen, blocks, {
+            create: busName => new MediaBlock.MediaBlock(method => this._onMediaButton(busName, method),
+                () => this._onMediaFocus(busName)),
+            insert: (view, index) => this._mediaBox.insert_child_at_index(view.actor, index),
+            move: (view, index) => this._mediaBox.set_child_at_index(view.actor, index),
+        }, this._mediaAccent);
+        this._syncMediaVisibility();
+    }
+
+    _busNameOf(actor) {
+        for (const [busName, view] of this._mediaBlocks) {
+            if (view.actor === actor)
+                return busName;
+        }
+        return null;
+    }
+
+    _syncMediaVisibility() {
+        this._mediaSection.visible = this._mediaShown && this._mediaBlocks.size > 0;
+    }
+
     // Called each time the menu opens, when every actor has its style.
     refresh() {
         this.refreshColors();
@@ -80,15 +133,21 @@ class MenuContent {
             row.destroy();
         for (const tile of Object.values(this.tiles))
             tile.destroy();
+        for (const view of this._mediaBlocks.values())
+            view.destroy();
+        this._mediaBlocks.clear();
         this.listPanel.actor.destroy();
     }
 
-    // Read from the first slider on screen; with every slider hidden, the stylesheet's.
+    // Read from the first slider on screen; with every slider hidden, the stylesheet's. The
+    // media blocks' playing bar takes the checked tiles' colour.
     refreshColors() {
         const shown = Object.values(this.sliders).find(row => row.actor.get_stage());
         const colors = shown ? ThemeColors.readTileColors(shown.slider.actor) : null;
         for (const tile of Object.values(this.tiles))
             tile.setColors(colors);
+        this._mediaAccent = colors ? colors.accent : null;
+        this.setMediaBlocks(this._mediaBlockData);
     }
 
     _detach(actor) {

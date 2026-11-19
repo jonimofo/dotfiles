@@ -12,6 +12,21 @@ function symbolicIcon(iconName, styleClass) {
     });
 }
 
+// A background colour as inline CSS, or null (the stylesheet's) without a colour: the
+// stylesheet only holds the fallback, the real colours come from the theme (see ThemeColors).
+function backgroundStyle(color) {
+    if (!color)
+        return null;
+    return `background-color: ${color};`;
+}
+
+function setStyleClass(actor, styleClass, on) {
+    if (on)
+        actor.add_style_class_name(styleClass);
+    else
+        actor.remove_style_class_name(styleClass);
+}
+
 function setPseudoClass(actor, pseudoClass, on) {
     if (on)
         actor.add_style_pseudo_class(pseudoClass);
@@ -24,6 +39,12 @@ function setButtonInactive(button, inactive) {
     button.reactive = !inactive;
     button.can_focus = !inactive;
     setPseudoClass(button, INSENSITIVE_PSEUDO_CLASS, inactive);
+}
+
+// A button that works (@working) or does nothing yet: inactive and dimmed together.
+function setButtonWorking(button, working) {
+    setButtonInactive(button, !working);
+    setDimmed(button, !working);
 }
 
 // Dims a part that does nothing yet, so it reads as inactive next to the working ones.

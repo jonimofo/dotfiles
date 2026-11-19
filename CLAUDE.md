@@ -17,6 +17,7 @@ This is a personal dotfiles repository for a Linux workstation (Debian-based). I
 - **App configs**: `espanso/` (text expansion), `rofi/` (launcher), `flameshot.ini`
 - **SSH**: `ssh/config`
 - **Scripts**: `scripts/`
+- **System files**: `system/` (root-owned helpers installed by hand, each with its own README; e.g. `system/battery-charge-limit/` for the Quick Settings Charge tile)
 - **Claude Code**: `claude/` (global `CLAUDE.md`, `rules/`, `skills/`, `templates/`, settings template, `install.sh`; see `claude/README.md`)
 
 ## Key Conventions

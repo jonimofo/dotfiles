@@ -1,0 +1,10 @@
+{
+ "uuid": "calendar@bgi",
+ "name": "Calendar (bgi)",
+ "description": "The Cinnamon calendar applet, with a second time zone and larger text",
+ "icon": "gnome-calendar",
+ "max-instances": -1,
+ "cinnamon-version": ["6.4"],
+ "version": "0.1.0",
+ "url": "https://github.com/jonimofo/dotfiles"
+}

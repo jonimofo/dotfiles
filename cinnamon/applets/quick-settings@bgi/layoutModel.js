@@ -1,8 +1,8 @@
 // What the settings dialog stored, made safe to apply. The dialog's list widget also has
 // Add, Remove and Edit buttons that cannot be hidden without hiding the moves, so a stored
 // list can hold anything: unknown ids are ignored, a repeated id keeps its first row, and a
-// declared element missing from the list is appended at the end, shown. Nothing can be lost
-// for good, and an element added in a later version appears by itself.
+// declared element missing from the list comes back shown, see insertMissing(). Nothing can
+// be lost for good, and an element added in a later version appears by itself.
 //
 // @stored: [{ show, id }] or anything else; @declared: [{ id }] in the default order.
 // Returns [{ id, show }] holding every declared id exactly once.
@@ -16,16 +16,54 @@ function normalize(stored, declared) {
         seen.add(row.id);
         result.push({ id: row.id, show: row.show !== false });
     }
-    for (const item of declared) {
-        if (!seen.has(item.id))
-            result.push({ id: item.id, show: true });
-    }
+    insertMissing(result, declared, seen);
     return result;
+}
+
+// Puts each declared element missing from @result just before the first of its declared
+// successors that @result holds, so it lands where the defaults put it relative to the
+// stored order; with no such successor, at the end. Handled in declaration order, so several
+// missing in a row keep their declared order. @seen: the ids @result holds, updated.
+function insertMissing(result, declared, seen) {
+    declared.forEach((item, index) => {
+        if (seen.has(item.id))
+            return;
+        const successor = declared.slice(index + 1).find(next => seen.has(next.id));
+        const at = successor ? result.findIndex(row => row.id === successor.id) : result.length;
+        result.splice(at, 0, { id: item.id, show: true });
+        seen.add(item.id);
+    });
+}
+
+// The rows to store back when @stored is not already the normalized list (an element added
+// or removed by a later version), so the settings dialog lists every declared element.
+// Returns null when there is nothing to write: storing the result settles the next pass.
+// Rows keep the dialog's shape, { show, id }; stored order and show flags are kept.
+function storedUpdate(stored, declared) {
+    const normalized = normalize(stored, declared).map(row => ({ show: row.show, id: row.id }));
+    const current = Array.isArray(stored) ? stored.map(row => (row ? { show: row.show, id: row.id } : row)) : stored;
+    return JSON.stringify(current) === JSON.stringify(normalized) ? null : normalized;
+}
+
+// Writes @key's normalized list back through @settings (getValue, setValue) when it differs.
+// Returns whether it wrote.
+function writeBackLayout(settings, key, declared) {
+    const update = storedUpdate(settings.getValue(key), declared);
+    if (!update)
+        return false;
+    settings.setValue(key, update);
+    return true;
 }
 
 // The ids to show, in the stored order.
 function visibleIds(stored, declared) {
     return normalize(stored, declared).filter(row => row.show).map(row => row.id);
+}
+
+// The Tiles list split into the tile ids to lay out and whether the media controls show:
+// they sit under the tiles whatever their place in the list. @mediaId: their id.
+function splitTileLayout(ids, mediaId) {
+    return { tileIds: ids.filter(id => id !== mediaId), media: ids.includes(mediaId) };
 }
 
 // @ids split into rows of @perRow; the last row may be shorter.
@@ -41,8 +79,9 @@ function defaults(declared) {
     return declared.map(item => ({ show: true, id: item.id }));
 }
 
-// Panel icons: each shows when the settings allow it AND its state wants it (Bluetooth on,
-// a VPN up). The fallback shows when none does. @allowedIds: ids; @wanted: { id: bool }.
+// Panel items: each shows when the settings allow it AND its state wants it (Bluetooth on,
+// a VPN up, a battery present). The fallback shows when none does.
+// @allowedIds: ids; @wanted: { id: bool }.
 function panelIconVisibility(allowedIds, wanted) {
     const visible = {};
     for (const id of Object.keys(wanted))

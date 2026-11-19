@@ -401,7 +401,7 @@ function makeImports(monitorCount, primaryIndex) {
         KEY_Up: 0xff52,
         KEY_Right: 0xff53,
         KEY_Down: 0xff54,
-        ModifierType: { CONTROL_MASK: 1 << 2, MOD1_MASK: 1 << 3, MOD4_MASK: 1 << 6, SUPER_MASK: 1 << 26 },
+        ModifierType: { SHIFT_MASK: 1 << 0, CONTROL_MASK: 1 << 2, MOD1_MASK: 1 << 3, MOD4_MASK: 1 << 6, SUPER_MASK: 1 << 26 },
         ActorAlign: { CENTER: 1, END: 2 },
         ScrollDirection: { UP: 0, DOWN: 1, LEFT: 2, RIGHT: 3, SMOOTH: 4 },
         EventType: { SCROLL: 1, KEY_PRESS: 2, KEY_RELEASE: 3 },
@@ -636,9 +636,7 @@ function openScale(env) {
     env.Main.overview.emit('showing');
 }
 
-// X-M1: while searching, Scale's windows are hidden on every screen but the result grid only
-// covers the primary one. A click on another screen reached an invisible window, opened it
-// and closed Scale.
+// The search has no caret: Ctrl with Backspace or Delete empties it, whatever else is held.
 function testSearchClearShortcut() {
     const env = setUp(1, 0);
     env.loadExtension().enable();
@@ -662,10 +660,17 @@ function testSearchClearShortcut() {
         check(`search: Ctrl+Delete empties the field (key ${symbol.toString(16)})`, text() === '');
     }
 
+    typeWord();
+    typeKey(env, keyEvent(null, KEY_BackSpace, ModifierType.CONTROL_MASK | ModifierType.SHIFT_MASK));
+    check('search: Ctrl+Shift+Backspace empties the field too', text() === '');
+
     check('search: with an empty field Ctrl+Backspace is left to Scale',
         typeKey(env, keyEvent(null, KEY_BackSpace, ModifierType.CONTROL_MASK)) !== true && text() === '');
 }
 
+// X-M1: while searching, Scale's windows are hidden on every screen but the result grid only
+// covers the primary one. A click on another screen reached an invisible window, opened it
+// and closed Scale.
 function testSearchBlocksOtherScreens() {
     // Three screens, the middle one primary: blockers go on screens 0 and 2.
     const env = setUp(3, 1);

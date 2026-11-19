@@ -310,9 +310,11 @@ var AppSearch = class AppSearch {
         case Clutter.KEY_Escape:
             this._entry.set_text('');
             break;
-        case Clutter.KEY_BackSpace:
-            this._entry.set_text(this._isClearShortcut(event) ? '' : Array.from(this._getText()).slice(0, -1).join(''));
+        case Clutter.KEY_BackSpace: {
+            const shorter = Array.from(this._getText()).slice(0, -1).join('');
+            this._entry.set_text(this._isClearShortcut(event) ? '' : shorter);
             break;
+        }
         case Clutter.KEY_Delete:
         case Clutter.KEY_KP_Delete:
             if (this._isClearShortcut(event))

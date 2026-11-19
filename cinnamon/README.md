@@ -239,8 +239,10 @@ Every prototype patch follows the same rules, so a failure in the extension neve
   `disable()` then has nothing to restore.
 - The wrapper runs the original and returns its result, unless its own decision is to take
   the event (a middle click, a key the search uses). Extra work that follows the original
-  (the window drag) runs after it; a decision that must come first (the click, the search)
-  falls back to the original when it fails.
+  (the window drag) runs after it, and a draggable left half made by a failure is undone at
+  once. A decision that must come first (the click, the search) falls back to the original
+  when it fails, except a search with text in the field: it keeps the key, since Scale's
+  handler could open a window the search hides.
 - The extension's own step runs in `try`/`catch` and logs through `uiHelpers.logFailure()`,
   with the `[scale-wheel-switch]` prefix and what was attempted.
 - `scripts/cinnamon-scale-test.sh` covers a throwing step and a missing original for each.

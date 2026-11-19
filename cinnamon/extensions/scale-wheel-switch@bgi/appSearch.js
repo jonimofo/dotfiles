@@ -371,15 +371,19 @@ var AppSearch = class AppSearch {
     }
 };
 
-// The search sees the key before Scale; when the search fails on it, the failure is logged
-// and Scale's handler gets the key.
+// The search sees the key before Scale; when the search fails on it, the failure is logged.
+// While the field has text the key stays taken: Scale's handler could open a window hidden
+// by the search (Return, Space, Escape). With an empty field Scale's handler gets the key.
 function wrapOnKeyPress(original) {
     return function(actor, event) {
+        const searching = Boolean(activeSearch) && activeSearch._isSearching();
         try {
             if (activeSearch && activeSearch.handleKeyPress(event))
                 return true;
         } catch (e) {
             UiHelpers.logFailure('search: handling a key', e);
+            if (searching)
+                return true;
         }
         return original.call(this, actor, event);
     };

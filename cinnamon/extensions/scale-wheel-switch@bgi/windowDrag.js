@@ -34,23 +34,36 @@ function clampUnit(value) {
     return Math.min(1, Math.max(0, value));
 }
 
+// Only a clone registered in draggableClones is undone by disable(): a failure half way
+// undoes what was already added, so no clone stays draggable outside it.
 function makeDraggable(windowClone) {
     if (draggableClones.has(windowClone))
         return;
 
-    windowClone.getDragActor = () => createDragActor(windowClone);
-    windowClone.getDragActorSource = () => windowClone.actor;
-    windowClone._draggable = UiHelpers.makeDraggable(windowClone.actor, DRAG_ACTOR_OPACITY, DRAG_SOURCE_OPACITY);
-    const destroyId = windowClone.actor.connect('destroy', () => draggableClones.delete(windowClone));
-    draggableClones.set(windowClone, destroyId);
+    try {
+        windowClone.getDragActor = () => createDragActor(windowClone);
+        windowClone.getDragActorSource = () => windowClone.actor;
+        windowClone._draggable = UiHelpers.makeDraggable(windowClone.actor, DRAG_ACTOR_OPACITY, DRAG_SOURCE_OPACITY);
+        const destroyId = windowClone.actor.connect('destroy', () => draggableClones.delete(windowClone));
+        draggableClones.set(windowClone, destroyId);
+    } catch (e) {
+        clearDraggable(windowClone);
+        throw e;
+    }
 }
 
 function removeDraggable(windowClone, destroyId) {
-    const draggable = windowClone._draggable;
     windowClone.actor.disconnect(destroyId);
-    windowClone.actor.disconnect(draggable.buttonPressEventId);
-    windowClone.actor.disconnect(draggable.destroyEventId);
-    draggable.disconnectAll();
+    clearDraggable(windowClone);
+}
+
+function clearDraggable(windowClone) {
+    const draggable = windowClone._draggable;
+    if (draggable) {
+        windowClone.actor.disconnect(draggable.buttonPressEventId);
+        windowClone.actor.disconnect(draggable.destroyEventId);
+        draggable.disconnectAll();
+    }
     delete windowClone._draggable;
     delete windowClone.getDragActor;
     delete windowClone.getDragActorSource;

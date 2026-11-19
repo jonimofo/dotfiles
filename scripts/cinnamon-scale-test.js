@@ -54,9 +54,12 @@ class FakeSignals {
         this._handlers.clear();
     }
 
+    // A handler disconnected by an earlier one of the same emission is skipped, as in GJS.
     emit(name, ...args) {
-        for (const { name: handlerName, callback } of [...this._handlers.values()]) {
-            if (handlerName === name && callback(this, ...args) === true)
+        for (const [id, { name: handlerName, callback }] of [...this._handlers]) {
+            if (!this._handlers.has(id) || handlerName !== name)
+                continue;
+            if (callback(this, ...args) === true)
                 return true;
         }
         return false;
@@ -244,6 +247,135 @@ class FakeEntry extends FakeActor {
     }
 }
 
+// Cinnamon's popup menu and its item, as the dock menu uses them. A menu follows
+// PopupMenuBase: the constructor calls _init, which subclasses override. An item's
+// 'activate' closes its menu, as PopupMenuBase does; open() and close() only emit. Every
+// menu made is listed in FakePopupMenu.made; its actor points back to it.
+class FakePopupMenu extends FakeSignals {
+    constructor(...args) {
+        super();
+        this._init(...args);
+        FakePopupMenu.made.push(this);
+    }
+
+    _init(sourceActor, orientation) {
+        this.sourceActor = sourceActor;
+        this._orientation = orientation;
+        this.actor = new FakeActor();
+        this.actor.menu = this;
+        this.items = [];
+        this.isOpen = false;
+        this.destroyed = false;
+        this.destroyCount = 0;
+    }
+
+    addMenuItem(item) {
+        this.items.push(item);
+        item.connect('activate', () => this.close(true));
+    }
+
+    open() {
+        this.isOpen = true;
+        this.emit('open-state-changed', true);
+    }
+
+    close() {
+        if (!this.isOpen)
+            return;
+        this.isOpen = false;
+        this.emit('open-state-changed', false);
+    }
+
+    destroy() {
+        this.destroyed = true;
+        this.destroyCount++;
+        this.actor.destroy();
+        this.emit('destroy');
+    }
+}
+FakePopupMenu.made = [];
+
+class FakePopupMenuItem extends FakeSignals {
+    constructor(label) {
+        super();
+        this.label = label;
+    }
+
+    activate() {
+        this.emit('activate');
+    }
+}
+
+// PopupMenuManager as stock: addMenu connects 'open-state-changed' and 'destroy'. Opening
+// takes a modal grab (Main.modalCount + 1), closing the active menu releases it; removeMenu
+// (on the menu's destroy) closes the active menu and destroys the manager with its last
+// menu, without releasing the grab itself.
+function makeFakePopupMenuManager(Main) {
+    return class FakePopupMenuManager {
+        constructor(owner) {
+            this.owner = owner;
+            this.menus = [];
+            this.activeMenu = null;
+            this.grabbed = false;
+            this.destroyed = false;
+        }
+
+        addMenu(menu) {
+            const ids = [
+                menu.connect('open-state-changed', (source, isOpen) => this._onMenuOpenState(menu, isOpen)),
+                menu.connect('destroy', () => this.removeMenu(menu)),
+            ];
+            this.menus.push({ menu, ids });
+            menu.manager = this;
+        }
+
+        _onMenuOpenState(menu, isOpen) {
+            if (isOpen) {
+                this.activeMenu = menu;
+                if (!this.grabbed) {
+                    Main.modalCount++;
+                    this.grabbed = true;
+                }
+            } else if (menu === this.activeMenu) {
+                if (this.grabbed) {
+                    Main.modalCount--;
+                    this.grabbed = false;
+                }
+                this.activeMenu = null;
+            }
+        }
+
+        removeMenu(menu) {
+            if (menu === this.activeMenu)
+                menu.close(true);
+            const index = this.menus.findIndex(entry => entry.menu === menu);
+            if (index === -1)
+                return;
+            for (const id of this.menus[index].ids)
+                menu.disconnect(id);
+            this.menus.splice(index, 1);
+            if (this.menus.length === 0)
+                this.destroyed = true;
+        }
+    };
+}
+
+// Tooltips.Tooltip: preventShow and hide(), as the dock menu uses them.
+class FakeTooltip {
+    constructor(item, text) {
+        this.item = item;
+        this.text = text;
+        this.preventShow = false;
+        this.hideCalls = 0;
+        FakeTooltip.made.push(this);
+    }
+
+    hide() {
+        this.hideCalls++;
+    }
+}
+FakeTooltip.made = [];
+
 const BUTTON = { PRIMARY: 1, MIDDLE: 2, SECONDARY: 3 };
 const ESCAPE_KEY = 0xff1b;
 // What a strip takes at the top of its screen, in the fake layout.
@@ -270,7 +402,7 @@ function makeImports(monitorCount, primaryIndex) {
         ModifierType: { CONTROL_MASK: 1 << 2, MOD1_MASK: 1 << 3, MOD4_MASK: 1 << 6, SUPER_MASK: 1 << 26 },
         ActorAlign: { CENTER: 1, END: 2 },
         ScrollDirection: { UP: 0, DOWN: 1, LEFT: 2, RIGHT: 3, SMOOTH: 4 },
-        EventType: { SCROLL: 1 },
+        EventType: { SCROLL: 1, KEY_PRESS: 2, KEY_RELEASE: 3 },
         BinLayout: class {},
         Clone: FakeClone,
     };
@@ -281,15 +413,24 @@ function makeImports(monitorCount, primaryIndex) {
         BoxLayout: FakeActor,
         Widget: FakeActor,
         Label: FakeActor,
-        Side: { LEFT: 0, RIGHT: 1 },
+        Side: { LEFT: 0, RIGHT: 1, BOTTOM: 2 },
         ThemeContext: { get_for_stage: () => themeContext },
     };
+    // One app system, as Cinnamon's: it emits 'app-state-changed'; get_running() is set by tests.
+    const appSystem = Object.assign(new FakeSignals(), {
+        running: [],
+        get_tree: () => ({ get_root_directory: () => emptyMenu }),
+        get_running: () => appSystem.running,
+        lookup_app: () => null,
+    });
     const CMenu = { TreeItemType: { INVALID: 0, DIRECTORY: 1, ENTRY: 2 } };
     const emptyMenu = { iter: () => ({ next: () => CMenu.TreeItemType.INVALID }) };
     const Cinnamon = {
-        AppSystem: { get_default: () => ({ get_tree: () => ({ get_root_directory: () => emptyMenu }) }) },
+        AppSystem: { get_default: () => appSystem },
         get_event_state: () => 0,
         util_set_hidden_from_pick: (actor, hidden) => (actor.hiddenFromPick = hidden),
+        // Each fake actor's box on the stage, from its position and size.
+        util_get_transformed_allocation: actor => ({ x1: actor.x, y1: actor.y, x2: actor.x + actor.width, y2: actor.y + actor.height }),
     };
 
     // Main loop timeouts: recorded, fired by the test.
@@ -303,6 +444,9 @@ function makeImports(monitorCount, primaryIndex) {
                 return callback();
             } });
             return id;
+        },
+        idle_add(callback) {
+            return Mainloop.timeout_add('idle', callback);
         },
         source_remove(id) {
             if (!timers.delete(id))
@@ -332,6 +476,9 @@ function makeImports(monitorCount, primaryIndex) {
 
     const Main = {
         layoutManager: { monitors, primaryIndex, primaryMonitor: monitors[primaryIndex] },
+        uiGroup: new FakeActor(),
+        // A window Scale would show says so in the fake.
+        isInteresting: metaWindow => metaWindow.interesting,
         overview,
         modalCount: 0,
         getWorkspaceName: index => `Workspace ${index + 1}`,
@@ -372,6 +519,8 @@ function makeImports(monitorCount, primaryIndex) {
                 main: Main,
                 workspace: { Workspace, WindowClone },
                 workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 },
+                popupMenu: { PopupMenu: FakePopupMenu, PopupMenuItem: FakePopupMenuItem, PopupMenuManager: makeFakePopupMenuManager(Main) },
+                tooltips: { Tooltip: FakeTooltip },
                 // Tweener: the objects whose animations were removed, in order.
                 tweener: { removeTweens: scope => tweenRemovals.push(scope) > 0 },
                 dnd: {
@@ -382,7 +531,7 @@ function makeImports(monitorCount, primaryIndex) {
             misc: { signalManager: { SignalManager: class {} }, windowUtils: {} },
             mainloop: Mainloop,
         },
-        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, strips: [], timers,
+        Clutter, Main, Workspace, WindowClone, monitors, themeContext, keyPresses, buttonReleases, strips: [], timers, appSystem,
         tweenRemovals,
     };
 }
@@ -408,6 +557,8 @@ function makeRequire(moduleImports, stubs = {}, dir = extensionDir) {
 
 function setUp(monitorCount = 1, primaryIndex = 0) {
     globalThis.global = { stage: new FakeSignals(), logError: () => {} };
+    FakePopupMenu.made = [];
+    FakeTooltip.made = [];
     const env = makeImports(monitorCount, primaryIndex);
     env.require = makeRequire(env.imports);
     // extension.js with every sibling but the search and the helpers replaced.
@@ -1303,6 +1454,324 @@ function testThumbnailDragReordersWorkspaces() {
     check('destroy: a reorder after Scale closed rebuilds nothing', stripState(first) === '');
 }
 
+function keyStroke(env, symbol, isPress) {
+    const type = isPress ? env.Clutter.EventType.KEY_PRESS : env.Clutter.EventType.KEY_RELEASE;
+    return { type: () => type, get_key_symbol: () => symbol };
+}
+
+function stageHandlerCount() {
+    return global.stage._handlers.size;
+}
+
+function menuLabels(menu) {
+    return menu.items.map(item => item.label).join('|');
+}
+
+// Owner's choice "Right click menu", "Close all its windows": the entries for each app state.
+function testDockMenuEntries() {
+    const env = setUp();
+    const { getDockMenuEntries, DockMenuAction } = env.require('./dockMenu');
+    const labels = count => getDockMenuEntries(count).map(entry => entry.label).join('|');
+    const actions = count => getDockMenuEntries(count).map(entry => entry.action).join('|');
+
+    check('dock menu: an app not running shows only New window', labels(0) === 'New window');
+    check('dock menu: one window shows New window, Close', labels(1) === 'New window|Close');
+    check('dock menu: three windows show New window, Close 3 windows', labels(3) === 'New window|Close 3 windows');
+    check('dock menu: New window comes first, then the close action',
+        actions(2) === `${DockMenuAction.NEW_WINDOW}|${DockMenuAction.CLOSE_WINDOWS}` && actions(0) === DockMenuAction.NEW_WINDOW);
+}
+
+// The menu sits above the icon, centred on it, inside the dock's monitor. Live stage
+// coordinates carry float noise: compared with a tolerance, or after rounding.
+function testDockMenuPosition() {
+    const env = setUp();
+    const { getMenuPosition } = env.require('./dockMenu');
+    const monitor = { x: 1920, y: 0, width: 1920, height: 1080 };
+    const box = (x1, y1, width, height) => ({ x1, y1, x2: x1 + width, y2: y1 + height });
+
+    const [x, y] = getMenuPosition(box(2812.000122, 1000.00009, 64.0000001, 72), 160.4, 80.2, monitor);
+    check('dock menu: centred on the icon', Math.abs(x - (2812 + 32 - 80.2)) <= 1);
+    check('dock menu: its bottom edge on the icon\'s top edge', Math.abs(y + 80.2 - 1000) <= 1);
+    check('dock menu: whole pixels', Number.isInteger(x) && Number.isInteger(y));
+
+    const [leftX] = getMenuPosition(box(1920.0001, 1000, 64, 72), 200, 80, monitor);
+    check('dock menu: kept inside the monitor\'s left edge', leftX === 1920);
+    const [rightX] = getMenuPosition(box(3840 - 64.00012, 1000, 64, 72), 200, 80, monitor);
+    check('dock menu: kept inside the monitor\'s right edge', near(rightX + 200, 3840));
+    const [, topY] = getMenuPosition(box(2500, 40.5, 64, 72), 200, 80, monitor);
+    check('dock menu: kept below the monitor\'s top edge', topY === 0);
+
+    const dockMenu = env.require('./dockMenu');
+    const icon = new FakeActor({ x: 2812.5, y: 1000.25, width: 64, height: 72 });
+    const menu = new dockMenu.DockIconMenu(icon, monitor);
+    menu.actor.get_preferred_size = () => [0, 0, 160, 80];
+    const [menuX, menuY] = menu._calculatePosition();
+    check('dock menu: the popup is attached below, placed above its icon, animated as flipped',
+        menu._orientation === env.imports.gi.St.Side.BOTTOM && menuX === 2765 && menuY === 920 && menu.sideFlipped === true);
+}
+
+// One menu at a time; it closes on a second right click, Escape, a click outside, close(),
+// destroy(); each path gives Scale its grab back; the chosen action runs once the menu is
+// gone and the grab released; nothing stays connected.
+function testDockMenuLifecycle() {
+    const env = setUp();
+    const { DockMenu, getDockMenuEntries } = env.require('./dockMenu');
+    const SCALE_MODALS = 1;
+    env.Main.modalCount = SCALE_MODALS;
+    const dockMenu = new DockMenu(env.monitors[0]);
+    const iconA = new FakeActor();
+    const iconB = new FakeActor();
+    const tooltipA = new FakeTooltip(iconA, 'App A');
+    const chosen = [];
+    let stateAtAction = '';
+    const onActivate = action => {
+        stateAtAction = `${env.Main.modalCount}|${openMenusOf(env).length}|${env.Main.uiGroup.children.length}`;
+        chosen.push(action);
+    };
+    const baseHandlers = stageHandlerCount();
+    const open = (icon, count, tooltip) => {
+        dockMenu.toggle(icon, getDockMenuEntries(count), onActivate, tooltip);
+        return lastMenuMade();
+    };
+    const grabReleased = () => env.Main.modalCount === SCALE_MODALS;
+
+    const first = open(iconA, 2, tooltipA);
+    check('lifecycle: a right click opens a menu in the ui group, attached below',
+        first.isOpen && env.Main.uiGroup.children.includes(first.actor) && first._orientation === env.imports.gi.St.Side.BOTTOM);
+    check('lifecycle: the menu takes a grab on top of Scale\'s', env.Main.modalCount === SCALE_MODALS + 1);
+    check('lifecycle: its entries', menuLabels(first) === 'New window|Close 2 windows');
+    check('lifecycle: the Escape guard is connected while it is open', stageHandlerCount() === baseHandlers + 1);
+    check('lifecycle: the icon\'s tooltip is hidden and kept hidden', tooltipA.preventShow && tooltipA.hideCalls === 1);
+
+    const second = open(iconB, 0);
+    check('lifecycle: one menu at a time', first.destroyCount === 1 && second.isOpen && openMenusOf(env).length === 1);
+    check('lifecycle: the first icon\'s tooltip shows again', !tooltipA.preventShow);
+    check('lifecycle: one grab only', env.Main.modalCount === SCALE_MODALS + 1);
+    check('lifecycle: not running: only New window', menuLabels(second) === 'New window');
+
+    open(iconB, 0);
+    check('lifecycle: a second right click on the same icon closes it',
+        second.destroyCount === 1 && openMenusOf(env).length === 0 && stageHandlerCount() === baseHandlers && grabReleased());
+
+    const third = open(iconA, 1);
+    third.items[1].activate();
+    check('lifecycle: Close runs once, after the menu is destroyed, with the grab released',
+        chosen.join() === 'close-windows' && stateAtAction === `${SCALE_MODALS}|0|0` && third.destroyCount === 1);
+    check('lifecycle: nothing left connected after a choice', stageHandlerCount() === baseHandlers && grabReleased());
+
+    // Escape: the menu closes on the press; the release must not reach Scale.
+    const fourth = open(iconA, 1);
+    const pressStopped = global.stage.emit('captured-event', keyStroke(env, ESCAPE_KEY, true));
+    fourth.close(true);
+    check('lifecycle: Escape\'s press goes to the open menu, which closes and releases its grab',
+        !pressStopped && fourth.destroyCount === 1 && grabReleased());
+    const repeatStopped = global.stage.emit('captured-event', keyStroke(env, ESCAPE_KEY, true));
+    const releaseStopped = global.stage.emit('captured-event', keyStroke(env, ESCAPE_KEY, false));
+    check('lifecycle: the rest of that Escape stroke is swallowed, Scale stays open',
+        repeatStopped && releaseStopped && env.Main.overview.hideCalls === 0);
+    check('lifecycle: the guard is gone after the release', stageHandlerCount() === baseHandlers);
+    check('lifecycle: no action on Escape', chosen.join() === 'close-windows');
+
+    // Closed by a click outside: the manager closes the menu; the next keys are Scale's.
+    const fifth = open(iconA, 1);
+    fifth.close(true);
+    check('lifecycle: closed by a click outside, the guard and the grab go at once',
+        stageHandlerCount() === baseHandlers && grabReleased() && fifth.destroyCount === 1);
+
+    const sixth = open(iconA, 3);
+    dockMenu.close();
+    check('lifecycle: close() (a rebuild, Scale hiding) destroys the menu and releases the grab',
+        sixth.destroyCount === 1 && openMenusOf(env).length === 0 && grabReleased());
+
+    const seventh = open(iconA, 3, tooltipA);
+    dockMenu.destroy();
+    check('lifecycle: destroy closes the open menu and destroys it once',
+        !seventh.isOpen && seventh.destroyCount === 1 && grabReleased());
+    check('lifecycle: destroy leaves nothing connected on the stage, the tooltip free',
+        stageHandlerCount() === baseHandlers && !tooltipA.preventShow);
+    check('lifecycle: nothing left in the ui group', env.Main.uiGroup.children.length === 0);
+    check('lifecycle: every menu destroyed exactly once, every manager gone with it',
+        FakePopupMenu.made.every(menu => menu.destroyCount === 1 && menu.manager.destroyed && menu._handlers.size === 0));
+}
+
+function openMenusOf(env) {
+    return env.Main.uiGroup.children.map(actor => actor.menu).filter(menu => menu && menu.isOpen);
+}
+
+function lastMenuMade() {
+    return FakePopupMenu.made[FakePopupMenu.made.length - 1];
+}
+
+// A window of the fake app on @workspace: delete() records its timestamp.
+function fakeAppWindow(workspace, { interesting = true, closable = true, userTime = 0, sticky = false, transientFor = null } = {}) {
+    return {
+        interesting,
+        deletedAt: null,
+        get_user_time: () => userTime,
+        can_close: () => closable,
+        get_workspace: () => workspace,
+        is_on_all_workspaces: () => sticky,
+        get_transient_for: () => transientFor,
+        delete(time) {
+            this.deletedAt = time;
+        },
+    };
+}
+
+// Workspaces that emit signals ('window-added'), as muffin's do.
+function setUpSignalingWorkspaces(count) {
+    const setup = setUpWorkspaces(count);
+    for (const workspace of setup.workspaces) {
+        Object.assign(workspace, new FakeSignals());
+        Object.setPrototypeOf(workspace, FakeSignals.prototype);
+    }
+    return setup;
+}
+
+// The real AppDock with one pinned app on the fake overview. The app's windows are @windows,
+// a list the test may change.
+function makeDock(env, windows) {
+    env.imports.misc.signalManager.SignalManager = FakeSignalManager;
+    const appDock = env.require('./appDock');
+    const newWindows = [];
+    const app = {
+        get_windows: () => windows,
+        get_name: () => 'Editor',
+        is_window_backed: () => false,
+        create_icon_texture: () => new FakeActor(),
+        open_new_window: workspace => newWindows.push(workspace),
+    };
+    const dockApps = { pinned: [app], others: [], running: new Set([app]) };
+    const dock = new appDock.AppDock(dockApps);
+    const iconOf = () => dock._box.children[0];
+    return { appDock, app, dock, dockApps, newWindows, iconOf };
+}
+
+// The menu through the real dock: Scale hiding, a rebuild and destroy() close it; left and
+// middle clicks are unchanged; Close acts on the windows counted at opening, still closable.
+function testDockMenuThroughDock() {
+    const env = setUp();
+    const { workspaces, activations } = setUpSignalingWorkspaces(3);
+    global.get_current_time = () => 4242;
+    env.Main.modalCount = 1;
+    env.Main.overview.visible = true;
+    env.Main.activated = null;
+    env.Main.activateWindow = (metaWindow, time) => (env.Main.activated = [metaWindow, time]);
+    const here = fakeAppWindow(workspaces[0], { userTime: 2 });
+    const elsewhere = fakeAppWindow(workspaces[2], { userTime: 5 });
+    const hidden = fakeAppWindow(workspaces[1], { interesting: false });
+    const stuck = fakeAppWindow(workspaces[1], { closable: false });
+    const windows = [here, elsewhere, hidden, stuck];
+    const { appDock, app, dock, dockApps, newWindows, iconOf } = makeDock(env, windows);
+    const [tooltip] = FakeTooltip.made;
+
+    check('close: the windows counted are the ones Scale shows that can close',
+        appDock.getClosableWindows(app).length === 2);
+
+    clickActor(iconOf(), BUTTON.SECONDARY);
+    const first = lastMenuMade();
+    check('right click: opens the menu with the counted windows', first.isOpen && menuLabels(first) === 'New window|Close 2 windows');
+    check('right click: goes to no window and keeps Scale open',
+        env.Main.activated === null && activations.length === 0 && env.Main.overview.hideCalls === 0 && newWindows.length === 0);
+    check('right click: the app name tooltip stays hidden', tooltip.item === iconOf() && tooltip.preventShow);
+
+    env.Main.overview.emit('hiding');
+    check('dock: Scale hiding closes the menu', first.destroyCount === 1 && openMenusOf(env).length === 0 && env.Main.modalCount === 1);
+    check('dock: the tooltip shows again once the menu is closed', !tooltip.preventShow);
+
+    clickActor(iconOf(), BUTTON.SECONDARY);
+    const second = lastMenuMade();
+    dock._buildIcons(dockApps, DEFAULT_ICON_SIZE);
+    check('dock: a rebuild of the icons closes the menu', second.destroyCount === 1 && openMenusOf(env).length === 0);
+
+    // Counted at opening: a window opening or closing meanwhile changes nothing but itself.
+    clickActor(iconOf(), BUTTON.SECONDARY);
+    const third = lastMenuMade();
+    const late = fakeAppWindow(workspaces[1], { userTime: 9 });
+    windows.push(late);
+    windows.splice(windows.indexOf(elsewhere), 1);
+    third.items[1].activate();
+    check('close: a counted window still open is asked to close', here.deletedAt === 4242);
+    check('close: never more than the label: a window opened meanwhile is left alone, one gone is skipped',
+        late.deletedAt === null && elsewhere.deletedAt === null);
+    check('close: windows Scale does not show, or that cannot close, are left alone',
+        hidden.deletedAt === null && stuck.deletedAt === null);
+    check('close: Scale stays open on the same workspace',
+        env.Main.overview.hideCalls === 0 && activations.length === 0 && global.workspace_manager.active === workspaces[0]);
+
+    clickActor(iconOf(), BUTTON.SECONDARY);
+    lastMenuMade().items[0].activate();
+    check('new window: same as the middle click, a window on the current workspace, Scale closes',
+        newWindows.join() === '-1' && env.Main.overview.hideCalls === 1);
+
+    env.Main.overview.visible = true;
+    clickActor(iconOf(), BUTTON.MIDDLE);
+    check('middle click: unchanged, a new window, no menu', newWindows.length === 2 && openMenusOf(env).length === 0);
+    clickActor(iconOf(), BUTTON.PRIMARY);
+    check('left click: unchanged, goes to the most recent window, no menu',
+        env.Main.activated[0] === late && activations.join() === '1' && openMenusOf(env).length === 0);
+
+    clickActor(iconOf(), BUTTON.SECONDARY);
+    const last = lastMenuMade();
+    dock.destroy();
+    check('dock: destroy() destroys the open menu once and releases its grab',
+        last.destroyCount === 1 && !last.isOpen && env.Main.modalCount === 1);
+}
+
+// Owner's choice "Go to the prompt": a window asked to close that opens a prompt attached to
+// it ("save changes?") takes the user there, on its workspace, and Scale closes, as stock
+// Scale's close does. Any other new window changes nothing.
+function testDockClosePrompt() {
+    const env = setUp();
+    const { workspaces, activations } = setUpSignalingWorkspaces(3);
+    env.Main.overview.visible = true;
+    env.Main.activated = null;
+    env.Main.activateWindow = (metaWindow, time) => {
+        env.Main.activated = [metaWindow, time];
+        env.Main.overview.hide();
+    };
+    const unsaved = fakeAppWindow(workspaces[2]);
+    const { dock, iconOf } = makeDock(env, [unsaved]);
+    const watchers = workspace => workspace._handlers.size;
+    const idles = () => [...env.timers.values()].filter(timer => timer.delay === 'idle');
+    const chooseClose = () => {
+        clickActor(iconOf(), BUTTON.SECONDARY);
+        lastMenuMade().items[1].activate();
+    };
+
+    chooseClose();
+    check('prompt: the closed window\'s workspace is watched', watchers(workspaces[2]) === 1 && unsaved.deletedAt !== null);
+    workspaces[2].emit('window-added', fakeAppWindow(workspaces[2]));
+    check('prompt: an unrelated new window changes nothing, the watch goes on',
+        idles().length === 0 && watchers(workspaces[2]) === 1 && env.Main.overview.hideCalls === 0);
+    const prompt = fakeAppWindow(workspaces[2], { transientFor: unsaved });
+    workspaces[2].emit('window-added', prompt);
+    check('prompt: the prompt stops the watch and is gone to from an idle',
+        watchers(workspaces[2]) === 0 && idles().length === 1 && env.Main.activated === null);
+    idles()[0].callback();
+    check('prompt: Scale switches to its workspace, activates it and closes',
+        env.Main.activated[0] === prompt && activations.join() === '2' && env.Main.overview.hideCalls === 1);
+
+    env.Main.overview.visible = true;
+    chooseClose();
+    env.Main.overview.emit('hiding');
+    check('prompt: Scale hiding stops the watch', watchers(workspaces[2]) === 0);
+
+    const sticky = fakeAppWindow(null, { sticky: true });
+    const { dock: stickyDock, iconOf: stickyIcon } = makeDock(env, [sticky]);
+    clickActor(stickyIcon(), BUTTON.SECONDARY);
+    lastMenuMade().items[1].activate();
+    check('prompt: a window on every workspace is watched on the active one', watchers(global.workspace_manager.active) === 1);
+    stickyDock.destroy();
+    check('prompt: destroy() stops the watch', watchers(global.workspace_manager.active) === 0);
+
+    chooseClose();
+    workspaces[2].emit('window-added', fakeAppWindow(workspaces[2], { transientFor: unsaved }));
+    const pending = idles().length;
+    dock.destroy();
+    check('prompt: destroy() also drops a prompt waiting for its idle', pending === 1 && idles().length === 0);
+}
+
 testPanelChoice();
 testPanelCopy();
 testPanelFallbacks();
@@ -1317,6 +1786,11 @@ testFittingItemWidth();
 testReorderIndex();
 testThumbnailDragReordersWorkspaces();
 testWindowDragUnchanged();
+testDockMenuEntries();
+testDockMenuPosition();
+testDockMenuLifecycle();
+testDockMenuThroughDock();
+testDockClosePrompt();
 
 if (failures > 0) {
     print(`${failures} failure(s)`);

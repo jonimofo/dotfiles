@@ -72,19 +72,34 @@ Videos playing a file without title tag:
   released on `unmanaged`; no polling.
 - Playing: `PlaybackStatus` is `Playing`. Paused or stopped: no bar.
 - Colour: the accent of the checked tiles, read from the theme
-  (`-slider-active-background-color`, Dracula's purple), made opaque so the bar is solid; the
-  stylesheet fallback is the checked tile's, through one shared selector.
+  (`-slider-active-background-color`, Dracula's purple), made opaque so the bar is solid.
+  When the theme gives none, the bar takes the stylesheet fallback of the checked tiles,
+  through one shared selector: that fallback is translucent, so the bar is not solid then.
+- Generic: no player-specific code. Any MPRIS player without a track title is titled from
+  its own window, whatever the application.
+- Cap: over three players, the kept blocks are chosen playing first, then paused, then
+  titled (track or window title), then the rest; they are shown by name, so a play or pause
+  never reorders the rows.
 
 ## As built
 
 - `mediaModel.js`: `blockText(metadata, name, windowTitle)` never gives null now;
   `hasTrackTitle()`, `isPlaying()`; `visibleBlocks()` keeps every player and adds
   `playing` to each block.
-- `mediaFocus.js`: `findPlayerWindow()` taken out of `focusPlayer()`, which uses it.
+- `mediaModel.js` also: `onePerOwner()` shared by the blocks and `untitledPlayers()`, and
+  `keepRank()` for the cap. `syncBlockViews()` hands the accent to every view.
+- `mediaFocus.js`: `findPlayerWindow()` taken out of `focusPlayer()`, which uses it
+  unchanged; an optional set of excluded windows (the closed ones) is left out before the
+  choice, click-to-focus passes none.
 - `mediaWindowTitles.js` (new): follows the windows of the players without a track title
-  (`MediaPlayers.untitled`), hands their titles to `MediaPlayers.setWindowTitle()`. Looked up
-  again at each player change and menu opening while a player has no window; a window that
-  closed is not taken again. `destroy()` releases every handler.
+  (`MediaPlayers.untitled`, one per owner), hands their titles to
+  `MediaPlayers.setWindowTitle()`. Looked up again at each player change while a player has
+  no window, and for every followed player at menu opening (the watch moves when the window
+  differs). A closed window is left out of later choices. Entries are tied to the bus
+  name's owner: a name taken over by another process starts again, late replies dropped. A
+  released player's window title is cleared. `destroy()` releases every handler.
+- `mediaControls.js` (new): the flow out of `applet.js` (players and window titles started
+  and stopped together, follow before the blocks, menu opening), tested on the fake bus.
 - `mediaWindows.js`: `watchTitle(window, onTitle, onGone)`, returning `release()`.
 - `mediaBlock.js`: a `quick-settings-media-bar` actor before the text on every block; the
   `quick-settings-media-bar-playing` class is toggled on that same actor (St caches styles
@@ -93,3 +108,22 @@ Videos playing a file without title tag:
 - `uiHelpers.js`: `backgroundStyle()` (moved from `tile.js`) and `setStyleClass()`, used by
   the tiles and the blocks.
 - Sizes in `stylesheet.css`: bar 3 px wide, 2 px corners, 4 px between bar and text.
+
+## First live trial, 2026-11-19
+
+The owner tried the branch with GNOME Videos playing a file: "yes it works, but i want it to
+be idempotent, like if i use another app it still works". The Videos row appeared with the
+window title, the purple bar showed while playing. Requirement taken: generic for any MPRIS
+player, no application-specific code (none was added). Status stays VALIDATED until the
+second trial.
+
+## Audit, 2026-11-19
+
+0 HIGH, 4 MEDIUM and 8 LOW, all fixed on the branch: the cap keeps playing players first;
+closed windows are left out so another window takes over; `watchTitle()` and the
+`applet.js` flow (now `mediaControls.js`) are tested, with the disconnect, the follow, the
+construction and the destroy each proven to fail a test when removed; accent tests and a
+stylesheet check that every `quick-settings-*` class set in the JavaScript has a selector
+(`quick-settings-list-label` has none, listed apart for the owner); fallback colour
+documented; stale comments and wording fixed; a released player's window title cleared;
+windows looked for again at menu opening; one follow per owner; entries tied to the owner.

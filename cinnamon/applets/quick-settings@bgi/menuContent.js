@@ -41,6 +41,7 @@ class MenuContent {
         this._mediaSection.add_child(this._mediaBox);
         this._mediaBlocks = new Map();
         this._mediaAccent = null;
+        this._mediaBlockData = [];
         this._mediaShown = true;
         this._onMediaButton = () => {};
         this._onMediaFocus = () => {};
@@ -96,17 +97,14 @@ class MenuContent {
     // player stays (MediaModel.blockMoves), so focus and hover survive; one is created when a
     // player appears, destroyed when it goes; none hides the section.
     setMediaBlocks(blocks) {
+        this._mediaBlockData = blocks;
         const onScreen = this._mediaBox.get_children().map(actor => this._busNameOf(actor));
         MediaModel.syncBlockViews(this._mediaBlocks, onScreen, blocks, {
-            create: busName => {
-                const view = new MediaBlock.MediaBlock(method => this._onMediaButton(busName, method),
-                    () => this._onMediaFocus(busName));
-                view.setAccent(this._mediaAccent);
-                return view;
-            },
+            create: busName => new MediaBlock.MediaBlock(method => this._onMediaButton(busName, method),
+                () => this._onMediaFocus(busName)),
             insert: (view, index) => this._mediaBox.insert_child_at_index(view.actor, index),
             move: (view, index) => this._mediaBox.set_child_at_index(view.actor, index),
-        });
+        }, this._mediaAccent);
         this._syncMediaVisibility();
     }
 
@@ -149,8 +147,7 @@ class MenuContent {
         for (const tile of Object.values(this.tiles))
             tile.setColors(colors);
         this._mediaAccent = colors ? colors.accent : null;
-        for (const view of this._mediaBlocks.values())
-            view.setAccent(this._mediaAccent);
+        this.setMediaBlocks(this._mediaBlockData);
     }
 
     _detach(actor) {

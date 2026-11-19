@@ -40,8 +40,19 @@ function readText(path) {
 // Commands the applet would start (settings pages): recorded, never run.
 const spawned = [];
 // GJS's imports, plus the Cinnamon modules the applet files import at load time.
+// gi.Cinnamon and ui.main only exist inside Cinnamon: empty stand-ins, so mediaWindows.js
+// loads (its watchTitle() uses neither).
+const giImports = new Proxy({}, { get: (target, name) => (name === 'Cinnamon' ? {} : imports.gi[name]) });
 const appletImports = new Proxy({}, {
-    get: (target, name) => (name === 'misc' ? { util: { spawn: argv => spawned.push(argv) } } : imports[name]),
+    get: (target, name) => {
+        if (name === 'misc')
+            return { util: { spawn: argv => spawned.push(argv) } };
+        if (name === 'gi')
+            return giImports;
+        if (name === 'ui')
+            return { main: {} };
+        return imports[name];
+    },
 });
 
 // Cinnamon's require(): every top-level declaration of the file is exported.
@@ -1117,7 +1128,10 @@ function testMediaModel() {
     const screen = [];
     const actions = {
         create: busName => ({
-            busName, tinted: null, updates: 0, destroyed: false,
+            busName, tinted: null, updates: 0, destroyed: false, accent: 'unset',
+            setAccent(accent) {
+                this.accent = accent;
+            },
             update() {
                 this.updates++;
             },
@@ -1150,7 +1164,46 @@ function testMediaModel() {
     check('media moves: applied, they always give the new order',
         [[['a', 'b', 'c'], ['b', 'd', 'a']], [['x'], ['y', 'x']], [['a', 'b', 'c'], ['c', 'b', 'a']], [['a'], ['a']]]
             .every(([before, after]) => apply(before, after) === `${after}`));
+    Model.syncBlockViews(fakeViews, screen.map(view => view.busName), ['a', 'd'].map(busName => ({ busName })), actions, 'rgba(1, 2, 3, 1.000)');
+    check(`media views: the accent reaches every view, a new one included (${screen.map(v => v.accent)})`,
+        screen.length === 2 && screen.every(view => view.accent === 'rgba(1, 2, 3, 1.000)'));
+    Model.syncBlockViews(fakeViews, screen.map(view => view.busName), ['a', 'd'].map(busName => ({ busName })), actions);
+    check('media views: no accent given, every view back to the stylesheet colour', screen.every(view => view.accent === null));
     check('media: no player, no block', Model.visibleBlocks([], 3).length === 0);
+    // Regression: the cap keeps the playing player even when it sorts last by name.
+    const withStatus = (busName, identity, title, status) => ({ ...player(busName, `:9.${identity}`, identity, title), properties: { ...all, PlaybackStatus: status } });
+    const capped = Model.visibleBlocks([
+        withStatus('org.mpris.MediaPlayer2.a', 'Alpha', null, 'Stopped'),
+        withStatus('org.mpris.MediaPlayer2.b', 'Beta', null, 'Stopped'),
+        withStatus('org.mpris.MediaPlayer2.c', 'Gamma', null, 'Stopped'),
+        withStatus('org.mpris.MediaPlayer2.z', 'Zulu', 'Song', 'Playing'),
+    ], 3);
+    check(`media cap: three idle players and one playing that sorts last, the playing one is kept (${capped.map(b => b.name)})`,
+        `${capped.map(b => b.name)}` === 'Alpha,Beta,Zulu');
+    const ranked = Model.visibleBlocks([
+        withStatus('org.mpris.MediaPlayer2.a', 'Alpha', null, 'Stopped'),
+        withStatus('org.mpris.MediaPlayer2.b', 'Beta', 'Track', 'Stopped'),
+        withStatus('org.mpris.MediaPlayer2.c', 'Gamma', 'Track', 'Paused'),
+        withStatus('org.mpris.MediaPlayer2.d', 'Delta', 'Track', 'Playing'),
+    ], 3);
+    check(`media cap: playing, then paused, then titled, the rest last; shown by name (${ranked.map(b => b.name)})`,
+        `${ranked.map(b => b.name)}` === 'Beta,Delta,Gamma');
+    const beforeResume = Model.visibleBlocks([
+        withStatus('org.mpris.MediaPlayer2.b', 'Beta', 'Track', 'Paused'),
+        withStatus('org.mpris.MediaPlayer2.a', 'Alpha', 'Track', 'Playing'),
+    ], 3);
+    const resumed = Model.visibleBlocks([
+        withStatus('org.mpris.MediaPlayer2.b', 'Beta', 'Track', 'Playing'),
+        withStatus('org.mpris.MediaPlayer2.a', 'Alpha', 'Track', 'Paused'),
+    ], 3);
+    check('media cap: under the cap, a play or pause never reorders the rows',
+        `${beforeResume.map(b => b.name)}` === 'Alpha,Beta' && `${resumed.map(b => b.name)}` === 'Alpha,Beta');
+    const owned = [player('org.mpris.MediaPlayer2.browser', ':1.70', 'Browser', null),
+        player('org.mpris.MediaPlayer2.browser.instance_1_9', ':1.70', 'Browser', null),
+        player('org.mpris.MediaPlayer2.music', ':1.71', 'Music', 'Song')];
+    check(`media: the untitled players are one per owner, as the blocks (${JSON.stringify(Model.untitledPlayers(owned))})`,
+        JSON.stringify(Model.untitledPlayers(owned)) === '[{"busName":"org.mpris.MediaPlayer2.browser.instance_1_9","owner":":1.70"}]'
+        && `${Model.visibleBlocks(owned, 3).map(b => b.busName)}` === 'org.mpris.MediaPlayer2.browser.instance_1_9,org.mpris.MediaPlayer2.music');
     check('media: unknown owners are not merged',
         Model.visibleBlocks([player('org.mpris.MediaPlayer2.a', null, 'A', 't'), player('org.mpris.MediaPlayer2.b', null, 'B', 't')], 3).length === 2);
 }
@@ -1301,8 +1354,8 @@ async function testMediaPlayers() {
         { Metadata: new GLib.Variant('a{sv}', {}) });
     check(`media players: a player that loses its track keeps its block, its name alone (${JSON.stringify(players.blocks[1].text)})`,
         players.blocks.length === 2 && players.blocks[1].text.title === '' && players.blocks[1].text.player === 'VLC media player');
-    check(`media players: the players without a track title are listed for their window (${players.untitled})`,
-        `${players.untitled}` === 'org.mpris.MediaPlayer2.vlc');
+    check(`media players: the players without a track title are listed for their window (${JSON.stringify(players.untitled)})`,
+        JSON.stringify(players.untitled) === '[{"busName":"org.mpris.MediaPlayer2.vlc","owner":":1.10"}]');
     const beforeTitle = changes;
     players.setWindowTitle('org.mpris.MediaPlayer2.vlc', 'A clip\u0007 - VLC media player');
     await nextIdle();
@@ -1612,36 +1665,12 @@ function testMediaFocus() {
         `${times}` === 'Process window@777,App@888');
 }
 
-// The window titles of players without a track title, on fake players and fake windows
-// whose title signals are fired by hand.
-function testMediaWindowTitles() {
-    const Focus = load('./mediaFocus');
-    const found = [];
-    const finder = {
-        focusInfo: busName => (busName === 'gone' ? null : { desktopEntry: 'videos', canRaise: false, title: '' }),
-        processId: (busName, onPid, onNone) => (busName === 'nopid' ? onNone() : onPid(42)),
-    };
-    const own = { title: 'Own', userTime: 5, pid: 42 };
-    const finderWindows = {
-        ofApp: () => [{ title: 'Other process', userTime: 99, pid: 7 }, own],
-        ofPid: () => [],
-        describe: window => window,
-    };
-    for (const busName of ['videos', 'nopid', 'gone'])
-        Focus.findPlayerWindow(busName, finder, finderWindows, window => found.push(window.title), () => found.push('none'));
-    check(`media window: found only among the player's own process, else none (${found})`, `${found}` === 'Own,none,none');
-
-    const Titles = load('./mediaWindowTitles');
-    const set = [];
-    let pidAnswers = [];
-    const players = {
-        focusInfo: () => ({ desktopEntry: null, canRaise: false, title: '' }),
-        processId: (busName, onPid, onNone) => pidAnswers.push({ busName, onPid, onNone }),
-        setWindowTitle: (busName, title) => set.push(`${busName}=${title}`),
-    };
+// Fake windows for the window title tests: each window's title watch is recorded, its
+// handlers fired by hand.
+function fakeTitleWindows(byPid) {
     const watched = [];
-    const byPid = { 42: [{ title: 'First clip', userTime: 3, pid: 42 }, { title: 'Second clip', userTime: 8, pid: 42 }], 43: [] };
-    const windows = {
+    return {
+        watched,
         ofApp: () => [],
         ofPid: pid => byPid[pid] || [],
         describe: window => window,
@@ -1653,21 +1682,66 @@ function testMediaWindowTitles() {
             };
         },
     };
-    const answer = pids => {
-        const pending = pidAnswers;
-        pidAnswers = [];
-        for (const { busName, onPid, onNone } of pending) {
-            if (pids[busName] === undefined)
-                onNone();
-            else
-                onPid(pids[busName]);
-        }
+}
+
+// Fake players for MediaWindowTitles: process id answers held until answer(), every
+// setWindowTitle recorded.
+function fakeTitlePlayers() {
+    const players = {
+        set: [],
+        pending: [],
+        focusInfo: () => ({ desktopEntry: null, canRaise: false, title: '' }),
+        processId: (busName, onPid, onNone) => players.pending.push({ busName, onPid, onNone }),
+        setWindowTitle: (busName, title) => players.set.push(`${busName}=${title}`),
+        answer: pids => {
+            const pending = players.pending;
+            players.pending = [];
+            for (const { busName, onPid, onNone } of pending) {
+                if (pids[busName] === undefined)
+                    onNone();
+                else
+                    onPid(pids[busName]);
+            }
+        },
     };
+    return players;
+}
+
+const untitled = (...busNames) => busNames.map(busName => ({ busName, owner: `:owner.${busName}` }));
+
+// The window titles of players without a track title, on fake players and fake windows
+// whose title signals are fired by hand.
+function testMediaWindowTitles() {
+    const Focus = load('./mediaFocus');
+    const found = [];
+    const finder = {
+        focusInfo: busName => (busName === 'gone' ? null : { desktopEntry: 'videos', canRaise: false, title: '' }),
+        processId: (busName, onPid, onNone) => (busName === 'nopid' ? onNone() : onPid(42)),
+    };
+    const own = { title: 'Own', userTime: 5, pid: 42 };
+    const closedOne = { title: 'Closed', userTime: 50, pid: 42 };
+    const finderWindows = {
+        ofApp: () => [{ title: 'Other process', userTime: 99, pid: 7 }, own, closedOne],
+        ofPid: () => [],
+        describe: window => window,
+    };
+    for (const busName of ['videos', 'nopid', 'gone'])
+        Focus.findPlayerWindow(busName, finder, finderWindows, window => found.push(window.title), () => found.push('none'));
+    Focus.findPlayerWindow('videos', finder, finderWindows, window => found.push(window.title), () => found.push('none'), new Set([closedOne]));
+    check(`media window: own process only, the window used last, else none; an excluded window is left out (${found})`,
+        `${found}` === 'Closed,none,none,Own');
+
+    const Titles = load('./mediaWindowTitles');
+    const players = fakeTitlePlayers();
+    const set = players.set;
+    const byPid = { 42: [{ title: 'First clip', userTime: 3, pid: 42 }, { title: 'Second clip', userTime: 8, pid: 42 }], 43: [] };
+    const windows = fakeTitleWindows(byPid);
+    const watched = windows.watched;
     const titles = new Titles.MediaWindowTitles(players, windows);
-    titles.follow(['videos', 'nowindow']);
-    titles.follow(['videos', 'nowindow']);
-    check(`media window titles: one process lookup per player while one is pending (${pidAnswers.length})`, pidAnswers.length === 2);
-    answer({ videos: 42, nowindow: 43 });
+    titles.follow(untitled('videos', 'nowindow'));
+    titles.follow(untitled('videos', 'nowindow'));
+    check(`media window titles: one process lookup per player while one is pending (${players.pending.length})`, players.pending.length === 2);
+    players.answer({ videos: 42, nowindow: 43 });
     check(`media window titles: the window used last gives the title, no window gives none (${set})`,
         `${set}` === 'videos=Second clip,nowindow=null' && watched.length === 1 && watched[0].window.title === 'Second clip');
     set.length = 0;
@@ -1675,39 +1749,197 @@ function testMediaWindowTitles() {
     watched[0].onTitle();
     check(`media window titles: a title change reaches the block (${set})`, `${set}` === 'videos=Renamed clip');
     set.length = 0;
-    titles.follow(['videos', 'nowindow']);
-    check(`media window titles: a followed window is not looked up again, a player without one is (${pidAnswers.map(a => a.busName)})`,
-        `${pidAnswers.map(a => a.busName)}` === 'nowindow');
+    titles.follow(untitled('videos', 'nowindow'));
+    check(`media window titles: a followed window is not looked up again, a player without one is (${players.pending.map(a => a.busName)})`,
+        `${players.pending.map(a => a.busName)}` === 'nowindow');
     byPid[43] = [{ title: 'Late window', userTime: 1, pid: 43 }];
-    answer({ nowindow: 43 });
+    players.answer({ nowindow: 43 });
     check(`media window titles: a window that appeared later is found at the next follow (${set})`, `${set}` === 'nowindow=Late window');
     set.length = 0;
     const videosWatch = watched[0];
-    titles.follow(['nowindow']);
-    check('media window titles: a player that got a track title (or left) has its window released',
-        videosWatch.released && !watched[1].released);
-    titles.follow(['nowindow', 'videos']);
-    answer({ videos: 42 });
+    titles.follow(untitled('nowindow'));
+    check(`media window titles: a player that got a track title has its window released and its window title cleared (${set})`,
+        videosWatch.released && !watched[1].released && `${set}` === 'videos=null');
+
+    // Two windows: the one used last closes, the other one takes over.
+    titles.follow(untitled('nowindow', 'videos'));
+    players.answer({ videos: 42 });
     set.length = 0;
     const closing = watched[watched.length - 1];
     closing.onGone();
     check(`media window titles: a window that goes away clears the title (${set})`, `${set}` === 'videos=null');
     set.length = 0;
-    const closedWindow = closing.window;
-    byPid[42] = [closedWindow];
-    titles.follow(['nowindow', 'videos']);
-    answer({ videos: 42 });
-    check(`media window titles: the window gone is not taken again (${set})`, `${set}` === 'videos=null' && watched[watched.length - 1] === closing);
-    titles.follow(['nowindow', 'videos']);
+    titles.follow(untitled('nowindow', 'videos'));
+    players.answer({ videos: 42 });
+    check(`media window titles: the window gone is left out, the other window of the player gives the title (${set})`,
+        `${set}` === 'videos=First clip' && watched[watched.length - 1] !== closing && watched[watched.length - 1].window.title === 'First clip');
+
+    // On menu opening the windows are looked for again: a window used since takes over.
+    set.length = 0;
+    const firstWatch = watched[watched.length - 1];
+    titles.follow(untitled('nowindow', 'videos'));
+    check('media window titles: a player change does not look again for a player with a window',
+        !players.pending.some(a => a.busName === 'videos'));
+    byPid[42].push({ title: 'Third clip', userTime: 90, pid: 42 });
+    titles.follow(untitled('nowindow', 'videos'), true);
+    players.answer({ videos: 42, nowindow: 43 });
+    check(`media window titles: on menu opening the window used last since takes over, the old watch released (${set})`,
+        `${set}` === 'videos=Third clip' && firstWatch.released && watched[watched.length - 1].window.title === 'Third clip'
+        && !watched[watched.length - 1].released);
+    set.length = 0;
+    const thirdWatch = watched[watched.length - 1];
+    const watchesBefore = watched.length;
+    titles.follow(untitled('nowindow', 'videos'), true);
+    players.answer({ videos: 42, nowindow: 43 });
+    check('media window titles: the same window found again keeps its watch, no update',
+        watched.length === watchesBefore && !thirdWatch.released && set.length === 0);
+
+    // A bus name taken over by another process: a new entry, the late reply for the old dropped.
+    titles.follow(untitled('nowindow', 'videos').map(p => ({ ...p })), true);
+    const oldReply = players.pending.find(a => a.busName === 'videos');
+    players.pending = players.pending.filter(a => a !== oldReply);
+    set.length = 0;
+    titles.follow([{ busName: 'nowindow', owner: ':owner.nowindow' }, { busName: 'videos', owner: ':new.owner' }]);
+    check(`media window titles: a new owner releases the old entry and looks again (${set}, ${players.pending.map(a => a.busName)})`,
+        thirdWatch.released && `${set}` === 'videos=null' && players.pending.some(a => a.busName === 'videos'));
+    set.length = 0;
+    oldReply.onPid(42);
+    check(`media window titles: the late reply for the old owner is dropped (${set})`, set.length === 0);
+    players.answer({ videos: 42, nowindow: 43 });
+    check(`media window titles: the new owner gets its own title (${set})`, set.includes('videos=Third clip'));
+
+    titles.follow(untitled('nowindow', 'videos'));
+    set.length = 0;
     titles.destroy();
     const watchCount = watched.length;
+    const afterDestroy = [...set];
     set.length = 0;
     byPid[42] = [{ title: 'After destroy', userTime: 1, pid: 42 }];
-    answer({ videos: 42 });
-    titles.follow(['videos']);
-    check(`media window titles: destroy releases every window, late replies and follows do nothing (${set})`,
+    players.answer({ videos: 42 });
+    titles.follow(untitled('videos'));
+    check(`media window titles: destroy releases every window, late replies and follows do nothing (${afterDestroy})`,
         watched.every(watch => watch.released || watch === closing) && watched.length === watchCount && set.length === 0
-        && pidAnswers.length === 0);
+        && players.pending.length === 0);
+}
+
+// The real watchTitle() on a fake Meta.Window recording connect and disconnect.
+function testMediaWindowsWatch() {
+    const Windows = load('./mediaWindows').CINNAMON_WINDOWS;
+    const log = [];
+    const handlers = new Map();
+    let nextId = 1;
+    const window = {
+        connect: (signal, handler) => {
+            const id = nextId++;
+            handlers.set(id, { signal, handler });
+            log.push(`connect ${signal}`);
+            return id;
+        },
+        disconnect: id => {
+            handlers.delete(id);
+            log.push(`disconnect ${id}`);
+        },
+    };
+    const emit = signal => [...handlers.values()].filter(h => h.signal === signal).forEach(h => h.handler(window));
+    let titles = 0;
+    let gone = 0;
+    const release = Windows.watchTitle(window, () => titles++, () => gone++);
+    emit('notify::title');
+    check(`media watch: notify::title and unmanaged connected, a title change reaches onTitle (${log})`,
+        `${log}` === 'connect notify::title,connect unmanaged' && titles === 1);
+    release();
+    check(`media watch: release disconnects both handlers (${log.slice(2)})`, `${log.slice(2)}` === 'disconnect 1,disconnect 2' && handlers.size === 0);
+    release();
+    check('media watch: a second release does nothing', log.length === 4);
+    log.length = 0;
+    const order = [];
+    Windows.watchTitle(window, () => {}, () => order.push(`gone with ${handlers.size} handlers`));
+    emit('unmanaged');
+    check(`media watch: unmanaged disconnects both handlers before onGone, once (${log}; ${order})`,
+        `${log}` === 'connect notify::title,connect unmanaged,disconnect 3,disconnect 4' && `${order}` === 'gone with 0 handlers'
+        && handlers.size === 0 && gone === 0);
+}
+
+// The media controls' flow on the fake session bus and fake windows: the follow before the
+// blocks, the players and the window titles started and stopped together.
+async function testMediaControls() {
+    const Controls = load('./mediaControls');
+    const bus = new FakeMprisBus();
+    bus.addPlayer('org.mpris.MediaPlayer2.anyplayer', ':1.80', { Identity: new GLib.Variant('s', 'Any player') },
+        mprisPlayer(null, null, 'Playing'));
+    bus.addPlayer('org.mpris.MediaPlayer2.music', ':1.81', { Identity: new GLib.Variant('s', 'Music') },
+        mprisPlayer('Song', null, 'Paused'));
+    bus.pids = new Map([[':1.80', 80]]);
+    const byPid = { 80: [{ title: 'A clip name', userTime: 1, pid: 80 }] };
+    const windows = fakeTitleWindows(byPid);
+    const shown = [];
+    const controls = new Controls.MediaControls(blocks => shown.push(blocks), windows, bus);
+    await nextIdle();
+    await nextIdle();
+    const last = () => shown[shown.length - 1] || [];
+    const any = () => last().find(block => block.name === 'Any player');
+    check(`media controls: a player without a track title is followed and titled with its window (${any() && any().text.title})`,
+        any() && any().text.title === 'A clip name' && any().playing === true && windows.watched.length === 1);
+    check('media controls: a titled player is not followed', last().find(block => block.name === 'Music').text.title === 'Song');
+    byPid[80].push({ title: 'Newer window', userTime: 9, pid: 80 });
+    controls.menuOpened();
+    await nextIdle();
+    check(`media controls: menu opening looks for the windows again (${any() && any().text.title})`,
+        any() && any().text.title === 'Newer window' && windows.watched[0].released);
+    const subscriptions = bus.subscriptions.size;
+    controls.destroy();
+    check(`media controls: destroy releases the window watches and the bus subscriptions (${subscriptions} before)`,
+        subscriptions > 0 && bus.subscriptions.size === 0 && windows.watched.every(watch => watch.released));
+}
+
+// The accent of the playing bar, read from a fake theme node.
+function testThemeColors() {
+    const ThemeColors = load('./themeColors');
+    const Constants = load('./constants');
+    const actor = colors => ({
+        get_stage: () => ({}),
+        get_theme_node: () => ({
+            lookup_color: property => (colors[property] ? [true, colors[property]] : [false, null]),
+        }),
+    });
+    const themed = ThemeColors.readTileColors(actor({
+        [Constants.THEME_TILE_COLOR]: { red: 51, green: 53, blue: 69, alpha: 255 },
+        [Constants.THEME_TILE_CHECKED_COLOR]: { red: 189, green: 147, blue: 249, alpha: 128 },
+    }));
+    check(`theme colours: the accent is the checked tile colour made opaque (${themed && themed.accent}, ${themed && themed.normal.checked})`,
+        themed && themed.accent === 'rgba(189, 147, 249, 1.000)' && themed.normal.checked === 'rgba(189, 147, 249, 0.502)');
+    check('theme colours: no checked colour in the theme, no colours (the stylesheet fallback)',
+        ThemeColors.readTileColors(actor({ [Constants.THEME_TILE_COLOR]: { red: 1, green: 1, blue: 1, alpha: 255 } })) === null
+        && ThemeColors.readTileColors({ get_stage: () => null }) === null);
+}
+
+// Every quick-settings-* style class the applet's JavaScript sets has a selector in its
+// stylesheet (the other classes, applet-label and system-status-icon, come from the theme).
+// Listed apart: an existing class without any selector, kept until its owner decides.
+const STYLE_CLASSES_WITHOUT_SELECTOR = ['quick-settings-list-label'];
+function testStyleClassesHaveSelectors() {
+    const dir = Gio.File.new_for_path(appletDir);
+    const enumerator = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+    const css = readText(`${appletDir}/stylesheet.css`);
+    const classes = new Set();
+    let info;
+    while ((info = enumerator.next_file(null)) !== null) {
+        const name = info.get_name();
+        if (!name.endsWith('.js'))
+            continue;
+        const source = readText(`${appletDir}/${name}`);
+        const patterns = [/style_class:\s*'([^']+)'/g, /style_class_name\('([^']+)'\)/g, /_STYLE_CLASS\s*=\s*'([^']+)'/g,
+            /(?:plainLabel|symbolicIcon)\([^)]*'(quick-settings-[^']+)'\)/g];
+        for (const pattern of patterns) {
+            for (const match of source.matchAll(pattern))
+                match[1].split(/\s+/).forEach(styleClass => classes.add(styleClass));
+        }
+    }
+    const missing = [...classes].filter(styleClass => styleClass.startsWith('quick-settings-')
+        && !STYLE_CLASSES_WITHOUT_SELECTOR.includes(styleClass))
+        .filter(styleClass => !new RegExp(`\\.${styleClass.replace(/[-]/g, '\\-')}(?![\\w-])`).test(css)).sort();
+    check(`stylesheet: every style class set in the JavaScript has a selector (${classes.size} classes; missing: ${missing})`,
+        classes.size > 20 && missing.length === 0);
 }
 
 async function testChargeLimit() {
@@ -2610,6 +2842,10 @@ async function main() {
     testChargeHelperAgrees();
     testMediaFocus();
     testMediaWindowTitles();
+    testMediaWindowsWatch();
+    await testMediaControls();
+    testThemeColors();
+    testStyleClassesHaveSelectors();
     await testMediaPlayers();
     testBatteryModel();
     testMicMute();

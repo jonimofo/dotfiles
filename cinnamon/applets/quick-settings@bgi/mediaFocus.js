@@ -11,13 +11,15 @@ const MediaModel = require('./mediaModel');
 // through @windows, so this runs on fakes in the tests.
 // @players: MediaPlayers (focusInfo, processId).
 // @windows: { ofApp(desktopEntry), ofPid(pid), describe(window) -> { title, userTime, pid } }.
-function findPlayerWindow(busName, players, windows, onWindow, onNone) {
+// @excluded: optional Set of windows left out before the choice (windows already closed).
+function findPlayerWindow(busName, players, windows, onWindow, onNone, excluded = null) {
     const info = players.focusInfo(busName);
     if (!info) {
         onNone();
         return;
     }
-    const pickAmong = candidates => {
+    const pickAmong = all => {
+        const candidates = excluded ? all.filter(window => !excluded.has(window)) : all;
         const index = MediaModel.chooseWindow(candidates.map(window => windows.describe(window)), info.title);
         return index < 0 ? null : candidates[index];
     };

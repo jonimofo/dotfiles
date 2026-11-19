@@ -42,10 +42,10 @@ class MediaPlayers {
         return MediaModel.visibleBlocks([...this._players.values()], Constants.MEDIA_MAX_PLAYERS);
     }
 
-    // The bus names of the players whose metadata has no track title.
+    // The players whose metadata has no track title, one per owner like the blocks:
+    // [{ busName, owner }] (MediaModel.untitledPlayers).
     get untitled() {
-        return [...this._players.values()].filter(player => !MediaModel.hasTrackTitle(player.metadata))
-            .map(player => player.busName);
+        return MediaModel.untitledPlayers([...this._players.values()]);
     }
 
     // @title: the title of the player's own window (untrusted text), or null for none. Kept

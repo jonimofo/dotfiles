@@ -322,8 +322,9 @@ the menu:
   - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
     dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
 - Media controls, under the tiles: one block per media player on the session bus (any
-  MPRIS player: VLC, GNOME Videos, a browser playing a video...), at most three, by player
-  name. The title in bold, then `artist · player` with the player name in italic (the
+  MPRIS player: VLC, GNOME Videos, a browser playing a video...), at most three, shown by
+  player name. With more than three, the ones kept are the playing players first, then the
+  paused ones, then the ones with a title. The title in bold, then `artist · player` with the player name in italic (the
   player alone without an artist; a long artist is cut first), and previous, play or pause,
   next as bare icons on that line. A player that publishes no track title (GNOME Videos
   playing a file without a title tag) shows the title of its own window instead, which for
@@ -451,10 +452,10 @@ signals, the ones Cinnamon's own overview and window menu use.
   come forward only through MPRIS Raise, when they offer it, and a sandboxed player without
   a track title shows its name alone.
 - A player without a track title takes the title of the window click-to-focus would bring
-  forward (the one used last among several), chosen when the player appears or its window
-  shows up, and kept until that window closes. A window opened after the player is found at
-  the next player change or menu opening.
-- Every player on the bus now has a block, also one that is stopped with nothing loaded: it
+  forward (the one used last among several). That window is chosen again at each menu
+  opening, and a window that closes hands over to the player's other windows. A window
+  opened after the player is found at the next player change or menu opening, not at once.
+- Every player on the bus has a block, also one that is stopped with nothing loaded: it
   shows its name alone, with the play button.
 
 - Microphone and Mic mute are dimmed while there is no input source (the internal microphone

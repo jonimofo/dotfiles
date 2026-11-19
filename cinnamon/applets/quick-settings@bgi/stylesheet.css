@@ -174,8 +174,8 @@
     border-radius: 2px;
 }
 
-/* The title and the artist and player line: one clickable area, 4 px in from the block's
-   edge so the text sits where it did. */
+/* The title and the artist and player line: one clickable area, after the bar and the row's
+   spacing, its own padding keeping the text off the hover tint's edge. */
 .quick-settings-media-text {
     padding: 2px 4px;
     border-radius: 10px;

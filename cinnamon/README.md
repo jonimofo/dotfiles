@@ -74,8 +74,8 @@ every other screen has its own strip at its very top.
 
 - Super opens and closes Scale.
 - Typing searches the applications of the Menu. Arrows select, Enter or a click launches,
-  Escape clears the field, then closes Scale. While the field has text, a click on another
-  screen's window area does nothing.
+  Escape clears the field, then closes Scale. Ctrl+Backspace and Ctrl+Delete also clear
+  it. While the field has text, a click on another screen's window area does nothing.
 - Each thumbnail shows the windows that workspace has on that strip's screen.
 - A click on a thumbnail enters that workspace: Scale closes on its desktop. A click on
   the current workspace's thumbnail closes Scale.

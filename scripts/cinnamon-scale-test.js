@@ -393,13 +393,15 @@ function makeImports(monitorCount, primaryIndex) {
         BUTTON_SECONDARY: BUTTON.SECONDARY,
         KEY_Escape: ESCAPE_KEY,
         KEY_BackSpace: 0xff08,
+        KEY_Delete: 0xffff,
+        KEY_KP_Delete: 0xff9f,
         KEY_Return: 0xff0d,
         KEY_KP_Enter: 0xff8d,
         KEY_Left: 0xff51,
         KEY_Up: 0xff52,
         KEY_Right: 0xff53,
         KEY_Down: 0xff54,
-        ModifierType: { CONTROL_MASK: 1 << 2, MOD1_MASK: 1 << 3, MOD4_MASK: 1 << 6, SUPER_MASK: 1 << 26 },
+        ModifierType: { SHIFT_MASK: 1 << 0, CONTROL_MASK: 1 << 2, MOD1_MASK: 1 << 3, MOD4_MASK: 1 << 6, SUPER_MASK: 1 << 26 },
         ActorAlign: { CENTER: 1, END: 2 },
         ScrollDirection: { UP: 0, DOWN: 1, LEFT: 2, RIGHT: 3, SMOOTH: 4 },
         EventType: { SCROLL: 1, KEY_PRESS: 2, KEY_RELEASE: 3 },
@@ -427,7 +429,7 @@ function makeImports(monitorCount, primaryIndex) {
     const emptyMenu = { iter: () => ({ next: () => CMenu.TreeItemType.INVALID }) };
     const Cinnamon = {
         AppSystem: { get_default: () => appSystem },
-        get_event_state: () => 0,
+        get_event_state: event => (event && event.state) || 0,
         util_set_hidden_from_pick: (actor, hidden) => (actor.hiddenFromPick = hidden),
         // Each fake actor's box on the stage, from its position and size.
         util_get_transformed_allocation: actor => ({ x1: actor.x, y1: actor.y, x2: actor.x + actor.width, y2: actor.y + actor.height }),
@@ -603,8 +605,8 @@ function makeSiblingStubs(env) {
     };
 }
 
-function keyEvent(character, symbol = 0) {
-    return { get_key_unicode: () => character, get_key_symbol: () => symbol };
+function keyEvent(character, symbol = 0, state = 0) {
+    return { get_key_unicode: () => character, get_key_symbol: () => symbol, state };
 }
 
 // A key typed in Scale: it reaches Workspace._onKeyPress, which the search wraps.
@@ -632,6 +634,38 @@ function bigViewArea(env, index) {
 function openScale(env) {
     env.Main.overview.visible = true;
     env.Main.overview.emit('showing');
+}
+
+// The search has no caret: Ctrl with Backspace or Delete empties it, whatever else is held.
+function testSearchClearShortcut() {
+    const env = setUp(1, 0);
+    env.loadExtension().enable();
+    openScale(env);
+    const text = () => searchBarOf(env).child.get_text();
+    const { KEY_BackSpace, KEY_Delete, KEY_KP_Delete, ModifierType } = env.Clutter;
+    const typeWord = () => Array.from('files').forEach(character => typeKey(env, keyEvent(character)));
+
+    typeWord();
+    typeKey(env, keyEvent(null, KEY_BackSpace));
+    check('search: Backspace alone removes one character', text() === 'file');
+    check('search: Delete alone leaves the text, and stays the search\'s key',
+        typeKey(env, keyEvent(null, KEY_Delete)) === true && text() === 'file');
+
+    typeKey(env, keyEvent(null, KEY_BackSpace, ModifierType.CONTROL_MASK));
+    check('search: Ctrl+Backspace empties the field', text() === '');
+
+    for (const symbol of [KEY_Delete, KEY_KP_Delete]) {
+        typeWord();
+        typeKey(env, keyEvent(null, symbol, ModifierType.CONTROL_MASK));
+        check(`search: Ctrl+Delete empties the field (key ${symbol.toString(16)})`, text() === '');
+    }
+
+    typeWord();
+    typeKey(env, keyEvent(null, KEY_BackSpace, ModifierType.CONTROL_MASK | ModifierType.SHIFT_MASK));
+    check('search: Ctrl+Shift+Backspace empties the field too', text() === '');
+
+    check('search: with an empty field Ctrl+Backspace is left to Scale',
+        typeKey(env, keyEvent(null, KEY_BackSpace, ModifierType.CONTROL_MASK)) !== true && text() === '');
 }
 
 // X-M1: while searching, Scale's windows are hidden on every screen but the result grid only
@@ -1895,6 +1929,7 @@ testPanelFallbacks();
 testThumbnailClickEntersWorkspace();
 testWheelKeepsScaleOpen();
 testSearchBlocksOtherScreens();
+testSearchClearShortcut();
 testMiddleClickDoesNothing();
 testDragHighlightsClearedOnDrop();
 testIconSizeAtDisplayScale();

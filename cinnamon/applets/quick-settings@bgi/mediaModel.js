@@ -35,21 +35,32 @@ function playerName(identity, busName) {
     return plainText(identity) || fallbackName(busName);
 }
 
-// { title, artist, player } for a block, or null when the metadata has no title. Line 2 is
-// artist then player: artist ends with the separator ("Artist · "), or is empty without an
-// artist, so the player name shows alone. @metadata: the unpacked Metadata map; @name: from
-// playerName().
-function blockText(metadata, name) {
-    const title = plainText(metadata ? metadata['xesam:title'] : null);
-    if (!title)
-        return null;
-    const artist = plainText(metadata['xesam:artist']);
+// Whether the metadata has a track title (xesam:title, once cleaned).
+function hasTrackTitle(metadata) {
+    return plainText(metadata ? metadata['xesam:title'] : null) !== '';
+}
+
+// { title, artist, player } for a block. Line 1 is the track title (xesam:title), else
+// @windowTitle (the title of the player's own window, for a player that publishes no track
+// title), else empty: the player name then shows alone on line 2. Line 2 is artist then
+// player: artist ends with the separator ("Artist · "), or is empty without an artist, so
+// the player name shows alone. @metadata: the unpacked Metadata map; @name: from
+// playerName(); @windowTitle: untrusted text, cleaned and cut like a track title.
+function blockText(metadata, name, windowTitle = null) {
+    const title = plainText(metadata ? metadata['xesam:title'] : null) || plainText(windowTitle);
+    const artist = metadata ? plainText(metadata['xesam:artist']) : '';
     const player = PanelText.cutText(name, Constants.MEDIA_PLAYER_NAME_MAX);
     return {
-        title: PanelText.cutText(title, Constants.MEDIA_TITLE_MAX),
+        title: title ? PanelText.cutText(title, Constants.MEDIA_TITLE_MAX) : '',
         artist: artist ? `${PanelText.cutText(artist, Constants.MEDIA_ARTIST_MAX)}${Constants.MEDIA_PLAYER_SEPARATOR}` : '',
         player,
     };
+}
+
+// Whether the Player properties say it plays now (PlaybackStatus Playing): the block's
+// accent bar shows only then.
+function isPlaying(properties) {
+    return Boolean(properties) && properties.PlaybackStatus === Constants.MPRIS_PLAYING;
 }
 
 // The three buttons from the Player properties: { previous, playPause, next }, each
@@ -65,11 +76,10 @@ function buttonStates(player) {
         [key, { ...definitions[key], working: control && capable[key] === true }]));
 }
 
-// The blocks to show. @players: [{ busName, owner, identity, metadata, properties }]. Two
-// names of one owner (a player and its instance name) count once, the longer name kept;
-// players without a title are left out; order by display name, then bus name; at most @max.
-// Returns [{ busName, name, text, buttons }].
-function visibleBlocks(players, max) {
+// One player per owner: two names of one owner (a player and its instance name) count
+// once, the longer name kept. A player without a known owner counts alone. @players: as
+// visibleBlocks(); the order of the result is not meaningful.
+function onePerOwner(players) {
     const byOwner = new Map();
     for (const player of players) {
         const key = player.owner || player.busName;
@@ -77,14 +87,52 @@ function visibleBlocks(players, max) {
         if (!kept || player.busName.length > kept.busName.length)
             byOwner.set(key, player);
     }
-    return [...byOwner.values()]
+    return [...byOwner.values()];
+}
+
+// The players of onePerOwner() whose metadata has no track title: the ones whose window
+// title is followed. Returns [{ busName, owner }].
+function untitledPlayers(players) {
+    return onePerOwner(players).filter(player => !hasTrackTitle(player.metadata))
+        .map(player => ({ busName: player.busName, owner: player.owner || null }));
+}
+
+// Which blocks a cap keeps first, lowest first: playing, paused, titled (a track or window
+// title), then the rest (a stopped player with nothing to show). Only the choice of the kept
+// blocks uses it: they are shown in name order, so a play or pause never reorders them.
+function keepRank(block, properties) {
+    if (block.playing)
+        return 0;
+    if (properties.PlaybackStatus === Constants.MPRIS_PAUSED)
+        return 1;
+    return block.text.title ? 2 : 3;
+}
+
+function byName(one, two) {
+    return one.name.localeCompare(two.name) || one.busName.localeCompare(two.busName);
+}
+
+// The blocks to show. @players: [{ busName, owner, identity, metadata, properties,
+// windowTitle }], one per owner (onePerOwner); every announced player gets a block, titled
+// as blockText() says. Over @max, the ones kept are chosen by keepRank(), ties by name; the
+// kept blocks are ordered by display name, then bus name. Returns [{ busName, name, text,
+// buttons, playing }].
+function visibleBlocks(players, max) {
+    const ranked = onePerOwner(players)
         .map(player => {
             const name = playerName(player.identity, player.busName);
-            return { busName: player.busName, name, text: blockText(player.metadata, name), buttons: buttonStates(player.properties || {}) };
+            const properties = player.properties || {};
+            const block = {
+                busName: player.busName,
+                name,
+                text: blockText(player.metadata, name, player.windowTitle),
+                buttons: buttonStates(properties),
+                playing: isPlaying(properties),
+            };
+            return { block, rank: keepRank(block, properties) };
         })
-        .filter(block => block.text)
-        .sort((one, two) => one.name.localeCompare(two.name) || one.busName.localeCompare(two.busName))
-        .slice(0, max);
+        .sort((one, two) => one.rank - two.rank || byName(one.block, two.block));
+    return ranked.slice(0, max).map(entry => entry.block).sort(byName);
 }
 
 // How to turn the blocks on screen (@oldOrder, bus names top to bottom) into @newOrder
@@ -130,11 +178,12 @@ function isTinted(index) {
 }
 
 // Brings the block views in line with @blocks (MediaModel.visibleBlocks(), in order): the
-// moves of blockMoves() applied through @actions, then every view updated and tinted for its
-// new place. @views: Map of bus name to view ({ update(block), setTinted(bool), destroy() });
-// @onScreen: the bus names in screen order; @actions: { create(busName) -> view,
-// insert(view, index), move(view, index) }.
-function syncBlockViews(views, onScreen, blocks, actions) {
+// moves of blockMoves() applied through @actions, then every view updated, tinted for its
+// new place and given @accent (the playing bar's colour, ThemeColors' accent or null for the
+// stylesheet's). @views: Map of bus name to view ({ update(block), setTinted(bool),
+// setAccent(accent), destroy() }); @onScreen: the bus names in screen order; @actions:
+// { create(busName) -> view, insert(view, index), move(view, index) }.
+function syncBlockViews(views, onScreen, blocks, actions, accent = null) {
     const { remove, steps } = blockMoves(onScreen, blocks.map(block => block.busName));
     for (const busName of remove) {
         views.get(busName).destroy();
@@ -151,6 +200,7 @@ function syncBlockViews(views, onScreen, blocks, actions) {
     }
     blocks.forEach((block, index) => {
         const view = views.get(block.busName);
+        view.setAccent(accent);
         view.update(block);
         view.setTinted(isTinted(index));
     });

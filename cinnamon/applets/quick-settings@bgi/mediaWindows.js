@@ -7,7 +7,8 @@ const Constants = require('./constants');
 // caller sorts by user time), a process's windows from the window actors, kept only when
 // Main.isInteresting() (the filter of Alt-Tab and Expo), and activation with
 // Main.activateWindow(window, time), the call of the stock window list: the window manager
-// switches to the window's workspace, unminimises and focuses it.
+// switches to the window's workspace, unminimises and focuses it. watchTitle() follows one
+// window for MediaWindowTitles, through its own signals: no polling.
 const CINNAMON_WINDOWS = {
     ofApp(desktopEntry) {
         const app = Cinnamon.AppSystem.get_default().lookup_app(`${desktopEntry}${Constants.MEDIA_DESKTOP_FILE_SUFFIX}`);
@@ -26,5 +27,25 @@ const CINNAMON_WINDOWS = {
     // @time: the click's event time.
     activate(window, time) {
         Main.activateWindow(window, time);
+    },
+
+    // @onTitle() after each change of the window's title; @onGone() once, when the window
+    // manager lets the window go (both handlers are released then). Returns release(), which
+    // disconnects both handlers; calling it again does nothing.
+    watchTitle(window, onTitle, onGone) {
+        let ids = [];
+        const release = () => {
+            for (const id of ids)
+                window.disconnect(id);
+            ids = [];
+        };
+        ids = [
+            window.connect('notify::title', () => onTitle()),
+            window.connect('unmanaged', () => {
+                release();
+                onGone();
+            }),
+        ];
+        return release;
     },
 };

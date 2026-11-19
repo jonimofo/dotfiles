@@ -1942,6 +1942,51 @@ function testStyleClassesHaveSelectors() {
         classes.size > 20 && missing.length === 0);
 }
 
+// Release audit M3: the gating of the Charge tile, on a fake ChargeLimit. A hidden tile
+// reads nothing and never returns to the limit on its own (the only write without a click);
+// a shown one gets every battery change.
+function testChargeGate() {
+    const calls = [];
+    const fakeCharge = {
+        refresh: () => calls.push('refresh'),
+        onBattery: battery => calls.push(battery),
+    };
+    const seen = () => calls.map(call => (call === 'refresh' ? call : 'battery')).join(' ');
+    const ChargeGate = load('./chargeGate');
+    const Constants = load('./constants');
+    const gate = new ChargeGate.ChargeGate(fakeCharge);
+    const unplugged = { onAc: false, full: true };
+    gate.onBattery(unplugged);
+    gate.setShown(false);
+    check(`charge gate: a hidden tile reads nothing and gets no battery change (${seen()})`, calls.length === 0);
+    gate.setShown(true);
+    check(`charge gate: showing the tile reads once (${seen()})`, `${calls}` === 'refresh');
+    gate.setShown(true);
+    check(`charge gate: a layout change that keeps it shown reads nothing more (${seen()})`, `${calls}` === 'refresh');
+    calls.length = 0;
+    gate.onBattery(unplugged);
+    gate.onBattery(null);
+    check('charge gate: a shown tile gets each battery change, as given',
+        calls.length === 2 && calls[0] === unplugged && calls[1] === null);
+    calls.length = 0;
+    gate.setShown(false);
+    gate.onBattery(unplugged);
+    check(`charge gate: hidden again, no read and no battery change (${seen()})`, calls.length === 0);
+    gate.setShown(true);
+    gate.onBattery(unplugged);
+    check(`charge gate: shown again, one read then the battery changes (${seen()})`,
+        calls.length === 2 && calls[0] === 'refresh' && calls[1] === unplugged);
+
+    // The applet's two calls, which no fake can reach: the battery feed and the layout.
+    const appletSource = readText(`${appletDir}/applet.js`);
+    check('charge gate: applet.js feeds every battery change to the gate',
+        appletSource.includes('this._chargeGate.onBattery(battery);'));
+    check("charge gate: applet.js gives the gate the layout of the 'charge-limit' tile",
+        appletSource.includes("this._chargeGate.setShown(tiles.includes('charge-limit'));"));
+    check("charge gate: 'charge-limit' is the Charge tile's id",
+        Constants.TILES.some(tile => tile.id === 'charge-limit'));
+}
+
 async function testChargeLimit() {
     const Model = load('./chargeModel');
     const Constants = load('./constants');
@@ -2838,6 +2883,7 @@ async function main() {
     testKeyboardLight();
     testAirplaneMode();
     testMediaModel();
+    testChargeGate();
     await testChargeLimit();
     testChargeHelperAgrees();
     testMediaFocus();

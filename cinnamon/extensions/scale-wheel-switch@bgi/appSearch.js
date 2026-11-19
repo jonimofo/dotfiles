@@ -360,6 +360,24 @@ var AppSearch = class AppSearch {
     }
 };
 
+// The search sees the key before Scale; when the search fails on it, the failure is logged.
+// While the field has text the key stays taken: Scale's handler could open a window hidden
+// by the search (Return, Space, Escape). With an empty field Scale's handler gets the key.
+function wrapOnKeyPress(original) {
+    return function(actor, event) {
+        const searching = Boolean(activeSearch) && activeSearch._isSearching();
+        try {
+            if (activeSearch && activeSearch.handleKeyPress(event))
+                return true;
+        } catch (e) {
+            UiHelpers.logFailure('search: handling a key', e);
+            if (searching)
+                return true;
+        }
+        return original.call(this, actor, event);
+    };
+}
+
 // Scale's key handling starts in Workspace._onKeyPress, looked up on each key: wrap it so
 // the search sees the key first. Undone in disable().
 function enable() {
@@ -367,13 +385,8 @@ function enable() {
     if (originalOnKeyPress)
         return;
 
-    const prototype = Workspace.Workspace.prototype;
-    originalOnKeyPress = prototype._onKeyPress;
-    prototype._onKeyPress = function(actor, event) {
-        if (activeSearch && activeSearch.handleKeyPress(event))
-            return true;
-        return originalOnKeyPress.call(this, actor, event);
-    };
+    originalOnKeyPress = UiHelpers.patchMethod(Workspace.Workspace.prototype,
+        '_onKeyPress', wrapOnKeyPress, 'search');
 }
 
 function disable() {

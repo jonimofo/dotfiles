@@ -67,6 +67,25 @@ function createDragClone(actor) {
     return new Clutter.Clone({ source: actor, x, y, width, height });
 }
 
+// The extension's own step inside a wrapped Cinnamon method failed: logged with what was
+// attempted, and the wrapper still returns what Cinnamon's method returned.
+function logFailure(attempt, error) {
+    global.logError(`[scale-wheel-switch] ${attempt} failed: ${error}`);
+}
+
+// Replaces @prototype[@name] with makeWrapper(original) and returns the original. When it is
+// not a function there (another Cinnamon version), the prototype is left as it is, the
+// failure is logged once and null is returned: @feature stays off, the rest keeps running.
+function patchMethod(prototype, name, makeWrapper, feature) {
+    const original = prototype[name];
+    if (typeof original !== 'function') {
+        logFailure(`${feature}: patching ${name}`, `it is ${typeof original}, not a function; ${feature} stays off`);
+        return null;
+    }
+    prototype[name] = makeWrapper(original);
+    return original;
+}
+
 // A constructor that puts @object's actors on screen calls this for that part: when it
 // fails, @object is destroyed, so nothing stays on screen, and the error goes on.
 function destroyOnFailure(object, build) {

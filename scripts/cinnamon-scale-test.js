@@ -1329,6 +1329,77 @@ function testWindowDragUnchanged() {
     check('window drag: the picture snaps back to the window', windowClone.getDragActorSource() === windowClone.actor);
 }
 
+// Release audit M4: a throw in the extension's own step of a wrapped Scale method lost
+// Scale's result and could leave Scale's input grab held; a Cinnamon without the method
+// broke enable(). The original always runs and its result is returned, the failure is
+// logged; a missing original leaves the prototype as it was.
+function testPrototypeWrappersFailSafe() {
+    const env = setUp();
+    const logs = [];
+    global.logError = message => logs.push(message);
+    global.get_pointer = () => [0, 0];
+    class WorkspaceMonitor {}
+    const scaleClone = new env.WindowClone();
+    WorkspaceMonitor.prototype._addWindowClone = () => scaleClone;
+    env.imports.ui.workspace.WorkspaceMonitor = WorkspaceMonitor;
+    env.Main.overview.workspacesView._workspaces = [];
+    const windowDrag = env.require('./windowDrag');
+    windowDrag.enable();
+    const added = new WorkspaceMonitor()._addWindowClone(null);
+    check(`wrappers: a failing drag setup still returns Scale's clone, and logs (${logs})`,
+        added === scaleClone && logs.length === 1 && logs[0].startsWith('[scale-wheel-switch] window drag: making a window draggable failed: '));
+    windowDrag.disable();
+
+    logs.length = 0;
+    const windowClick = env.require('./windowClick');
+    windowClick.enable();
+    let reads = 0;
+    const flakyEvent = {
+        get_button: () => {
+            reads++;
+            if (reads === 1)
+                throw new Error('no button');
+            return BUTTON.PRIMARY;
+        },
+    };
+    const clickResult = new env.WindowClone()._onButtonRelease(null, flakyEvent);
+    check(`wrappers: a failing button read still gives Scale the click and its result, and logs (${logs})`,
+        clickResult === env.Clutter.EVENT_STOP && env.buttonReleases.join() === `${BUTTON.PRIMARY}`
+        && logs.length === 1 && logs[0] === '[scale-wheel-switch] window click: reading the button failed: Error: no button');
+    windowClick.disable();
+
+    logs.length = 0;
+    const extension = env.loadExtension();
+    extension.enable();
+    openScale(env);
+    const brokenKey = { get_key_unicode: () => { throw new Error('no key'); }, get_key_symbol: () => 0 };
+    const keyResult = typeKey(env, brokenKey);
+    check(`wrappers: a failing search still gives Scale the key and its result, and logs (${logs})`,
+        keyResult === false && env.keyPresses.length === 1 && env.keyPresses[0] === brokenKey
+        && logs.length === 1 && logs[0] === '[scale-wheel-switch] search: handling a key failed: Error: no key');
+    extension.disable();
+
+    // A Cinnamon without the three methods: nothing patched, one log each, disable() clean.
+    const bare = setUp();
+    const bareLogs = [];
+    global.logError = message => bareLogs.push(message);
+    class BareMonitor {}
+    bare.imports.ui.workspace.WorkspaceMonitor = BareMonitor;
+    delete bare.WindowClone.prototype._onButtonRelease;
+    delete bare.Workspace.prototype._onKeyPress;
+    const modules = ['./windowDrag', './windowClick', './appSearch'].map(name => bare.require(name));
+    const enabled = modules.every(module => !throws(() => module.enable()));
+    const untouched = !('_addWindowClone' in BareMonitor.prototype) && !('_onButtonRelease' in bare.WindowClone.prototype)
+        && !('_onKeyPress' in bare.Workspace.prototype);
+    check(`wrappers: a missing original leaves the prototype untouched and logs once each (${bareLogs})`,
+        enabled && untouched && bareLogs.length === 3
+        && bareLogs.every(message => message.includes('not a function')));
+    const disabled = modules.every(module => !throws(() => module.disable()));
+    check('wrappers: disable() after a skipped patch leaves the prototypes untouched',
+        disabled && !('_addWindowClone' in BareMonitor.prototype) && !('_onButtonRelease' in bare.WindowClone.prototype)
+        && !('_onKeyPress' in bare.Workspace.prototype));
+}
+
 function testThumbnailDragReordersWorkspaces() {
     const env = setUp(2, 0);
     env.imports.misc.signalManager.SignalManager = FakeSignalManager;
@@ -1786,6 +1857,7 @@ testFittingItemWidth();
 testReorderIndex();
 testThumbnailDragReordersWorkspaces();
 testWindowDragUnchanged();
+testPrototypeWrappersFailSafe();
 testDockMenuEntries();
 testDockMenuPosition();
 testDockMenuLifecycle();

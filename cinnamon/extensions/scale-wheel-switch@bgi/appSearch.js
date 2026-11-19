@@ -360,6 +360,20 @@ var AppSearch = class AppSearch {
     }
 };
 
+// The search sees the key before Scale; when the search fails on it, the failure is logged
+// and Scale's handler gets the key.
+function wrapOnKeyPress(original) {
+    return function(actor, event) {
+        try {
+            if (activeSearch && activeSearch.handleKeyPress(event))
+                return true;
+        } catch (e) {
+            UiHelpers.logFailure('search: handling a key', e);
+        }
+        return original.call(this, actor, event);
+    };
+}
+
 // Scale's key handling starts in Workspace._onKeyPress, looked up on each key: wrap it so
 // the search sees the key first. Undone in disable().
 function enable() {
@@ -367,13 +381,8 @@ function enable() {
     if (originalOnKeyPress)
         return;
 
-    const prototype = Workspace.Workspace.prototype;
-    originalOnKeyPress = prototype._onKeyPress;
-    prototype._onKeyPress = function(actor, event) {
-        if (activeSearch && activeSearch.handleKeyPress(event))
-            return true;
-        return originalOnKeyPress.call(this, actor, event);
-    };
+    originalOnKeyPress = UiHelpers.patchMethod(Workspace.Workspace.prototype,
+        '_onKeyPress', wrapOnKeyPress, 'search');
 }
 
 function disable() {

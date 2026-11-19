@@ -67,20 +67,30 @@ function forEachOpenClone(callback) {
     }
 }
 
+// Scale's own clone comes first and is always returned: a failure to make it draggable is
+// logged, and Scale goes on with a window that cannot be dragged.
+function wrapAddWindowClone(original) {
+    return function(win) {
+        const windowClone = original.call(this, win);
+        try {
+            makeDraggable(windowClone);
+        } catch (e) {
+            UiHelpers.logFailure('window drag: making a window draggable', e);
+        }
+        return windowClone;
+    };
+}
+
 // Scale builds its window clones in WorkspaceMonitor._addWindowClone: wrap it, undo in disable().
 function enable() {
     // Already patched: saving the wrapper as the original would make it permanent.
     if (originalAddWindowClone)
         return;
 
-    const prototype = Workspace.WorkspaceMonitor.prototype;
-    originalAddWindowClone = prototype._addWindowClone;
-    prototype._addWindowClone = function(win) {
-        const windowClone = originalAddWindowClone.call(this, win);
-        makeDraggable(windowClone);
-        return windowClone;
-    };
-    forEachOpenClone(makeDraggable);
+    originalAddWindowClone = UiHelpers.patchMethod(Workspace.WorkspaceMonitor.prototype,
+        '_addWindowClone', wrapAddWindowClone, 'window drag');
+    if (originalAddWindowClone)
+        forEachOpenClone(makeDraggable);
 }
 
 function disable() {

@@ -221,6 +221,19 @@ Prototype patches (3):
 - `WindowClone.prototype._onButtonRelease` (`workspace.js`), so a middle click no longer closes the application and a right click opens the window.
 - `Workspace.prototype._onKeyPress` (`workspace.js`), to send typed keys to the search first.
 
+Every prototype patch follows the same rules, so a failure in the extension never breaks Scale:
+
+- `enable()` patches through `uiHelpers.patchMethod()`: only when the original is a function.
+  Otherwise it logs once, leaves the prototype as it is and that feature stays off;
+  `disable()` then has nothing to restore.
+- The wrapper runs the original and returns its result, unless its own decision is to take
+  the event (a middle click, a key the search uses). Extra work that follows the original
+  (the window drag) runs after it; a decision that must come first (the click, the search)
+  falls back to the original when it fails.
+- The extension's own step runs in `try`/`catch` and logs through `uiHelpers.logFailure()`,
+  with the `[scale-wheel-switch]` prefix and what was attempted.
+- `scripts/cinnamon-scale-test.sh` covers a throwing step and a missing original for each.
+
 Private fields and methods read, called or written:
 
 | Object | Members | Used for |

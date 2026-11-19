@@ -38,6 +38,7 @@ const Settings = imports.ui.settings;
 const LayoutModel = require('./layoutModel');
 const ChargeLimit = require('./chargeLimit');
 const ChargeModel = require('./chargeModel');
+const ChargeGate = require('./chargeGate');
 const MediaControls = require('./mediaControls');
 const MediaWindows = require('./mediaWindows');
 
@@ -357,7 +358,7 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     // Read when the tile shows, when the menu opens, after each click and on each battery
-    // change. A hidden tile does nothing at all: no read, no automatic return.
+    // change. A hidden tile does nothing at all: no read, no automatic return (ChargeGate).
     _setUpChargeLimit() {
         const tile = this._content.tiles['charge-limit'];
         this._chargeLimit = new ChargeLimit.ChargeLimit(Subprocess.runCommand, () => {
@@ -369,7 +370,7 @@ class QuickSettingsApplet extends Applet.Applet {
         tile.setOnToggle(() => this._chargeLimit.toggle());
         tile.setAvailable(false);
         // The first read comes from _applyLayout(), only when the tile shows.
-        this._chargeShown = false;
+        this._chargeGate = new ChargeGate.ChargeGate(this._chargeLimit);
     }
 
     // Wi-Fi and Bluetooth through their own tiles' code; checked while airplane mode is on.
@@ -429,8 +430,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._battery = new Battery.Battery(battery => {
             header.setBattery(battery);
             this._panelIcons.setBattery(battery);
-            if (this._chargeShown)
-                this._chargeLimit.onBattery(battery);
+            this._chargeGate.onBattery(battery);
         });
         header.setOnButton('screenshot', () => this._closeThen(() => Util.spawn(Constants.SCREENSHOT_COMMAND)));
         header.setOnButton('settings', () => this._closeThen(() => Util.spawn(Constants.SYSTEM_SETTINGS_COMMAND)));
@@ -498,10 +498,7 @@ class QuickSettingsApplet extends Applet.Applet {
         if (nordvpnShown && !this._nordvpnShown)
             this._nordvpn.refresh();
         this._nordvpnShown = nordvpnShown;
-        const chargeShown = tiles.includes('charge-limit');
-        if (chargeShown && !this._chargeShown)
-            this._chargeLimit.refresh();
-        this._chargeShown = chargeShown;
+        this._chargeGate.setShown(tiles.includes('charge-limit'));
         if (tiles.includes(Constants.MEDIA_ITEM.id))
             this._startMedia();
         else

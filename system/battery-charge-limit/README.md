@@ -25,35 +25,38 @@ A state already in place is left alone: nothing is written, it prints `unchanged
 directory and no other command. Tests: `scripts/battery-charge-limit-test.sh`, on a fake
 sysfs tree.
 
-## Install (by the owner, once)
+## Install (once per machine)
 
-```bash
-sudo install -o root -g root -m 0755 \
-  ~/Repos/dotfiles/system/battery-charge-limit/battery-charge-limit \
-  /usr/local/sbin/battery-charge-limit
-```
+The applet calls the helper as `/usr/bin/sudo -n /usr/local/sbin/battery-charge-limit limit`
+or `... full`, from the desktop session, with no terminal: `-n` never asks for a password,
+so step 2 is what lets the tile work. Without it every click is refused (logged) and the
+tile keeps showing the real mode.
 
-It is a copy, not a link: a file root runs must not be writable by the user. Install again
-after a change to the script. The applet then reloads with
-`~/Repos/dotfiles/cinnamon/applet.sh reload quick-settings@bgi`.
+1. Install the helper. It is a copy, not a link: a file root runs must not be writable by
+   the user. Install again after a change to the script.
+
+   ```bash
+   sudo install -o root -g root -m 0755 \
+     ~/Repos/dotfiles/system/battery-charge-limit/battery-charge-limit \
+     /usr/local/sbin/battery-charge-limit
+   ```
+
+2. Allow exactly these two command lines through `sudo -n`, and nothing else. No sudoers
+   file is shipped: create it with `sudo visudo -f /etc/sudoers.d/battery-charge-limit`,
+   with this line, `youruser` replaced by your user name:
+
+   ```
+   youruser ALL=(root) NOPASSWD: /usr/local/sbin/battery-charge-limit limit, /usr/local/sbin/battery-charge-limit full
+   ```
+
+3. Reload the applet: `~/Repos/dotfiles/cinnamon/applet.sh reload quick-settings@bgi`.
 
 ## Uninstall
 
 ```bash
+sudo rm /etc/sudoers.d/battery-charge-limit
 sudo rm /usr/local/sbin/battery-charge-limit
 ```
 
 The battery keeps the last mode written. To go back to the firmware's default first:
 `sudo /usr/local/sbin/battery-charge-limit full`.
-
-## Allowing it through `sudo -n` (optional)
-
-The applet runs `/usr/bin/sudo -n /usr/local/sbin/battery-charge-limit limit` or `... full`:
-`-n` never asks for a password, so the helper must be runnable that way. No sudoers file is
-shipped. Where sudo would ask for a password, a rule allowing only these two command lines
-does it. Example, not shipped, edited with
-`sudo visudo -f /etc/sudoers.d/battery-charge-limit`:
-
-```
-youruser ALL=(root) NOPASSWD: /usr/local/sbin/battery-charge-limit limit, /usr/local/sbin/battery-charge-limit full
-```

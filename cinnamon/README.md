@@ -3,6 +3,17 @@
 My Cinnamon extensions and applets, versioned. Each one is symlinked into
 `~/.local/share/cinnamon/extensions/` or `~/.local/share/cinnamon/applets/`.
 
+## Fresh machine, in order
+
+Every path assumes the repo is checked out at `~/Repos/dotfiles`.
+
+1. Scale overview: [link the extension](#install), [free the Super key](#free-the-super-key-once-per-machine),
+   then [enable it](#enable).
+2. Quick Settings: [link and enable the applet](#quick-settings-install).
+3. Charge tile: [install the root helper and its sudoers rule](../system/battery-charge-limit/README.md#install-once-per-machine).
+4. Calendar: [link it and replace the stock applet](#calendar-install).
+5. Keyboard shortcuts: [load them](#custom-shortcuts) with `dconf load`.
+
 ## What lives here
 
 - `extensions/scale-wheel-switch@bgi/`: turns Scale into a GNOME-style overview.
@@ -424,13 +435,20 @@ gjs scripts/cinnamon-quick-settings-schema.js cinnamon/applets/quick-settings@bg
 
 ## Quick Settings: install
 
-The link must point to the main checkout, not to a git worktree.
+1. Link and enable the applet. The link must point to the main checkout, not to a git
+   worktree.
 
-```bash
-ln -s ~/Repos/dotfiles/cinnamon/applets/quick-settings@bgi \
-  ~/.local/share/cinnamon/applets/quick-settings@bgi
-~/Repos/dotfiles/cinnamon/applet.sh enable quick-settings@bgi
-```
+   ```bash
+   ln -s ~/Repos/dotfiles/cinnamon/applets/quick-settings@bgi \
+     ~/.local/share/cinnamon/applets/quick-settings@bgi
+   ~/Repos/dotfiles/cinnamon/applet.sh enable quick-settings@bgi
+   ```
+
+2. For the Charge tile, install its root helper (a copy owned by root, not a link) and its
+   narrow sudoers rule: steps 1 to 3 of the
+   [helper's install](../system/battery-charge-limit/README.md#install-once-per-machine).
+   The applet calls the helper through `sudo -n` from the desktop session, with no
+   terminal, so the tile works only once that rule is in place.
 
 `applet.sh enable` adds the applet at the right end of panel1's right zone and prints
 "unchanged" when it is already there. A changed size in `stylesheet.css` shows after the
@@ -443,9 +461,6 @@ Reload after an edit:
 journalctl --user -b --since "-2 min" --no-pager | grep -E 'quick-settings|JS ERROR'
 ```
 
-The Charge tile also needs its root helper, installed once by hand (a copy owned by root,
-not a link): see [`system/battery-charge-limit`](../system/battery-charge-limit/README.md).
-
 ## Quick Settings: uninstall
 
 ```bash
@@ -455,8 +470,9 @@ rm ~/.local/share/cinnamon/applets/quick-settings@bgi
 
 ## Quick Settings: dependencies
 
-All already on this machine; nothing to install. Without one, the matching part is dimmed
-or does nothing, and the reason goes to the journal once:
+The applet installs none of these: each is a separate program, and the Charge tile's
+helper and its sudoers rule are installed by hand (last row). Without one, the matching
+part is dimmed or does nothing, and the reason goes to the journal once:
 
 | Tool | Used for | When absent |
 |---|---|---|
@@ -466,7 +482,7 @@ or does nothing, and the reason goes to the journal once:
 | `flameshot` | Screenshot button | nothing happens; Cinnamon reports the missing command |
 | `blueman-manager` | last entry of the Bluetooth list | nothing happens; Cinnamon reports the missing command |
 | UPower with a keyboard backlight | Keyboard light tile | tile dimmed |
-| `/usr/local/sbin/battery-charge-limit` ([install](../system/battery-charge-limit/README.md)), the helper runnable through `sudo -n`, a battery with `charge_types` and charge thresholds in sysfs | Charge tile | tile dimmed; a refused `sudo -n` is logged and the tile shows the real mode |
+| `/usr/local/sbin/battery-charge-limit` and its sudoers rule for `sudo -n` ([install](../system/battery-charge-limit/README.md#install-once-per-machine)), a battery with `charge_types` and charge thresholds in sysfs | Charge tile | tile dimmed; a refused `sudo -n` is logged and the tile shows the real mode |
 
 NetworkManager, BlueZ, PulseAudio or PipeWire, cinnamon-settings-daemon, the session
 manager and the session bus (media players) come with the desktop.

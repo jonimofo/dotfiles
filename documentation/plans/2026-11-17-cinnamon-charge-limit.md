@@ -68,13 +68,14 @@ Dell XPS, kernel 6.12, `dell_laptop` loaded.
   reading on battery runs `limit` once. "On AC" comes from the battery state
   cinnamon-settings-daemon already sends (charging, fully charged, pending charge: on AC;
   discharging, pending discharge: on battery). The memory is kept in the applet instance.
-- No sudoers file is shipped. The helper must be runnable through `sudo -n`; the helper's
-  README shows an optional narrow rule for a machine where it is not.
+- No sudoers file is shipped. The applet calls the helper through `sudo -n` from the desktop
+  session, with no terminal, so it never gets a password: a narrow sudoers rule allowing
+  only the two exact command lines is a required install step, in the helper's README.
 
 ## As built
 
 - Helper: `system/battery-charge-limit/battery-charge-limit`, with its README (install,
-  uninstall, the optional narrow sudoers line). Tests: `scripts/battery-charge-limit-test.sh`,
+  the narrow sudoers rule, uninstall). Tests: `scripts/battery-charge-limit-test.sh`,
   on a fake sysfs tree, through a copy that differs only by its `BATTERY_DIR` line; the write
   order is read from the copy's `sh -x` trace.
 - Applet: `chargeModel.js` (pure: state from the sysfs texts, labels, the helper command,
@@ -100,6 +101,14 @@ Dell XPS, kernel 6.12, `dell_laptop` loaded.
   reading applied right after each write (a battery already full on AC when full is chosen
   counts as seen full); a hidden tile does nothing.
 
+## Release audit fixes
+
+- The narrow sudoers rule was called optional: it is now a numbered install step of the
+  helper's README and of the Quick Settings install, since the tile cannot work without it.
+- The gating by whether the tile shows (no read and no automatic return while hidden, the
+  battery feed while shown, one read each time it shows) moved from `applet.js` to
+  `chargeGate.js`, tested on a fake ChargeLimit.
+
 ## Security reasoning for the helper
 
 - It runs as root, so its only inputs are its argument and the sysfs files: a fixed `PATH`,
@@ -113,5 +122,5 @@ Dell XPS, kernel 6.12, `dell_laptop` loaded.
 
 ## Out of scope
 
-Any other charge mode or threshold value; a settings UI for the values; a sudoers or polkit
-file; installing anything.
+Any other charge mode or threshold value; a settings UI for the values; shipping a sudoers
+or polkit file; installing anything.

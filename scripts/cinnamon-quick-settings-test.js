@@ -1953,6 +1953,7 @@ function testChargeGate() {
     };
     const seen = () => calls.map(call => (call === 'refresh' ? call : 'battery')).join(' ');
     const ChargeGate = load('./chargeGate');
+    const Constants = load('./constants');
     const gate = new ChargeGate.ChargeGate(fakeCharge);
     const unplugged = { onAc: false, full: true };
     gate.onBattery(unplugged);
@@ -1975,6 +1976,15 @@ function testChargeGate() {
     gate.onBattery(unplugged);
     check(`charge gate: shown again, one read then the battery changes (${seen()})`,
         calls.length === 2 && calls[0] === 'refresh' && calls[1] === unplugged);
+
+    // The applet's two calls, which no fake can reach: the battery feed and the layout.
+    const appletSource = readText(`${appletDir}/applet.js`);
+    check('charge gate: applet.js feeds every battery change to the gate',
+        appletSource.includes('this._chargeGate.onBattery(battery);'));
+    check("charge gate: applet.js gives the gate the layout of the 'charge-limit' tile",
+        appletSource.includes("this._chargeGate.setShown(tiles.includes('charge-limit'));"));
+    check("charge gate: 'charge-limit' is the Charge tile's id",
+        Constants.TILES.some(tile => tile.id === 'charge-limit'));
 }
 
 async function testChargeLimit() {

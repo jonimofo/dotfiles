@@ -1,4 +1,4 @@
-Status: VALIDATED
+Status: DONE
 
 # Cinnamon Scale: right click menu on a dock icon, to close an app
 
@@ -58,6 +58,39 @@ Running app with 3 windows:      Running app with 1 window:     App not running:
    +------------------+             +------------------+
 ```
 
+C. Save prompt, chosen after the audit, "Go to the prompt (Recommended)": "Only when a
+save dialog appears: the overview closes and takes you to that dialog, on its workspace.
+This is what Cinnamon itself does when you close a window from the overview. Without
+unsaved work, nothing changes: the overview stays open."
+
+```
+Close on an app WITHOUT unsaved work:
+
+  overview stays open, same workspace   (as today)
+
+Close on an app WITH unsaved work:
+
+  overview closes
+        |
+        v
+  +------------------------------+
+  |  Save changes before closing? |
+  |                              |
+  |  [Don't save] [Cancel] [Save] |
+  +------------------------------+
+  shown on the app's workspace, in front
+```
+
+## Differences from the mockups
+
+- No arrow under the menu: Cinnamon 6.4 menus have none.
+- A left or middle click on the icon whose menu is open does what that click always does
+  (Cinnamon's menu manager lets clicks on the menu's source through). A click on another
+  icon only closes the menu.
+- The wheel and Super do nothing while the menu is open: its grab makes Scale no longer the
+  only modal.
+- The app name tooltip of the icon is not shown while its menu is open.
+
 ## Decisions
 
 1. The menu is Cinnamon's own `PopupMenu.PopupMenu` with `PopupMenuItem`s, styled by the
@@ -79,8 +112,8 @@ Running app with 3 windows:      Running app with 1 window:     App not running:
    `Main.isInteresting`, the same set Scale shows and the dock's dot uses), minus the
    windows whose `can_close()` is false. Skip-taskbar windows and dialogs attached to a
    window are left out by `Main.isInteresting`; they usually close with their parent. The
-   label counts that list when the menu opens; Close reads it again when chosen, since a
-   window may close meanwhile without any app state change.
+   list is taken when the menu opens, with the label; Close asks only those of it still
+   closable when chosen: never more windows than the label says, none opened meanwhile.
 5. Close calls `Meta.Window.delete(global.get_current_time())` on each, what the title
    bar's close button and stock's window menu do. Never a process kill. Nothing switches
    workspace, Scale is not hidden; the dock follows the app stopping as it already does.
@@ -95,27 +128,43 @@ Running app with 3 windows:      Running app with 1 window:     App not running:
    stroke (repeats and the release) once the menu is closed. Closed any other way, the guard
    is disconnected at once.
 10. Strings: "New window", "Close", "Close %d windows" are constants at the top of
-    `dockMenu.js`, passed through Cinnamon's global `_()` like the search placeholder.
+    `dockMenu.js`, in English in every locale, not passed through `_()`: Cinnamon
+    translates "Close" but not the other two, and the menu would mix languages.
+11. Save prompt (answer C), as stock `WindowClone.closeWindow` (`workspace.js`): before the
+    windows are asked to close, `window-added` is watched on their workspaces (the active
+    one for a window on every workspace). The first new window whose `get_transient_for()`
+    is one of them is gone to from an idle, with the dock's `activateWindow`: its workspace,
+    then Scale closes. The watch stops at that match, when Scale starts hiding, when the
+    dock is destroyed, and at the next Close. Stock has no time limit, neither has this
+    watch; stock also stops at the first new window of any kind, this one waits for a
+    prompt.
+12. The icon's tooltip gets `preventShow` and `hide()` (`tooltips.js`) while its menu is
+    open, and is free again when the menu closes or is destroyed.
 
 ## How it is built
 
 | File | Change |
 |---|---|
 | `dockMenu.js` (new) | `getDockMenuEntries`, `getMenuPosition`, `DockIconMenu` (placement), `DockMenu` (one menu, manager, Escape guard, destroy) |
-| `appDock.js` | Right click opens the menu; `getClosableWindows`, `closeWindows`, `runMenuAction`; menu closed on rebuild and on `hiding`, destroyed with the dock |
-| `scripts/cinnamon-scale-test.js` | Entries for 0, 1 and 3 windows; placement with float noise and the monitor's edges; lifecycle (one at a time, toggle, Escape stroke, click outside, rebuild, destroy, no handler left); Close set and calls; left and middle clicks unchanged |
+| `appDock.js` | Right click opens the menu; `getClosableWindows`, `getStillClosableWindows`, `closeWindows`, `ClosePromptWatch`; menu closed on rebuild and on `hiding`, destroyed with the dock |
+| `scripts/cinnamon-scale-test.js` | Entries for 0, 1 and 3 windows; placement with float noise and the monitor's edges; lifecycle on a stock-like menu manager (modal count back to Scale's on every close path, one at a time, toggle, Escape stroke, click outside, destroy once, tooltip); the real dock (hiding, rebuild, destroy, Close set counted at opening, left and middle clicks unchanged); save prompt (gone to, unrelated window ignored, watch released on match, hiding, destroy) |
 | `scripts/cinnamon-scale-test.sh` | Header lists the dock menu |
 | `cinnamon/README.md` | Behaviour, limitations, private member, assumptions |
 
-## To check by hand
+## Checked by hand
 
-Not yet tried live. After a Cinnamon restart (Alt+F2 r):
+Tried live by the owner on 2026-11-19 after a Cinnamon restart, before the audit fixes:
+"all work". The audit then added the save prompt (answer C), the count taken at opening,
+the hidden tooltip and English labels. The list below is what to check after a change here
+(Alt+F2 r):
 
-1. Super, right click a running app's icon with one window: menu above the icon, theme
-   colours, "New window", "Close". Left click and middle click on icons behave as before.
-2. An app with 3 windows on two workspaces: "Close 3 windows"; choose it: all three close,
+1. An editor with unsaved text, Close from its dock menu: Scale closes on the editor's
+   workspace, its save prompt in front. Cancel in the prompt: the editor stays open.
+2. Super, right click a running app's icon with one window: menu above the icon, theme
+   colours, "New window", "Close", no app name tooltip over it. Left click and middle click
+   on icons behave as before.
+3. An app with 3 windows on two workspaces: "Close 3 windows"; choose it: all three close,
    Scale stays open on the same workspace, the icon leaves the dock if not pinned.
-3. An editor with unsaved text: Close shows its save dialog.
 4. A pinned app not running: only "New window"; choose it: a window opens, Scale closes.
 5. Menu open: a click on the background, on the strip, on another dock icon closes it and
    does nothing else; Escape closes only the menu, a second Escape closes Scale; typing then

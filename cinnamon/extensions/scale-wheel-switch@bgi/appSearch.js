@@ -311,7 +311,12 @@ var AppSearch = class AppSearch {
             this._entry.set_text('');
             break;
         case Clutter.KEY_BackSpace:
-            this._entry.set_text(Array.from(this._getText()).slice(0, -1).join(''));
+            this._entry.set_text(this._isClearShortcut(event) ? '' : Array.from(this._getText()).slice(0, -1).join(''));
+            break;
+        case Clutter.KEY_Delete:
+        case Clutter.KEY_KP_Delete:
+            if (this._isClearShortcut(event))
+                this._entry.set_text('');
             break;
         case Clutter.KEY_Return:
         case Clutter.KEY_KP_Enter:
@@ -333,6 +338,12 @@ var AppSearch = class AppSearch {
             this._appendCharacter(event, true);
         }
         return true;
+    }
+
+    // Ctrl with Backspace or Delete empties the field: it has no caret, so there is no word
+    // before or after it to delete.
+    _isClearShortcut(event) {
+        return Boolean(Cinnamon.get_event_state(event) & Clutter.ModifierType.CONTROL_MASK);
     }
 
     // A leading space is not text: Scale uses the space bar to activate the selected window.

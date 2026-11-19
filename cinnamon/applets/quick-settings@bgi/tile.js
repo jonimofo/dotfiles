@@ -3,14 +3,6 @@ const St = imports.gi.St;
 const UiHelpers = require('./uiHelpers');
 const ExpandArrow = require('./expandArrow');
 
-// The background of a tile, as inline CSS: the stylesheet only holds the fallback, the
-// real colours come from the theme (see ThemeColors).
-function backgroundStyle(color) {
-    if (!color)
-        return null;
-    return `background-color: ${color};`;
-}
-
 // A pill-shaped toggle: icon and label on the left, an arrow on the right when the tile
 // opens an in-place list. A tile does nothing until setOnToggle() gives it an action. An
 // inactive or unavailable tile has its icon and background dimmed; the label stays readable.
@@ -122,6 +114,6 @@ class Tile {
             return;
         }
         const pair = this._dimmed ? this._colors.dimmed : this._colors.normal;
-        this.actor.set_style(backgroundStyle(this._checked ? pair.checked : pair.tile));
+        this.actor.set_style(UiHelpers.backgroundStyle(this._checked ? pair.checked : pair.tile));
     }
 }

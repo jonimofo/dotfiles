@@ -12,6 +12,21 @@ function symbolicIcon(iconName, styleClass) {
     });
 }
 
+// A background colour as inline CSS, or null (the stylesheet's) without a colour: the
+// stylesheet only holds the fallback, the real colours come from the theme (see ThemeColors).
+function backgroundStyle(color) {
+    if (!color)
+        return null;
+    return `background-color: ${color};`;
+}
+
+function setStyleClass(actor, styleClass, on) {
+    if (on)
+        actor.add_style_class_name(styleClass);
+    else
+        actor.remove_style_class_name(styleClass);
+}
+
 function setPseudoClass(actor, pseudoClass, on) {
     if (on)
         actor.add_style_pseudo_class(pseudoClass);

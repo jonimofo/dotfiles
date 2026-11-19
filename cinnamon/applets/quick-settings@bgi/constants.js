@@ -287,14 +287,15 @@ const SESSION_MANAGER_INTERFACE = 'org.gnome.SessionManager';
 const INHIBIT_IDLE_FLAG = 8;
 const INHIBIT_REASON = 'prevent idle functions like screen blanking and dimming';
 
-// Media controls under the tiles: one block per MPRIS player with a track, through the
-// session bus like the stock sound applet. Listed at the end of the Tiles tab.
+// Media controls under the tiles: one block per MPRIS player on the session bus, found like
+// the stock sound applet does. Listed at the end of the Tiles tab.
 const MEDIA_ITEM = { id: 'media', name: 'Media controls' };
 const MPRIS_NAME_PREFIX = 'org.mpris.MediaPlayer2.';
 const MPRIS_PATH = '/org/mpris/MediaPlayer2';
 const MPRIS_ROOT_INTERFACE = 'org.mpris.MediaPlayer2';
 const MPRIS_PLAYER_INTERFACE = 'org.mpris.MediaPlayer2.Player';
 const MPRIS_PLAYING = 'Playing';
+const MPRIS_PAUSED = 'Paused';
 const DBUS_DAEMON = { name: 'org.freedesktop.DBus', path: '/org/freedesktop/DBus', iface: 'org.freedesktop.DBus' };
 // The D-Bus types the media code reads; anything else from a player is ignored.
 const MPRIS_TYPES = {

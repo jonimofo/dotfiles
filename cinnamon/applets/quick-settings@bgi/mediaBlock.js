@@ -13,14 +13,22 @@ const UiHelpers = require('./uiHelpers');
 // characters, does not), so the player name stays readable. The title and that line are
 // one button, tinted on hover like the list entries and separate from the three icons:
 // @onFocus() runs on its click (bring the player's window forward), @onButton(method) on a
-// click of a working icon.
+// click of a working icon. Left of the text, a thin bar takes the accent colour while the
+// player plays; it is there on every block, clear when not playing, so the text never moves.
+// Without any title (no track title, no window title) line 1 hides and the player name shows
+// alone.
 const TINTED_STYLE_CLASS = 'quick-settings-media-block-tinted';
+const PLAYING_STYLE_CLASS = 'quick-settings-media-bar-playing';
 
 class MediaBlock {
     constructor(onButton, onFocus) {
         this.actor = new St.BoxLayout({ vertical: true, style_class: 'quick-settings-media-block' });
 
-        const row = new St.BoxLayout();
+        const row = new St.BoxLayout({ style_class: 'quick-settings-media-row' });
+        this._bar = new St.Widget({ style_class: 'quick-settings-media-bar' });
+        this._playing = false;
+        this._accent = null;
+        row.add_child(this._bar);
         const lines = new St.BoxLayout({ vertical: true, style_class: 'quick-settings-media-lines' });
         this._title = plainLabel('quick-settings-media-title');
         lines.add_child(this._title);
@@ -59,15 +67,21 @@ class MediaBlock {
 
     // @tinted: from MediaModel.isTinted() for the block's place on screen.
     setTinted(tinted) {
-        if (tinted)
-            this.actor.add_style_class_name(TINTED_STYLE_CLASS);
-        else
-            this.actor.remove_style_class_name(TINTED_STYLE_CLASS);
+        UiHelpers.setStyleClass(this.actor, TINTED_STYLE_CLASS, tinted);
+    }
+
+    // @accent: the CSS colour from ThemeColors.readTileColors(), or null for the stylesheet's.
+    setAccent(accent) {
+        this._accent = accent;
+        this._applyBar();
     }
 
     // @block: one of MediaModel.visibleBlocks().
     update(block) {
         this._title.text = block.text.title;
+        this._title.visible = block.text.title !== '';
+        this._playing = block.playing;
+        this._applyBar();
         this._artist.text = block.text.artist;
         this._artist.visible = block.text.artist !== '';
         this._player.text = block.text.player;
@@ -81,6 +95,13 @@ class MediaBlock {
             entry.method = state.method;
             UiHelpers.setButtonWorking(entry.button, state.working);
         }
+    }
+
+    // The style class is toggled on the same actor (St caches styles per actor); the theme's
+    // accent, when read, is set on it only while playing.
+    _applyBar() {
+        UiHelpers.setStyleClass(this._bar, PLAYING_STYLE_CLASS, this._playing);
+        this._bar.set_style(UiHelpers.backgroundStyle(this._playing ? this._accent : null));
     }
 
     destroy() {

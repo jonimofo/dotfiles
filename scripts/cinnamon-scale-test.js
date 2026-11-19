@@ -244,6 +244,70 @@ class FakeEntry extends FakeActor {
     }
 }
 
+// Cinnamon's popup menu, its item and its manager, as the dock menu uses them. A menu
+// follows PopupMenuBase: the constructor calls _init, which subclasses override. An item's
+// 'activate' closes its menu, as PopupMenuBase does; open() and close() only emit.
+class FakePopupMenu extends FakeSignals {
+    constructor(...args) {
+        super();
+        this._init(...args);
+    }
+
+    _init(sourceActor, orientation) {
+        this.sourceActor = sourceActor;
+        this.orientation = orientation;
+        this.actor = new FakeActor();
+        this.items = [];
+        this.isOpen = false;
+        this.destroyed = false;
+    }
+
+    addMenuItem(item) {
+        this.items.push(item);
+        item.connect('activate', () => this.close(true));
+    }
+
+    open() {
+        this.isOpen = true;
+        this.emit('open-state-changed', true);
+    }
+
+    close() {
+        if (!this.isOpen)
+            return;
+        this.isOpen = false;
+        this.emit('open-state-changed', false);
+    }
+
+    destroy() {
+        this.destroyed = true;
+        this.actor.destroy();
+        this.emit('destroy');
+    }
+}
+
+class FakePopupMenuItem extends FakeSignals {
+    constructor(label) {
+        super();
+        this.label = label;
+    }
+
+    activate() {
+        this.emit('activate');
+    }
+}
+
+class FakePopupMenuManager {
+    constructor(owner) {
+        this.owner = owner;
+        this.menus = [];
+    }
+
+    addMenu(menu) {
+        this.menus.push(menu);
+    }
+}
+
 const BUTTON = { PRIMARY: 1, MIDDLE: 2, SECONDARY: 3 };
 const ESCAPE_KEY = 0xff1b;
 // What a strip takes at the top of its screen, in the fake layout.
@@ -270,7 +334,7 @@ function makeImports(monitorCount, primaryIndex) {
         ModifierType: { CONTROL_MASK: 1 << 2, MOD1_MASK: 1 << 3, MOD4_MASK: 1 << 6, SUPER_MASK: 1 << 26 },
         ActorAlign: { CENTER: 1, END: 2 },
         ScrollDirection: { UP: 0, DOWN: 1, LEFT: 2, RIGHT: 3, SMOOTH: 4 },
-        EventType: { SCROLL: 1 },
+        EventType: { SCROLL: 1, KEY_PRESS: 2, KEY_RELEASE: 3 },
         BinLayout: class {},
         Clone: FakeClone,
     };
@@ -281,7 +345,7 @@ function makeImports(monitorCount, primaryIndex) {
         BoxLayout: FakeActor,
         Widget: FakeActor,
         Label: FakeActor,
-        Side: { LEFT: 0, RIGHT: 1 },
+        Side: { LEFT: 0, RIGHT: 1, BOTTOM: 2 },
         ThemeContext: { get_for_stage: () => themeContext },
     };
     const CMenu = { TreeItemType: { INVALID: 0, DIRECTORY: 1, ENTRY: 2 } };
@@ -290,6 +354,8 @@ function makeImports(monitorCount, primaryIndex) {
         AppSystem: { get_default: () => ({ get_tree: () => ({ get_root_directory: () => emptyMenu }) }) },
         get_event_state: () => 0,
         util_set_hidden_from_pick: (actor, hidden) => (actor.hiddenFromPick = hidden),
+        // Each fake actor's box on the stage, from its position and size.
+        util_get_transformed_allocation: actor => ({ x1: actor.x, y1: actor.y, x2: actor.x + actor.width, y2: actor.y + actor.height }),
     };
 
     // Main loop timeouts: recorded, fired by the test.
@@ -332,6 +398,9 @@ function makeImports(monitorCount, primaryIndex) {
 
     const Main = {
         layoutManager: { monitors, primaryIndex, primaryMonitor: monitors[primaryIndex] },
+        uiGroup: new FakeActor(),
+        // A window Scale would show says so in the fake.
+        isInteresting: metaWindow => metaWindow.interesting,
         overview,
         modalCount: 0,
         getWorkspaceName: index => `Workspace ${index + 1}`,
@@ -372,6 +441,7 @@ function makeImports(monitorCount, primaryIndex) {
                 main: Main,
                 workspace: { Workspace, WindowClone },
                 workspacesView: { WORKSPACE_SWITCH_TIME: 0.25 },
+                popupMenu: { PopupMenu: FakePopupMenu, PopupMenuItem: FakePopupMenuItem, PopupMenuManager: FakePopupMenuManager },
                 // Tweener: the objects whose animations were removed, in order.
                 tweener: { removeTweens: scope => tweenRemovals.push(scope) > 0 },
                 dnd: {
@@ -1303,6 +1373,196 @@ function testThumbnailDragReordersWorkspaces() {
     check('destroy: a reorder after Scale closed rebuilds nothing', stripState(first) === '');
 }
 
+function keyStroke(env, symbol, isPress) {
+    const type = isPress ? env.Clutter.EventType.KEY_PRESS : env.Clutter.EventType.KEY_RELEASE;
+    return { type: () => type, get_key_symbol: () => symbol };
+}
+
+function stageHandlerCount() {
+    return global.stage._handlers.size;
+}
+
+function menuLabels(menu) {
+    return menu.items.map(item => item.label).join('|');
+}
+
+// Owner's choice "Right click menu", "Close all its windows": the entries for each app state.
+function testDockMenuEntries() {
+    const env = setUp();
+    const { getDockMenuEntries, DockMenuAction } = env.require('./dockMenu');
+    const labels = count => getDockMenuEntries(count).map(entry => entry.label).join('|');
+    const actions = count => getDockMenuEntries(count).map(entry => entry.action).join('|');
+
+    check('dock menu: an app not running shows only New window', labels(0) === 'New window');
+    check('dock menu: one window shows New window, Close', labels(1) === 'New window|Close');
+    check('dock menu: three windows show New window, Close 3 windows', labels(3) === 'New window|Close 3 windows');
+    check('dock menu: New window comes first, then the close action',
+        actions(2) === `${DockMenuAction.NEW_WINDOW}|${DockMenuAction.CLOSE_WINDOWS}` && actions(0) === DockMenuAction.NEW_WINDOW);
+}
+
+// The menu sits above the icon, centred on it, inside the dock's monitor. Live stage
+// coordinates carry float noise: compared with a tolerance, or after rounding.
+function testDockMenuPosition() {
+    const env = setUp();
+    const { getMenuPosition } = env.require('./dockMenu');
+    const monitor = { x: 1920, y: 0, width: 1920, height: 1080 };
+    const box = (x1, y1, width, height) => ({ x1, y1, x2: x1 + width, y2: y1 + height });
+
+    const [x, y] = getMenuPosition(box(2812.000122, 1000.00009, 64.0000001, 72), 160.4, 80.2, monitor);
+    check('dock menu: centred on the icon', Math.abs(x - (2812 + 32 - 80.2)) <= 1);
+    check('dock menu: its bottom edge on the icon\'s top edge', Math.abs(y + 80.2 - 1000) <= 1);
+    check('dock menu: whole pixels', Number.isInteger(x) && Number.isInteger(y));
+
+    const [leftX] = getMenuPosition(box(1920.0001, 1000, 64, 72), 200, 80, monitor);
+    check('dock menu: kept inside the monitor\'s left edge', leftX === 1920);
+    const [rightX] = getMenuPosition(box(3840 - 64.00012, 1000, 64, 72), 200, 80, monitor);
+    check('dock menu: kept inside the monitor\'s right edge', near(rightX + 200, 3840));
+    const [, topY] = getMenuPosition(box(2500, 40.5, 64, 72), 200, 80, monitor);
+    check('dock menu: kept below the monitor\'s top edge', topY === 0);
+
+    const dockMenu = env.require('./dockMenu');
+    const icon = new FakeActor({ x: 2812.5, y: 1000.25, width: 64, height: 72 });
+    const menu = new dockMenu.DockIconMenu(icon, monitor);
+    menu.actor.get_preferred_size = () => [0, 0, 160, 80];
+    const [menuX, menuY] = menu._calculatePosition();
+    check('dock menu: the popup is attached below, placed above its icon, animated as flipped',
+        menu.orientation === env.imports.gi.St.Side.BOTTOM && menuX === 2765 && menuY === 920 && menu.sideFlipped === true);
+}
+
+// One menu at a time; it closes on a second right click, Escape, a rebuild, destroy; the
+// chosen action runs once the menu is gone; nothing stays connected.
+function testDockMenuLifecycle() {
+    const env = setUp();
+    const { DockMenu, getDockMenuEntries } = env.require('./dockMenu');
+    const monitor = env.monitors[0];
+    const dockMenu = new DockMenu(monitor);
+    const iconA = new FakeActor();
+    const iconB = new FakeActor();
+    const chosen = [];
+    let menuGoneAtAction = false;
+    const onActivate = action => {
+        menuGoneAtAction = !dockMenu.isOpen() && env.Main.uiGroup.children.length === 0;
+        chosen.push(action);
+    };
+    const baseHandlers = stageHandlerCount();
+
+    // The menu a right click on @icon opens, for an app with @count windows.
+    const open = (icon, count) => {
+        dockMenu.toggle(icon, getDockMenuEntries(count), onActivate);
+        return dockMenu._menu;
+    };
+
+    const first = open(iconA, 2);
+    check('lifecycle: a right click opens a menu in the ui group, managed, open',
+        first.isOpen && env.Main.uiGroup.children.includes(first.actor) && dockMenu.isOpen());
+    check('lifecycle: its entries', menuLabels(first) === 'New window|Close 2 windows');
+    check('lifecycle: the Escape guard is connected while it is open', stageHandlerCount() === baseHandlers + 1);
+
+    const second = open(iconB, 0);
+    check('lifecycle: one menu at a time', first.destroyed && second.isOpen && env.Main.uiGroup.children.length === 1);
+    check('lifecycle: not running: only New window', menuLabels(second) === 'New window');
+
+    open(iconB, 0);
+    check('lifecycle: a second right click on the same icon closes it',
+        second.destroyed && !dockMenu.isOpen() && stageHandlerCount() === baseHandlers);
+
+    const third = open(iconA, 1);
+    third.items[1].activate();
+    check('lifecycle: Close runs once, after the menu is destroyed',
+        chosen.join() === 'close-windows' && menuGoneAtAction && third.destroyed);
+    check('lifecycle: nothing left connected after a choice', stageHandlerCount() === baseHandlers);
+
+    // Escape: the menu closes on the press; the release must not reach Scale.
+    const fourth = open(iconA, 1);
+    const pressStopped = global.stage.emit('captured-event', keyStroke(env, ESCAPE_KEY, true));
+    fourth.close(true);
+    check('lifecycle: Escape\'s press goes to the open menu', !pressStopped && fourth.destroyed);
+    const repeatStopped = global.stage.emit('captured-event', keyStroke(env, ESCAPE_KEY, true));
+    const releaseStopped = global.stage.emit('captured-event', keyStroke(env, ESCAPE_KEY, false));
+    check('lifecycle: the rest of that Escape stroke is swallowed, Scale stays open',
+        repeatStopped && releaseStopped && env.Main.overview.hideCalls === 0);
+    check('lifecycle: the guard is gone after the release', stageHandlerCount() === baseHandlers);
+    check('lifecycle: no action on Escape', chosen.join() === 'close-windows');
+
+    // Closed by a click outside: the next keys are Scale's.
+    const fifth = open(iconA, 1);
+    fifth.close(true);
+    check('lifecycle: closed by a click outside, the guard goes at once', stageHandlerCount() === baseHandlers);
+
+    const sixth = open(iconA, 3);
+    dockMenu.close();
+    check('lifecycle: close() (a rebuild, Scale hiding) destroys the menu', sixth.destroyed && !dockMenu.isOpen());
+
+    const seventh = open(iconA, 3);
+    dockMenu.destroy();
+    check('lifecycle: destroy closes and destroys the open menu, runs no action',
+        seventh.destroyed && !seventh.isOpen && chosen.join() === 'close-windows');
+    check('lifecycle: destroy leaves nothing connected on the stage', stageHandlerCount() === baseHandlers);
+    check('lifecycle: nothing left in the ui group', env.Main.uiGroup.children.length === 0);
+}
+
+// A window of the fake app on @workspace: delete() records its timestamp.
+function fakeAppWindow(workspace, { interesting = true, closable = true, userTime = 0 } = {}) {
+    return {
+        interesting,
+        deletedAt: null,
+        get_user_time: () => userTime,
+        can_close: () => closable,
+        get_workspace: () => workspace,
+        is_on_all_workspaces: () => false,
+        delete(time) {
+            this.deletedAt = time;
+        },
+    };
+}
+
+// Owner's choice "Close all its windows": every window Scale shows, on every workspace, asked
+// to close; Scale stays open on the same workspace. Left and middle clicks are unchanged.
+function testDockCloseWindows() {
+    const env = setUp();
+    const { workspaces, activations } = setUpWorkspaces(3);
+    global.get_current_time = () => 4242;
+    const appDock = env.require('./appDock');
+    const { DockMenuAction } = env.require('./dockMenu');
+    const here = fakeAppWindow(workspaces[0], { userTime: 2 });
+    const elsewhere = fakeAppWindow(workspaces[2], { userTime: 5 });
+    const hidden = fakeAppWindow(workspaces[1], { interesting: false });
+    const stuck = fakeAppWindow(workspaces[1], { closable: false });
+    const newWindows = [];
+    const app = {
+        get_windows: () => [here, elsewhere, hidden, stuck],
+        open_new_window: workspace => newWindows.push(workspace),
+    };
+    env.Main.overview.visible = true;
+
+    check('close: the windows counted are the ones Scale shows that can close',
+        appDock.getClosableWindows(app).length === 2);
+    appDock.runMenuAction(app, DockMenuAction.CLOSE_WINDOWS);
+    check('close: every counted window is asked to close, on every workspace',
+        here.deletedAt === 4242 && elsewhere.deletedAt === 4242);
+    check('close: windows Scale does not show, or that cannot close, are left alone',
+        hidden.deletedAt === null && stuck.deletedAt === null);
+    check('close: Scale stays open on the same workspace',
+        env.Main.overview.hideCalls === 0 && activations.length === 0 && global.workspace_manager.active === workspaces[0]);
+
+    appDock.runMenuAction(app, DockMenuAction.NEW_WINDOW);
+    check('new window: same as the middle click, a window on the current workspace, Scale closes',
+        newWindows.join() === '-1' && env.Main.overview.hideCalls === 1);
+
+    // The dock's click handler, with a recording menu in place of the real one.
+    const toggles = [];
+    const fakeDock = { _menu: { toggle: (icon, entries) => toggles.push(entries.map(entry => entry.label).join('|')) } };
+    const icon = new FakeActor();
+    appDock.AppDock.prototype._onIconClicked.call(fakeDock, app, icon, BUTTON.SECONDARY);
+    check('right click: opens the menu with the counted windows', toggles.join() === 'New window|Close 2 windows');
+    appDock.AppDock.prototype._onIconClicked.call(fakeDock, app, icon, BUTTON.MIDDLE);
+    check('middle click: unchanged, a new window, no menu', newWindows.length === 2 && toggles.length === 1);
+    env.Main.activateWindow = (metaWindow, time) => (env.Main.activated = [metaWindow, time]);
+    appDock.AppDock.prototype._onIconClicked.call(fakeDock, app, icon, BUTTON.PRIMARY);
+    check('left click: unchanged, goes to the most recent window, no menu',
+        env.Main.activated[0] === elsewhere && activations.join() === '2' && toggles.length === 1);
+}
+
 testPanelChoice();
 testPanelCopy();
 testPanelFallbacks();
@@ -1317,6 +1577,10 @@ testFittingItemWidth();
 testReorderIndex();
 testThumbnailDragReordersWorkspaces();
 testWindowDragUnchanged();
+testDockMenuEntries();
+testDockMenuPosition();
+testDockMenuLifecycle();
+testDockCloseWindows();
 
 if (failures > 0) {
     print(`${failures} failure(s)`);

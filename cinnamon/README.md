@@ -88,7 +88,13 @@ every other screen has its own strip at its very top.
   other running apps. A dot under an icon means the app has a window open.
 - A click on a dock icon goes to the app's most recent window, switching workspace if
   needed, or launches the app when it has no window. Scale closes. A middle click always
-  opens a new window; a right click does the same as a left click.
+  opens a new window.
+- A right click on a dock icon opens a menu above it, drawn by the Cinnamon theme: "New
+  window" (same as the middle click), then, for a running app, "Close" for one window or
+  "Close N windows" for more. Close asks every window of the app that Scale shows, on every
+  workspace, to close, as its title bar's close button does: an app with unsaved work still
+  asks. Scale stays open on the same workspace. A click outside the menu, Escape, or a
+  second right click on the same icon closes it without doing anything else.
 - The dock follows apps starting and stopping while Scale is open.
 
 ## Choose the apps of the dock
@@ -172,6 +178,11 @@ Then give Super back to the Menu (see above).
   With none, or none of its pinned apps installed, and no other app running, no dock is
   drawn until the next opening of Scale.
 - Many apps make the dock icons smaller to fit the screen's width. Untested.
+- The dock menu has no arrow: Cinnamon 6.4 menus have none. Its count is taken when it
+  opens; Close acts on the windows open when it is chosen.
+- With a dock menu open, a click on another icon only closes the menu.
+- Close skips the windows Scale does not show (skip-taskbar windows, an app's dialogs
+  attached to a window) and the ones muffin says cannot be closed.
 - A top panel set to autohide or intellihide is not copied: Scale shows the clock band
   instead, since Cinnamon may hide that panel and the copy would be an empty band.
 - The panel's place is read when Scale opens: a panel moved or resized while it is open
@@ -186,7 +197,8 @@ then [`documentation/plans/2026-11-12-cinnamon-scale-second-screen.md`](../docum
 then [`documentation/plans/2026-11-12-cinnamon-scale-dock.md`](../documentation/plans/2026-11-12-cinnamon-scale-dock.md) for the dock,
 then [`documentation/plans/2026-11-17-cinnamon-scale-clock.md`](../documentation/plans/2026-11-17-cinnamon-scale-clock.md) for the date and time, then the top panel,
 then [`documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md`](../documentation/plans/2026-11-17-cinnamon-scale-enter-workspace.md) for entering a workspace,
-then [`documentation/plans/2026-11-18-cinnamon-scale-reorder-workspaces.md`](../documentation/plans/2026-11-18-cinnamon-scale-reorder-workspaces.md) for reordering workspaces.
+then [`documentation/plans/2026-11-18-cinnamon-scale-reorder-workspaces.md`](../documentation/plans/2026-11-18-cinnamon-scale-reorder-workspaces.md) for reordering workspaces,
+then [`documentation/plans/2026-11-19-cinnamon-scale-dock-menu.md`](../documentation/plans/2026-11-19-cinnamon-scale-dock-menu.md) for the dock icon menu.
 
 The extension relies on private parts of Cinnamon 6.4 (`metadata.json` pins that version).
 Everything it changes is undone when it is disabled. Check this list after a Cinnamon upgrade.
@@ -224,6 +236,7 @@ Private fields and methods read, called or written:
 | `Main.panelManager` | `getPanelsInMonitor(primaryIndex)`, each panel's `actor` and `isHideable()` | the top panel copied in Scale, never an autohide one |
 | `Main.AppletManager` | `getRunningInstancesForUuid('calendar@bgi')`, then `('calendar@cinnamon.org')`, the applet's `actor` | the clock of the fallback band |
 | grouped window list applet | `settings` (its `AppletSettings`), key `pinned-apps` | the pinned apps of the dock |
+| `PopupMenu.PopupMenu` | `_calculatePosition` (overridden in a subclass), `sideFlipped` (written) | the dock menu above its icon; the stock placement for a menu attached below puts it at the monitor's bottom edge, over the dock |
 
 Assumptions about behaviour:
 
@@ -255,6 +268,13 @@ Assumptions about behaviour:
 - `Main.activateWindow` does not close Scale when it has to switch workspace, so the dock
   switches to the window's workspace first, then activates it.
 - `Cinnamon.AppSystem`'s `app-state-changed` signal drives the dock's live update.
+- The dock menu's `PopupMenuManager` takes a modal grab on top of Scale's (`Main.modalCount`
+  2, so the wheel and Super leave it alone), closes the menu on a press outside it and
+  swallows that press, and on close pops the grab, which gives the key focus back to Scale's
+  view. Its `open-state-changed` handler runs before the dock's, which then destroys the
+  menu; the manager destroys itself with its last menu.
+- Scale closes on an Escape key release (`WorkspacesView._onStageKeyRelease`). The menu
+  closes on the press, so the dock swallows the rest of that key stroke on the stage.
 - Scale hides the panels (`Main.panelManager.disablePanels()` in `Overview._animateVisible`:
   each panel eases to opacity 0 in 0.2 s, then `actor.hide()`), and gives them back as it
   starts to close (`enablePanels()`: `actor.show()`, then an ease to 255 in 0.2 s), while
@@ -480,7 +500,7 @@ scripts/cinnamon-extension-check.sh     # syntax, metadata.json, settings-schema
 scripts/cinnamon-applet-test.sh         # applet.sh, against stub gsettings and gdbus
 scripts/cinnamon-extension-test.sh      # extension.sh, against the same stubs
 scripts/cinnamon-hot-corner-test.sh     # scale-wheel-switch hot corners over fullscreen windows, on fakes
-scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, panel copy, thumbnail click, workspace reorder, on fakes
+scripts/cinnamon-scale-test.sh          # scale-wheel-switch search, clicks, drop highlights, dock sizes, dock menu, panel copy, thumbnail click, workspace reorder, on fakes
 scripts/cinnamon-quick-settings-test.sh # applet logic, no real setting or device touched
 scripts/cinnamon-calendar-test.sh       # calendar@bgi texts, time zones, tick clock, day marker, stylesheet rules
 ```

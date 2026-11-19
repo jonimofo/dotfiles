@@ -6,6 +6,7 @@ const Main = imports.ui.main;
 const Tooltips = imports.ui.tooltips;
 const SignalManager = imports.misc.signalManager;
 const UiHelpers = require('./uiHelpers');
+const DockMenu = require('./dockMenu');
 
 // The panel applet whose pinned apps the dock shows, and its settings key.
 const PANEL_APPLET_UUID = 'grouped-window-list@cinnamon.org';
@@ -14,7 +15,7 @@ const PINNED_APPS_KEY = 'pinned-apps';
 // It is reduced when the icons do not fit in the monitor's width.
 const ICON_SIZE_PROPERTY = '-scale-dock-icon-size';
 const RUNNING_DOT_STYLE_CLASS = 'scale-dock-dot-running';
-// The buttons a dock icon answers (see onIconClicked): side buttons do nothing.
+// The buttons a dock icon answers (see AppDock._onIconClicked): side buttons do nothing.
 const CLICK_BUTTONS = [Clutter.BUTTON_PRIMARY, Clutter.BUTTON_MIDDLE, Clutter.BUTTON_SECONDARY];
 
 // The pinned apps of the first window list applet on the panels, in its order. An id that
@@ -69,6 +70,32 @@ function getDockApps() {
     return { pinned, others, running: new Set(sequences.keys()) };
 }
 
+// The windows the dock menu's Close asks to close: the ones Scale shows, on every workspace,
+// except those muffin says cannot be closed. Their count is the one in the menu's label.
+function getClosableWindows(app) {
+    return getAppWindows(app).filter(metaWindow => metaWindow.can_close());
+}
+
+// Each window is asked to close as its title bar's close button does: an app may ask to
+// save first, or refuse. Scale stays open on the same workspace.
+function closeWindows(windows) {
+    const time = global.get_current_time();
+    for (const metaWindow of windows)
+        metaWindow.delete(time);
+}
+
+// Read again when the entry is chosen: windows may have closed while the menu was open.
+function runMenuAction(app, action) {
+    switch (action) {
+    case DockMenu.DockMenuAction.NEW_WINDOW:
+        UiHelpers.openNewWindow(app);
+        break;
+    case DockMenu.DockMenuAction.CLOSE_WINDOWS:
+        closeWindows(getClosableWindows(app));
+        break;
+    }
+}
+
 function countDockApps({ pinned, others }) {
     return pinned.length + others.length;
 }
@@ -83,8 +110,8 @@ function activateWindow(metaWindow) {
     Main.activateWindow(metaWindow, time);
 }
 
-// GNOME dash behaviour: a middle click always opens a new window, a left or right click
-// goes to the app's most recent window, or launches the app when it has none.
+// GNOME dash behaviour: a middle click always opens a new window, a left click goes to the
+// app's most recent window, or launches the app when it has none.
 function onIconClicked(app, button) {
     if (button === Clutter.BUTTON_MIDDLE) {
         UiHelpers.openNewWindow(app);
@@ -108,6 +135,7 @@ var AppDock = class AppDock {
         this._monitor = Main.layoutManager.primaryMonitor;
         this._signals = new SignalManager.SignalManager(null);
         this._rebuildIdleId = 0;
+        this._menu = new DockMenu.DockMenu(this._monitor);
 
         this._box = new St.BoxLayout({ style_class: 'scale-dock' });
         this.actor = new St.Bin({ style_class: 'scale-dock-bar', child: this._box, reactive: true });
@@ -130,6 +158,7 @@ var AppDock = class AppDock {
         this._fitIcons(dockApps);
 
         this._signals.connect(Cinnamon.AppSystem.get_default(), 'app-state-changed', this._queueRebuild, this);
+        this._signals.connect(Main.overview, 'hiding', () => this._menu.close());
     }
 
     getHeight() {
@@ -164,7 +193,9 @@ var AppDock = class AppDock {
     }
 
     // Call once the dock is on the stage. The separator only splits two non-empty parts.
+    // An open menu closes: its icon is destroyed.
     _buildIcons({ pinned, others, running }, iconSize) {
+        this._menu.close();
         this._box.destroy_all_children();
         for (const app of pinned)
             this._box.add_actor(this._createIcon(app, iconSize, running.has(app)));
@@ -192,11 +223,23 @@ var AppDock = class AppDock {
         icon.add_actor(dot);
         // Destroyed with the icon.
         new Tooltips.Tooltip(icon, app.get_name());
-        UiHelpers.connectClick(icon, CLICK_BUTTONS, button => onIconClicked(app, button));
+        UiHelpers.connectClick(icon, CLICK_BUTTONS, button => this._onIconClicked(app, icon, button));
         return icon;
     }
 
+    // A right click opens the icon's menu, or closes it when it is already open on that icon.
+    _onIconClicked(app, icon, button) {
+        if (button !== Clutter.BUTTON_SECONDARY) {
+            onIconClicked(app, button);
+            return;
+        }
+
+        const entries = DockMenu.getDockMenuEntries(getClosableWindows(app).length);
+        this._menu.toggle(icon, entries, action => runMenuAction(app, action));
+    }
+
     destroy() {
+        this._menu.destroy();
         this._signals.disconnectAllSignals();
         if (this._rebuildIdleId) {
             Mainloop.source_remove(this._rebuildIdleId);

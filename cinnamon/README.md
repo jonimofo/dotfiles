@@ -188,6 +188,9 @@ Then give Super back to the Menu (see above).
   Super do nothing while the menu is open.
 - After Close, a prompt attached to a closed window is gone to until Scale closes, however
   late it comes; stock Scale stops waiting at the first new window of any kind.
+- A prompt an app draws inside its own window (recent GNOME apps) is no new window: Scale
+  stays open, as with stock Scale's close button, and the window keeps showing its prompt
+  among Scale's windows. No wait on a still-open window was added: it would be a guess.
 - Close skips the windows Scale does not show (skip-taskbar windows, an app's dialogs
   attached to a window) and the ones muffin says cannot be closed.
 - A top panel set to autohide or intellihide is not copied: Scale shows the clock band

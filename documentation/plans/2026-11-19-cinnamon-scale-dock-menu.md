@@ -155,11 +155,14 @@ Close on an app WITH unsaved work:
 
 Tried live by the owner on 2026-11-19 after a Cinnamon restart, before the audit fixes:
 "all work". The audit then added the save prompt (answer C), the count taken at opening,
-the hidden tooltip and English labels. The list below is what to check after a change here
-(Alt+F2 r):
+the hidden tooltip and English labels. Second trial by the owner on 2026-11-19, after the
+fixes: an app that draws its save prompt inside its own window leaves Scale open (no new
+window to follow); the owner chose no timer, the limit is in the README. The list
+below is what to check after a change here (Alt+F2 r):
 
-1. An editor with unsaved text, Close from its dock menu: Scale closes on the editor's
-   workspace, its save prompt in front. Cancel in the prompt: the editor stays open.
+1. An editor with unsaved text and a separate prompt window, Close from its dock menu:
+   Scale closes on the editor's workspace, its save prompt in front. Cancel in the
+   prompt: the editor stays open.
 2. Super, right click a running app's icon with one window: menu above the icon, theme
    colours, "New window", "Close", no app name tooltip over it. Left click and middle click
    on icons behave as before.

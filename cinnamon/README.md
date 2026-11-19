@@ -92,9 +92,11 @@ every other screen has its own strip at its very top.
 - A right click on a dock icon opens a menu above it, drawn by the Cinnamon theme: "New
   window" (same as the middle click), then, for a running app, "Close" for one window or
   "Close N windows" for more. Close asks every window of the app that Scale shows, on every
-  workspace, to close, as its title bar's close button does: an app with unsaved work still
-  asks. Scale stays open on the same workspace. A click outside the menu, Escape, or a
-  second right click on the same icon closes it without doing anything else.
+  workspace, to close, as its title bar's close button does. Scale stays open on the same
+  workspace. When a window answers with a prompt attached to it ("save changes?"), Scale
+  goes to that prompt on its workspace and closes, as stock Scale does when it closes a
+  window. A click outside the menu, Escape, or a second right click on the same icon closes
+  it without doing anything else. The three labels are in English in every locale.
 - The dock follows apps starting and stopping while Scale is open.
 
 ## Choose the apps of the dock
@@ -179,8 +181,13 @@ Then give Super back to the Menu (see above).
   drawn until the next opening of Scale.
 - Many apps make the dock icons smaller to fit the screen's width. Untested.
 - The dock menu has no arrow: Cinnamon 6.4 menus have none. Its count is taken when it
-  opens; Close acts on the windows open when it is chosen.
-- With a dock menu open, a click on another icon only closes the menu.
+  opens; Close acts only on those counted windows still open and closable when it is
+  chosen, never on one opened meanwhile.
+- With a dock menu open, a click on another icon only closes the menu. A left or middle
+  click on the icon whose menu is open does what that click always does. The wheel and
+  Super do nothing while the menu is open.
+- After Close, a prompt attached to a closed window is gone to until Scale closes, however
+  late it comes; stock Scale stops waiting at the first new window of any kind.
 - Close skips the windows Scale does not show (skip-taskbar windows, an app's dialogs
   attached to a window) and the ones muffin says cannot be closed.
 - A top panel set to autohide or intellihide is not copied: Scale shows the clock band
@@ -273,6 +280,9 @@ Assumptions about behaviour:
   swallows that press, and on close pops the grab, which gives the key focus back to Scale's
   view. Its `open-state-changed` handler runs before the dock's, which then destroys the
   menu; the manager destroys itself with its last menu.
+- Muffin emits `window-added` on a workspace for a new window; a prompt of a closing window
+  is transient for it (`get_transient_for()`). Stock's `WindowClone.closeWindow` relies on
+  both, and goes to the prompt from an idle.
 - Scale closes on an Escape key release (`WorkspacesView._onStageKeyRelease`). The menu
   closes on the press, so the dock swallows the rest of that key stroke on the stage.
 - Scale hides the panels (`Main.panelManager.disablePanels()` in `Overview._animateVisible`:

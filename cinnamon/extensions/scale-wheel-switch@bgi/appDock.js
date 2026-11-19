@@ -84,17 +84,66 @@ function closeWindows(windows) {
         metaWindow.delete(time);
 }
 
-// Read again when the entry is chosen: windows may have closed while the menu was open.
-function runMenuAction(app, action) {
-    switch (action) {
-    case DockMenu.DockMenuAction.NEW_WINDOW:
-        UiHelpers.openNewWindow(app);
-        break;
-    case DockMenu.DockMenuAction.CLOSE_WINDOWS:
-        closeWindows(getClosableWindows(app));
-        break;
-    }
+// Of the windows counted when the menu opened, those still closable when Close is chosen:
+// never more than the label says, none that closed meanwhile.
+function getStillClosableWindows(app, countedWindows) {
+    const closable = getClosableWindows(app);
+    return countedWindows.filter(metaWindow => closable.includes(metaWindow));
 }
+
+// The workspaces where a prompt of @windows can appear: each window's own, and the active
+// one for a window on every workspace.
+function getPromptWorkspaces(windows) {
+    const workspaces = new Set();
+    for (const metaWindow of windows) {
+        if (metaWindow.is_on_all_workspaces())
+            workspaces.add(global.workspace_manager.get_active_workspace());
+        else
+            workspaces.add(metaWindow.get_workspace());
+    }
+    return workspaces;
+}
+
+// Stock Scale's close (WindowClone.closeWindow in workspace.js): a window asked to close
+// can open a prompt attached to it ("save changes?"), which Scale shows no clone of. The
+// first new window transient for one of @windows goes to @onPrompt, from an idle as stock
+// does (the new window is not mapped yet). Stock stops at the first new window of any kind;
+// this watch waits for a prompt until destroyed, and has no time limit, like stock.
+var ClosePromptWatch = class ClosePromptWatch {
+    constructor(windows, onPrompt) {
+        this._windows = windows;
+        this._onPrompt = onPrompt;
+        this._idleId = 0;
+        this._connections = [...getPromptWorkspaces(windows)].map(workspace =>
+            [workspace, workspace.connect('window-added', (source, metaWindow) => this._onWindowAdded(metaWindow))]);
+    }
+
+    _onWindowAdded(metaWindow) {
+        if (!this._windows.includes(metaWindow.get_transient_for()))
+            return;
+
+        this._disconnect();
+        this._idleId = Mainloop.idle_add(() => {
+            this._idleId = 0;
+            this._onPrompt(metaWindow);
+            return false;
+        });
+    }
+
+    _disconnect() {
+        for (const [workspace, id] of this._connections)
+            workspace.disconnect(id);
+        this._connections = [];
+    }
+
+    destroy() {
+        this._disconnect();
+        if (this._idleId) {
+            Mainloop.source_remove(this._idleId);
+            this._idleId = 0;
+        }
+    }
+};
 
 function countDockApps({ pinned, others }) {
     return pinned.length + others.length;
@@ -136,6 +185,7 @@ var AppDock = class AppDock {
         this._signals = new SignalManager.SignalManager(null);
         this._rebuildIdleId = 0;
         this._menu = new DockMenu.DockMenu(this._monitor);
+        this._promptWatch = null;
 
         this._box = new St.BoxLayout({ style_class: 'scale-dock' });
         this.actor = new St.Bin({ style_class: 'scale-dock-bar', child: this._box, reactive: true });
@@ -158,11 +208,16 @@ var AppDock = class AppDock {
         this._fitIcons(dockApps);
 
         this._signals.connect(Cinnamon.AppSystem.get_default(), 'app-state-changed', this._queueRebuild, this);
-        this._signals.connect(Main.overview, 'hiding', () => this._menu.close());
+        this._signals.connect(Main.overview, 'hiding', this._onScaleHiding, this);
     }
 
     getHeight() {
         return this._height;
+    }
+
+    _onScaleHiding() {
+        this._menu.close();
+        this._stopPromptWatch();
     }
 
     // Several state changes come for one launch: rebuild once, when idle.
@@ -222,24 +277,53 @@ var AppDock = class AppDock {
         icon.add_actor(new St.Bin({ child: app.create_icon_texture(iconSize) }));
         icon.add_actor(dot);
         // Destroyed with the icon.
-        new Tooltips.Tooltip(icon, app.get_name());
-        UiHelpers.connectClick(icon, CLICK_BUTTONS, button => this._onIconClicked(app, icon, button));
+        const tooltip = new Tooltips.Tooltip(icon, app.get_name());
+        UiHelpers.connectClick(icon, CLICK_BUTTONS, button => this._onIconClicked(app, icon, tooltip, button));
         return icon;
     }
 
     // A right click opens the icon's menu, or closes it when it is already open on that icon.
-    _onIconClicked(app, icon, button) {
+    // The windows Close acts on are counted now, with the label.
+    _onIconClicked(app, icon, tooltip, button) {
         if (button !== Clutter.BUTTON_SECONDARY) {
             onIconClicked(app, button);
             return;
         }
 
-        const entries = DockMenu.getDockMenuEntries(getClosableWindows(app).length);
-        this._menu.toggle(icon, entries, action => runMenuAction(app, action));
+        const countedWindows = getClosableWindows(app);
+        const entries = DockMenu.getDockMenuEntries(countedWindows.length);
+        this._menu.toggle(icon, entries, action => this._runMenuAction(app, action, countedWindows), tooltip);
+    }
+
+    _runMenuAction(app, action, countedWindows) {
+        switch (action) {
+        case DockMenu.DockMenuAction.NEW_WINDOW:
+            UiHelpers.openNewWindow(app);
+            break;
+        case DockMenu.DockMenuAction.CLOSE_WINDOWS:
+            this._closeWindows(getStillClosableWindows(app, countedWindows));
+            break;
+        }
+    }
+
+    // Watched before the windows are asked to close, as stock does. A prompt goes to its
+    // window as a left click would: its workspace, then Scale closes.
+    _closeWindows(windows) {
+        this._stopPromptWatch();
+        this._promptWatch = new ClosePromptWatch(windows, activateWindow);
+        closeWindows(windows);
+    }
+
+    _stopPromptWatch() {
+        if (this._promptWatch) {
+            this._promptWatch.destroy();
+            this._promptWatch = null;
+        }
     }
 
     destroy() {
         this._menu.destroy();
+        this._stopPromptWatch();
         this._signals.disconnectAllSignals();
         if (this._rebuildIdleId) {
             Mainloop.source_remove(this._rebuildIdleId);

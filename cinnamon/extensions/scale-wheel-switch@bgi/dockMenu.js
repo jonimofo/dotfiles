@@ -4,6 +4,8 @@ const St = imports.gi.St;
 const Main = imports.ui.main;
 const PopupMenu = imports.ui.popupMenu;
 
+// English in every locale, not passed through _(): Cinnamon translates "Close" but not the
+// other two, and the menu would mix languages.
 const NEW_WINDOW_LABEL = "New window";
 const CLOSE_LABEL = "Close";
 const CLOSE_WINDOWS_LABEL = "Close %d windows";
@@ -17,11 +19,11 @@ var DockMenuAction = {
 // The entries of a dock icon's menu, top to bottom, for an app with @windowCount windows
 // the menu can close: "New window" always, then "Close" for one, "Close N windows" for more.
 function getDockMenuEntries(windowCount) {
-    const entries = [{ action: DockMenuAction.NEW_WINDOW, label: _(NEW_WINDOW_LABEL) }];
+    const entries = [{ action: DockMenuAction.NEW_WINDOW, label: NEW_WINDOW_LABEL }];
     if (windowCount === 1)
-        entries.push({ action: DockMenuAction.CLOSE_WINDOWS, label: _(CLOSE_LABEL) });
+        entries.push({ action: DockMenuAction.CLOSE_WINDOWS, label: CLOSE_LABEL });
     else if (windowCount > 1)
-        entries.push({ action: DockMenuAction.CLOSE_WINDOWS, label: _(CLOSE_WINDOWS_LABEL).replace('%d', String(windowCount)) });
+        entries.push({ action: DockMenuAction.CLOSE_WINDOWS, label: CLOSE_WINDOWS_LABEL.replace('%d', String(windowCount)) });
     return entries;
 }
 
@@ -71,22 +73,20 @@ var DockMenu = class DockMenu {
         this._pendingAction = null;
         this._escapeGuardId = 0;
         this._escapePressed = false;
-    }
-
-    isOpen() {
-        return this._menu !== null;
+        this._tooltip = null;
     }
 
     // Opens the menu of @entries above @sourceActor; @onActivate gets the chosen entry's
-    // action. A second call for the same source closes the menu instead.
-    toggle(sourceActor, entries, onActivate) {
+    // action. A second call for the same source closes the menu instead. @tooltip, the
+    // source's Tooltips.Tooltip, is kept hidden while the menu is open.
+    toggle(sourceActor, entries, onActivate, tooltip) {
         const wasOpenOnSource = this._menu !== null && this._menu.sourceActor === sourceActor;
         this.close();
         if (!wasOpenOnSource)
-            this._open(sourceActor, entries, onActivate);
+            this._open(sourceActor, entries, onActivate, tooltip);
     }
 
-    _open(sourceActor, entries, onActivate) {
+    _open(sourceActor, entries, onActivate, tooltip) {
         const menu = new DockIconMenu(sourceActor, this._area);
         for (const { action, label } of entries) {
             const item = new PopupMenu.PopupMenuItem(label);
@@ -103,11 +103,14 @@ var DockMenu = class DockMenu {
         // manager destroys itself with its last menu.
         const manager = new PopupMenu.PopupMenuManager(menu);
         manager.addMenu(menu);
-        menu.connect('open-state-changed', (source, isOpen) => {
-            if (!isOpen)
-                this._onClosed(menu);
+        const openStateId = menu.connect('open-state-changed', (source, isOpen) => {
+            if (isOpen)
+                return;
+            menu.disconnect(openStateId);
+            this._onClosed(menu);
         });
         this._menu = menu;
+        this._hideTooltip(tooltip);
         this._connectEscapeGuard();
         menu.open(true);
     }
@@ -123,6 +126,7 @@ var DockMenu = class DockMenu {
             return;
 
         this._menu = null;
+        this._restoreTooltip();
         if (!this._escapePressed)
             this._disconnectEscapeGuard();
         menu.destroy();
@@ -130,6 +134,20 @@ var DockMenu = class DockMenu {
         this._pendingAction = null;
         if (action)
             action();
+    }
+
+    _hideTooltip(tooltip) {
+        this._tooltip = tooltip || null;
+        if (this._tooltip) {
+            this._tooltip.preventShow = true;
+            this._tooltip.hide();
+        }
+    }
+
+    _restoreTooltip() {
+        if (this._tooltip)
+            this._tooltip.preventShow = false;
+        this._tooltip = null;
     }
 
     // The menu closes on Escape's press; the release would then reach Scale, which closes
@@ -174,7 +192,6 @@ var DockMenu = class DockMenu {
         }
     }
 
-    // No entry's action runs once the dock is gone.
     destroy() {
         if (this._menu) {
             const menu = this._menu;
@@ -182,6 +199,7 @@ var DockMenu = class DockMenu {
             menu.close(false);
             menu.destroy();
         }
+        this._restoreTooltip();
         this._pendingAction = null;
         this._disconnectEscapeGuard();
     }

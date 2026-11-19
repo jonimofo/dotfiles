@@ -1,4 +1,4 @@
-Status: VALIDATED
+Status: DONE
 
 # Cinnamon Quick Settings: playing bar and players without a title
 
@@ -114,8 +114,8 @@ Videos playing a file without title tag:
 The owner tried the branch with GNOME Videos playing a file: "yes it works, but i want it to
 be idempotent, like if i use another app it still works". The Videos row appeared with the
 window title, the purple bar showed while playing. Requirement taken: generic for any MPRIS
-player, no application-specific code (none was added). Status stays VALIDATED until the
-second trial.
+player, no application-specific code (none was added). The owner asked for the merge on
+2026-11-19, after the audit fixes.
 
 ## Audit, 2026-11-19
 

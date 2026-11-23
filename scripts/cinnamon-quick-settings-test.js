@@ -800,12 +800,12 @@ async function testGammastepWarmth() {
     const on = makeWarmth({ store: fakeWarmthStore({ 'warmth-kelvin': 3500 }) });
     on.warmth.toggle();
     await wait(0);
-    check(`gammastep warmth: on sends -O <kelvin> on every screen (${on.gammastep.runs})`,
-        `${on.gammastep.runs}` === 'gammastep -m randr -O 3500' && on.store.values['warmth-enabled'] === true);
+    check(`gammastep warmth: on sends -P -O <kelvin>: the run replaces the previous tint, runs do not stack (${on.gammastep.runs})`,
+        `${on.gammastep.runs}` === 'gammastep -m randr -P -O 3500' && on.store.values['warmth-enabled'] === true);
     on.warmth.setTemperature(2500);
     await wait(0);
     check(`gammastep warmth: the slider sends the new kelvin live, shows it, stores nothing yet (${on.gammastep.runs})`,
-        on.gammastep.runs[1] === 'gammastep -m randr -O 2500' && on.warmth.kelvin === 2500
+        on.gammastep.runs[1] === 'gammastep -m randr -P -O 2500' && on.warmth.kelvin === 2500
         && warmthRow(on.warmth).text === '2500 K' && on.store.values['warmth-kelvin'] === 3500);
     on.warmth.setTemperature(2500);
     await wait(0);
@@ -848,7 +848,7 @@ async function testGammastepWarmth() {
         await wait(0);
         check(`gammastep warmth: a stored ${stored} reads as 2000 K on the row and at start-up (${row.text}, ${bad.gammastep.runs})`,
             bad.warmth.kelvin === 2000 && row.text === '2000 K' && row.fraction === defaultFraction
-            && `${bad.gammastep.runs}` === 'gammastep -m randr -O 2000');
+            && `${bad.gammastep.runs}` === 'gammastep -m randr -P -O 2000');
     }
     check(`gammastep warmth: an invalid stored kelvin logs nothing (${errors})`, errors.length === 0);
 
@@ -856,11 +856,11 @@ async function testGammastepWarmth() {
     const race = makeWarmth({ gammastep: held, store: fakeWarmthStore({ 'warmth-enabled': true }) });
     for (const kelvin of [3000, 3100, 3200, 3300])
         race.warmth.setTemperature(kelvin);
-    check(`gammastep warmth: one run at a time while dragging (${held.runs})`, `${held.runs}` === 'gammastep -m randr -O 3000');
+    check(`gammastep warmth: one run at a time while dragging (${held.runs})`, `${held.runs}` === 'gammastep -m randr -P -O 3000');
     held.held.shift()();
     await wait(0);
     check(`gammastep warmth: overlapping changes end on the newest value (${held.runs})`,
-        held.runs.length === 2 && held.runs[1] === 'gammastep -m randr -O 3300');
+        held.runs.length === 2 && held.runs[1] === 'gammastep -m randr -P -O 3300');
     held.held.shift()();
     await wait(0);
     check('gammastep warmth: nothing left to run', held.runs.length === 2 && held.held.length === 0);
@@ -875,7 +875,7 @@ async function testGammastepWarmth() {
     heldAtDestroy.held.shift()();
     await wait(0);
     check(`gammastep warmth: a run queued before destroy does not run after it (${heldAtDestroy.runs})`,
-        `${heldAtDestroy.runs}` === 'gammastep -m randr -O 3000' && heldAtDestroy.held.length === 0);
+        `${heldAtDestroy.runs}` === 'gammastep -m randr -P -O 3000' && heldAtDestroy.held.length === 0);
     destroyed.warmth.commitTemperature();
     check('gammastep warmth: a release after destroy writes nothing', destroyed.store.writes === 0);
 
@@ -883,7 +883,7 @@ async function testGammastepWarmth() {
     stored.warmth.applyStored();
     await wait(0);
     check(`gammastep warmth: start-up with stored on re-applies (${stored.gammastep.runs})`,
-        `${stored.gammastep.runs}` === 'gammastep -m randr -O 1800');
+        `${stored.gammastep.runs}` === 'gammastep -m randr -P -O 1800');
 
     // M1: gammastep missing is logged once, however often it is looked for.
     let installed = false;
@@ -903,7 +903,7 @@ async function testGammastepWarmth() {
     missing.warmth.applyStored();
     await wait(0);
     check(`gammastep warmth: gammastep installed later is picked up and applied (${missing.gammastep.runs})`,
-        missing.warmth.available && `${missing.gammastep.runs}` === 'gammastep -m randr -O 2000' && errors.length === 0);
+        missing.warmth.available && `${missing.gammastep.runs}` === 'gammastep -m randr -P -O 2000' && errors.length === 0);
     installed = false;
     missing.warmth.applyStored();
     check(`gammastep warmth: removed again, logged again once (${errors})`, !missing.warmth.available && errors.length === 1);
@@ -913,7 +913,7 @@ async function testGammastepWarmth() {
     failing.warmth.toggle();
     await wait(0);
     check(`gammastep warmth: a failing run makes the row unavailable, logged with command and value (${errors})`,
-        !failing.warmth.available && errors.length === 1 && errors[0].includes("'gammastep -m randr -O 2000' failed")
+        !failing.warmth.available && errors.length === 1 && errors[0].includes("'gammastep -m randr -P -O 2000' failed")
         && errors[0].includes('Unable to connect'));
     check('gammastep warmth: a failing run dims the slider and the switch', !warmthRow(failing.warmth).switchAvailable);
     errors = [];
@@ -930,7 +930,7 @@ async function testGammastepWarmth() {
     failing.warmth.applyStored();
     await wait(0);
     check(`gammastep warmth: a monitor change after a failed run recovers and re-applies (${failing.gammastep.runs})`,
-        failing.warmth.available && failing.gammastep.runs.length === 2 && failing.gammastep.runs[1] === 'gammastep -m randr -O 2000');
+        failing.warmth.available && failing.gammastep.runs.length === 2 && failing.gammastep.runs[1] === 'gammastep -m randr -P -O 2000');
 
     // M2: the waiting run is dropped on failure; M7: recovery through the menu-open path.
     const flaky = fakeGammastep({ hold: true });
@@ -954,7 +954,7 @@ async function testGammastepWarmth() {
     flaky.held.shift()();
     await wait(0);
     check(`gammastep warmth: menu open recovers the row and re-applies the newest kelvin (${flaky.runs})`,
-        menu.warmth.available && flaky.runs.length === 3 && flaky.runs[2] === 'gammastep -m randr -O 3200');
+        menu.warmth.available && flaky.runs.length === 3 && flaky.runs[2] === 'gammastep -m randr -P -O 3200');
     menu.warmth.menuOpened();
     await wait(0);
     check('gammastep warmth: menu open while available runs nothing', flaky.runs.length === 3);

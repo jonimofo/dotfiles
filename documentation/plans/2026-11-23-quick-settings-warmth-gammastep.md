@@ -24,8 +24,12 @@ tints both outputs and `gammastep -m randr -x` resets both.
 
 ## Design
 
-- Switch on: `gammastep -m randr -O <kelvin>`. Switch off: `gammastep -m randr -x`.
+- Switch on: `gammastep -m randr -P -O <kelvin>`. Switch off: `gammastep -m randr -x`.
   Command, method and flags are constants in `constants.js`.
+- `-P` was added on 2026-11-23 after the first use on the real screens: without it each run
+  tints the ramps left by the previous one. Measured at 4100 K, three runs in a row gave
+  xrandr gamma 1.3, 1.5 then 1.8 on green: the slider could only darken. With `-P` every run
+  starts from neutral ramps. The single run used to validate the design could not show it.
 - The slider sends the value while dragging, one run per 100 K step, and the value text
   follows the handle. Runs go one at a time; a change made while one runs replaces any
   other waiting one, so the newest value is the one left on the screens. The kelvin is

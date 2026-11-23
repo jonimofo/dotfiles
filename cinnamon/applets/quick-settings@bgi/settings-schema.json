@@ -282,5 +282,13 @@
                 "id": "battery"
             }
         ]
+    },
+    "warmth-enabled": {
+        "type": "generic",
+        "default": false
+    },
+    "warmth-kelvin": {
+        "type": "generic",
+        "default": 2000
     }
 }

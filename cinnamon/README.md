@@ -347,12 +347,22 @@ the menu:
 - Sliders: Sound (default output), Microphone (default input), Brightness, Warmth. Sound and
   Microphone follow the handle live, like the stock sound applet. Brightness sets every
   external monitor that answers DDC/CI to the same value when the handle is released, or
-  the laptop panel when no such monitor is connected. Warmth is the Night Light
-  temperature, 6500 K (no tint) on the left to 1000 K (deepest red) on the right in steps
-  of 100 K, wider than Cinnamon's Night Light page (1700 K to 4700 K), shown as `3400 K`;
-  a value set elsewhere outside that range is shown as is, the handle at the nearest end.
-  The switch at its right end turns Night Light on and off; while it is off the slider is
-  dimmed.
+  the laptop panel when no such monitor is connected. Warmth is the screen colour
+  temperature on every connected screen, set with `gammastep -m randr -O <kelvin>`,
+  6500 K (no tint) on the left to 1000 K (deepest red) on the right in steps of 100 K,
+  shown as `3400 K`. The switch at its right end turns it on and off (`gammastep -m randr
+  -x` resets the gamma); while it is off the slider is dimmed. The handle sends one run per
+  step while dragging, and the value next to it follows; runs go one at a time and the
+  newest value is the one left on the screens. On and the temperature are kept in the
+  applet's own settings (hidden keys `warmth-enabled`, `warmth-kelvin`; defaults off,
+  2000 K), the temperature once the handle is released. Both are applied again when the
+  applet starts (login, Cinnamon restart) and one second after the last monitor change,
+  since a newly plugged screen starts with neutral gamma. With gammastep missing or after
+  a failed run, the row and its switch are dimmed; the next menu open or monitor change
+  looks for gammastep again and re-applies the state. Cinnamon's Night Light is not used:
+  its colour plugin keeps one colour device per vendor-model-serial, so two identical
+  monitors reporting the same serial get one device and only one of them is tinted. Night
+  Light also sets the gamma ramps; leave it off so the two do not overwrite each other.
 - Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
   - Wi-Fi: wireless on or off. Shows the network in use.
   - Bluetooth: adapter on or off. Shows the connected device's name, with `+N` when several
@@ -382,7 +392,7 @@ the menu:
     once), the first change to battery power applies the limit, once. A dock unplugged or a
     short power cut counts as that change.
   - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
-    dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
+    dimming), Mic mute. Warmth has no tile: the switch on its row turns it on and off.
 - Media controls, under the tiles: one block per media player on the session bus (any
   MPRIS player: VLC, GNOME Videos, a browser playing a video...), at most three, shown by
   player name. With more than three, the ones kept are the playing players first, then the
@@ -481,6 +491,7 @@ part is dimmed or does nothing, and the reason goes to the journal once:
 
 | Tool | Used for | When absent |
 |---|---|---|
+| `gammastep` | Warmth row, on every screen (one-shot mode, `randr` method) | Warmth row and its switch dimmed and inert until the next menu open or monitor change finds it working; a missing command is logged once, a failed run with the command and value |
 | `ddcutil` | external monitor brightness | the laptop panel is used, through cinnamon-settings-daemon; with no laptop panel either, the Brightness row is dimmed |
 | `power-profiles-daemon` | Power profile tile and list | tile dimmed until the daemon starts |
 | `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed and shown off, no VPN panel icon from NordVPN |
@@ -546,11 +557,13 @@ signals, the ones Cinnamon's own overview and window menu use.
   own app) triggers one `nordvpn status` read, so the VPN name on the panel follows. With
   NordVPN's OpenVPN technology no such link exists in NetworkManager: the panel then
   follows only when the menu opens.
-- A Warmth above 4700 K may be set back to 4700 K when Cinnamon Settings > Night Light is
-  opened. Verified by reading the page's code only (`cs_nightlight.py` and the xapp `Range`
-  widget: a 1700 K to 4700 K scale bound to the key, whose clamped value is written back
-  300 ms after it changes); not tried on screen, since that would change the setting. A
-  value below 1700 K is not affected by that path.
+- The Warmth is reset by anything else that sets the gamma ramps: Night Light also sets
+  them, leave it off so the two do not overwrite each other; also `xrandr --gamma`, a
+  colour profile loaded later. It comes back at the next monitor change or applet start,
+  or by moving the slider.
+- A command the applet runs (gammastep, ddcutil, nordvpn, the charge helper) that has not
+  ended after 60 seconds is killed and logged as timed out; the row or tile that ran it
+  behaves as after a failed run.
 
 ## Quick Settings: tests
 
@@ -573,7 +586,7 @@ logic tests.
 `cinnamon-quick-settings-test.sh` runs on the memory GSettings backend and on fakes: fake
 NetworkManager objects (Wi-Fi, VPN), a fake system bus (BlueZ, power profiles, UPower's
 keyboard backlight), fake session buses (Keep awake, MPRIS media players), fake Cvc
-streams, fake radios (Airplane mode), and fake ddcutil and nordvpn commands fed with output
+streams, fake radios (Airplane mode), a fake gammastep (Warmth), and fake ddcutil and nordvpn commands fed with output
 captured on this machine (`scripts/fixtures/`). It never talks to the real
 NetworkManager, BlueZ, UPower, session manager or media players.
 
@@ -581,7 +594,8 @@ Design records:
 [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md),
 [`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md),
 [`documentation/plans/2026-11-17-cinnamon-quick-settings-media.md`](../documentation/plans/2026-11-17-cinnamon-quick-settings-media.md),
-[`documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md`](../documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md).
+[`documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md`](../documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md),
+[`documentation/plans/2026-11-23-quick-settings-warmth-gammastep.md`](../documentation/plans/2026-11-23-quick-settings-warmth-gammastep.md).
 
 ## Calendar: what it does
 

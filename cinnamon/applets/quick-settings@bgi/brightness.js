@@ -1,4 +1,3 @@
-const GLib = imports.gi.GLib;
 const Constants = require('./constants');
 
 // The Brightness slider's model. Uses the DDC monitors when there are any, else the laptop
@@ -18,18 +17,6 @@ class Brightness {
         this._pendingValue = null;
         this._destroyed = false;
         this._detectGeneration = 0;
-        this._detectSoonId = 0;
-    }
-
-    // A dock sends several monitor changes in a row: one detection once they stop.
-    detectSoon() {
-        if (this._detectSoonId)
-            GLib.source_remove(this._detectSoonId);
-        this._detectSoonId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Constants.BRIGHTNESS_DETECT_DELAY_MS, () => {
-            this._detectSoonId = 0;
-            this.detect();
-            return GLib.SOURCE_REMOVE;
-        });
     }
 
     // Detects the backend again: at start and when the monitors change.
@@ -100,8 +87,5 @@ class Brightness {
 
     destroy() {
         this._destroyed = true;
-        if (this._detectSoonId)
-            GLib.source_remove(this._detectSoonId);
-        this._detectSoonId = 0;
     }
 }

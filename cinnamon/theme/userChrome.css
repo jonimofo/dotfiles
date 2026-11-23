@@ -1,0 +1,48 @@
+/* Window buttons for Thunderbird and Firefox: both apps draw their own title bar, so the
+   window manager theme does not reach them. Use the Dracula theme's dot images instead.
+   dracula-assets is a link to ~/.themes/Dracula/assets that cinnamon/theme/install.sh
+   creates next to this stylesheet in the profile's chrome/ folder. */
+.titlebar-button > .toolbarbutton-icon {
+  background-color: transparent !important;
+  background-size: 16px !important;
+}
+
+.titlebar-close > .toolbarbutton-icon {
+  background-image: url("dracula-assets/close.svg") !important;
+}
+.titlebar-close:hover > .toolbarbutton-icon {
+  background-image: url("dracula-assets/close_prelight.svg") !important;
+}
+.titlebar-close:hover:active > .toolbarbutton-icon {
+  background-image: url("dracula-assets/close_pressed.svg") !important;
+}
+.titlebar-close:-moz-window-inactive > .toolbarbutton-icon {
+  background-image: url("dracula-assets/close_unfocused.svg") !important;
+}
+
+.titlebar-min > .toolbarbutton-icon {
+  background-image: url("dracula-assets/min.svg") !important;
+}
+.titlebar-min:hover > .toolbarbutton-icon {
+  background-image: url("dracula-assets/min_prelight.svg") !important;
+}
+.titlebar-min:hover:active > .toolbarbutton-icon {
+  background-image: url("dracula-assets/min_pressed.svg") !important;
+}
+.titlebar-min:-moz-window-inactive > .toolbarbutton-icon {
+  background-image: url("dracula-assets/min_unfocused.svg") !important;
+}
+
+.titlebar-max > .toolbarbutton-icon,
+.titlebar-restore > .toolbarbutton-icon {
+  background-image: url("dracula-assets/maximize.svg") !important;
+}
+:is(.titlebar-max, .titlebar-restore):hover > .toolbarbutton-icon {
+  background-image: url("dracula-assets/maximize_prelight.svg") !important;
+}
+:is(.titlebar-max, .titlebar-restore):hover:active > .toolbarbutton-icon {
+  background-image: url("dracula-assets/maximize_pressed.svg") !important;
+}
+:is(.titlebar-max, .titlebar-restore):-moz-window-inactive > .toolbarbutton-icon {
+  background-image: url("dracula-assets/maximize_unfocused.svg") !important;
+}

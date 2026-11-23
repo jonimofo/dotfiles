@@ -1,7 +1,8 @@
 # Cinnamon theme: Dracula
 
 Applications, window borders, panel, icons and cursors all use Dracula. Set up on 2026-11-11,
-Cinnamon 6.4. Nothing here is versioned: the theme files come from upstream releases.
+Cinnamon 6.4. The theme files come from upstream releases and are not versioned; only the
+Thunderbird and Firefox window buttons live in this repo, under `theme/`.
 
 ## What is installed
 
@@ -59,6 +60,34 @@ ln -sfn ~/.themes/Dracula/assets ~/.config/assets
 The CSS loads its images from `../assets`, relative to `~/.config/gtk-4.0/`, hence
 `~/.config/assets`. The override wins over every GTK4 app's own style: an app that looks
 broken is the first thing to check.
+
+## Thunderbird and Firefox window buttons
+
+Both apps draw their own title bar, so the window manager theme does not reach their close,
+minimize and maximize buttons. `theme/userChrome.css` swaps in the Dracula dot images. The
+compact bar, with tabs next to the buttons, is kept on purpose: `mail.tabs.drawInTitlebar=false`
+or Firefox's "Title Bar" option would bring the Dracula buttons back only by adding a full
+window title bar. The old pref `widget.gtk.non-native-titlebar-buttons.enabled` no longer exists.
+
+```bash
+cinnamon/theme/install.sh ~/.thunderbird/yft1awhq.default-default ~/.mozilla/firefox/ifcpghdw.default-release
+```
+
+For each profile, the script links `chrome/userChrome.css` to the repo file and
+`chrome/dracula-assets` to `~/.themes/Dracula/assets`, and adds
+`toolkit.legacyUserProfileCustomizations.stylesheets` to `user.js` if missing. A real
+`userChrome.css` already there is kept as `userChrome.css.<timestamp>.bak`. `--check` shows
+what would change, without writing. Safe to run twice. Restart the app afterwards.
+
+Limits: restore uses the maximize dot. Only the profiles given are changed. The selectors were
+checked on Thunderbird 153 and Firefox 160; re-check them after a major Mozilla update.
+
+Undo, per profile, then restart the app:
+
+```bash
+rm <profile>/chrome/userChrome.css <profile>/chrome/dracula-assets
+sed -i '/toolkit.legacyUserProfileCustomizations.stylesheets/d; /Dracula window buttons/d' <profile>/user.js
+```
 
 ## Undo
 

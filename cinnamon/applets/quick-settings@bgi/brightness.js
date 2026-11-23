@@ -25,7 +25,7 @@ class Brightness {
     detectSoon() {
         if (this._detectSoonId)
             GLib.source_remove(this._detectSoonId);
-        this._detectSoonId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Constants.BRIGHTNESS_DETECT_DELAY_MS, () => {
+        this._detectSoonId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Constants.MONITORS_SETTLE_DELAY_MS, () => {
             this._detectSoonId = 0;
             this.detect();
             return GLib.SOURCE_REMOVE;

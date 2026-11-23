@@ -29,7 +29,7 @@ const Nordvpn = require('./nordvpn');
 const ListSpecs = require('./listSpecs');
 const Battery = require('./battery');
 const BooleanSetting = require('./booleanSetting');
-const NightLight = require('./nightLight');
+const GammastepWarmth = require('./gammastepWarmth');
 const WarmthModel = require('./warmthModel');
 const KeepAwake = require('./keepAwake');
 const PowerProfiles = require('./powerProfiles');
@@ -86,7 +86,6 @@ class QuickSettingsApplet extends Applet.Applet {
         this._setUpNordvpn();
         this._setUpPowerProfile();
         this._setUpSettingTiles();
-        this._setUpNightLight();
         this._setUpKeepAwake();
         this._setUpKeyboardLight();
         this._setUpChargeLimit();
@@ -96,6 +95,7 @@ class QuickSettingsApplet extends Applet.Applet {
             busName => this._focusMediaPlayer(busName));
         this._setUpHeader();
         this._setUpLayoutSettings(metadata.uuid, instanceId);
+        this._setUpWarmth();
     }
 
     on_applet_added_to_panel() {
@@ -119,7 +119,7 @@ class QuickSettingsApplet extends Applet.Applet {
         this._vpn.destroy();
         this._nordvpn.destroy();
         this._powerProfiles.destroy();
-        this._nightLight.destroy();
+        this._warmth.destroy();
         this._doNotDisturb.destroy();
         this._keepAwake.destroy();
         this._battery.destroy();
@@ -314,21 +314,29 @@ class QuickSettingsApplet extends Applet.Applet {
         return setting;
     }
 
-    // The Warmth row's switch turns Night Light on and off; the temperature follows the
-    // handle live, one write per step.
-    _setUpNightLight() {
+    // The Warmth row's switch turns the tint on and off on every screen; the temperature
+    // follows the handle live, one gammastep run per step. The state lives in the applet's
+    // settings (this.settings, from _setUpLayoutSettings) and is applied again at start.
+    _setUpWarmth() {
         const row = this._content.sliders.warmth;
-        this._nightLight = new NightLight.NightLight(() => this._syncNightLight());
-        row.setOnSwitch(() => this._nightLight.toggle());
-        row.onLiveChange(value => this._nightLight.setTemperature(WarmthModel.fractionToKelvin(value)));
-        this._syncNightLight();
+        this._warmth = new GammastepWarmth.GammastepWarmth({
+            runCommand: Subprocess.runCommand,
+            store: this.settings,
+            onChange: () => this._syncWarmth(),
+        });
+        row.setOnSwitch(() => this._warmth.toggle());
+        row.onLiveChange(value => this._warmth.setTemperature(WarmthModel.fractionToKelvin(value)));
+        this._syncWarmth();
+        this._warmth.applyStored();
     }
 
-    // Night Light off: the Warmth slider is dimmed and inert, the switch stays usable.
-    _syncNightLight() {
-        const state = WarmthModel.rowState(this._nightLight.enabled, this._nightLight.temperature);
+    // Warmth off: the slider is dimmed and inert, the switch stays usable. Without a working
+    // gammastep both are.
+    _syncWarmth() {
+        const state = WarmthModel.rowState(this._warmth.available, this._warmth.enabled, this._warmth.kelvin);
         const row = this._content.sliders.warmth;
         row.setAvailable(state.available);
+        row.setSwitchAvailable(state.switchAvailable);
         row.setSwitchState(state.switchOn);
         row.showValue(state.fraction);
         row.setValueText(state.text);
@@ -565,9 +573,11 @@ class QuickSettingsApplet extends Applet.Applet {
         });
         row.onRelease(Constants.BRIGHTNESS_SCROLL_COMMIT_MS, value => this._brightness.set(value));
         // The first detection comes from _applyLayout(), only when the row shows.
+        // A new screen has neutral gamma: the Warmth is applied again, shown or not.
         this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => {
             if (this._isShown(Constants.LAYOUT_KEYS.sliders, 'monitors'))
                 this._brightness.detectSoon();
+            this._warmth.applySoon();
         });
     }
 

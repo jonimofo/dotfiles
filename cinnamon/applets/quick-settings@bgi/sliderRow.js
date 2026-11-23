@@ -64,6 +64,11 @@ class SliderRow {
         this._switchButton.connect('clicked', () => onSwitch());
     }
 
+    // A switch whose setting cannot be applied: dimmed and inert.
+    setSwitchAvailable(available) {
+        UiHelpers.setButtonWorking(this._switchButton, available);
+    }
+
     // Also the button's checked state, as the tiles set it, so screen readers get it.
     setSwitchState(on) {
         this._switch.setToggleState(on);

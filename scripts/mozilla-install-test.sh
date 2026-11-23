@@ -55,10 +55,23 @@ pref_count() {
     say "${count:-0}"
 }
 
+# Snapshot of every path, type and link target under the given folders, to prove nothing changed.
+tree_state() {
+    local dir
+    for dir in "$@"; do
+        if [[ ! -e "$dir" ]]; then
+            say "$dir absent"
+            continue
+        fi
+        find "$dir" -printf '%p %y %l\n' | sort
+    done
+}
+
 links_are_correct() {
+    local dir="${1:-$profile}"
     local css_target assets_target
-    css_target="$(readlink "$profile/chrome/userChrome.css" || true)"
-    assets_target="$(readlink "$profile/chrome/dracula-assets" || true)"
+    css_target="$(readlink "$dir/chrome/userChrome.css" || true)"
+    assets_target="$(readlink "$dir/chrome/dracula-assets" || true)"
     if [[ "$css_target" != "$STYLESHEET" ]]; then
         return 1
     fi
@@ -128,9 +141,9 @@ test_real_file_backed_up() {
     printf '/* old */\n' > "$profile/chrome/userChrome.css"
     local output backups
     output="$(run_installer "$profile")"
-    backups="$(find "$profile/chrome" -name 'userChrome.css.*.bak' -type f)"
-    if links_are_correct && [[ -n "$backups" ]]; then
-        if [[ "$(cat "$backups")" == "/* old */" && "$output" == *"backed up"* ]]; then
+    backups=("$profile"/chrome/userChrome.css.*.bak)
+    if links_are_correct && [[ ${#backups[@]} -eq 1 && -f "${backups[0]}" ]]; then
+        if [[ "$(cat "${backups[0]}")" == "/* old */" && "$output" == *"backed up"* ]]; then
             pass "real userChrome.css is backed up"
             return 0
         fi
@@ -139,14 +152,142 @@ test_real_file_backed_up() {
 }
 
 test_check_writes_nothing() {
+    local flag
+    for flag in --check -n; do
+        new_case
+        local status=0 listing
+        "$INSTALLER" "$flag" "$profile" >/dev/null 2>&1 || status=$?
+        listing="$(find "$profile" -mindepth 1)"
+        if [[ $status -eq 1 && -z "$listing" ]]; then
+            pass "$flag writes nothing and exits 1 on pending changes"
+        else
+            failure "$flag writes nothing (status $status, found: $listing)"
+        fi
+    done
+}
+
+test_check_after_profile() {
     new_case
     local status=0 listing
-    "$INSTALLER" --check "$profile" >/dev/null 2>&1 || status=$?
+    "$INSTALLER" "$profile" --check >/dev/null 2>&1 || status=$?
     listing="$(find "$profile" -mindepth 1)"
     if [[ $status -eq 1 && -z "$listing" ]]; then
-        pass "--check writes nothing and exits 1 on pending changes"
+        pass "--check after a profile is a dry run"
     else
-        failure "--check writes nothing (status $status, found: $listing)"
+        failure "--check after a profile is a dry run (status $status, found: $listing)"
+    fi
+}
+
+test_unknown_flag_usage() {
+    new_case
+    local status=0 output listing
+    output="$("$INSTALLER" --bogus "$profile" 2>&1 >/dev/null)" || status=$?
+    listing="$(find "$profile" -mindepth 1)"
+    if [[ $status -eq 2 && "$output" == usage:* && -z "$listing" ]]; then
+        pass "unknown flag gives usage and exit 2"
+    else
+        failure "unknown flag gives usage and exit 2 (status $status)"
+    fi
+}
+
+# Points both links at stale targets; $1 = "dummy" (existing file) or "dangling".
+assert_relink() {
+    local kind="$1"
+    new_case
+    mkdir -p "$profile/chrome"
+    local stale="$tmp_root/case$case_id/stale.css"
+    if [[ "$kind" == "dummy" ]]; then
+        printf '/* stale */\n' > "$stale"
+    fi
+    ln -s "$stale" "$profile/chrome/userChrome.css"
+    ln -s "$stale" "$profile/chrome/dracula-assets"
+    local output relinks
+    output="$(run_installer "$profile")"
+    relinks="$(printf '%s\n' "$output" | grep -c '^relink ' || true)"
+    if links_are_correct && [[ "$relinks" == "2" ]]; then
+        pass "stale $kind links are relinked"
+    else
+        failure "stale $kind links are relinked (relink lines: $relinks)"
+    fi
+}
+
+test_relink() {
+    assert_relink dummy
+    assert_relink dangling
+}
+
+test_two_profiles() {
+    new_case
+    local second="$tmp_root/case$case_id/second profile"
+    mkdir -p "$second"
+    run_installer "$profile" "$second" >/dev/null
+    if links_are_correct "$profile" && links_are_correct "$second"; then
+        if [[ "$(pref_count "$second/user.js")" == "1" ]]; then
+            pass "two profiles in one call, one with a space, are both installed"
+            return 0
+        fi
+    fi
+    failure "two profiles in one call, one with a space, are both installed"
+}
+
+# Runs the installer on a good profile then a broken one; asserts failure and no change at all.
+assert_bad_profile_changes_nothing() {
+    local label="$1" good="$2" bad="$3"
+    local before after status=0
+    before="$(tree_state "$good" "$bad")"
+    run_installer "$good" "$bad" >/dev/null || status=$?
+    after="$(tree_state "$good" "$bad")"
+    if [[ $status -eq 1 && "$before" == "$after" ]]; then
+        pass "$label fails with nothing changed in any profile"
+    else
+        failure "$label fails with nothing changed in any profile (status $status)"
+    fi
+}
+
+test_bad_profiles_change_nothing() {
+    new_case
+    local good="$profile" bad="$tmp_root/case$case_id/bad"
+    mkdir -p "$bad"
+    printf 'x\n' > "$bad/chrome"
+    assert_bad_profile_changes_nothing "chrome as a regular file" "$good" "$bad"
+    new_case
+    good="$profile"
+    bad="$tmp_root/case$case_id/bad"
+    mkdir -p "$bad/user.js"
+    assert_bad_profile_changes_nothing "user.js as a folder" "$good" "$bad"
+    new_case
+    good="$profile"
+    bad="$tmp_root/case$case_id/bad"
+    mkdir -p "$bad" "$tmp_root/case$case_id/elsewhere"
+    ln -s "$tmp_root/case$case_id/elsewhere" "$bad/chrome"
+    assert_bad_profile_changes_nothing "symlinked chrome" "$good" "$bad"
+    new_case
+    assert_bad_profile_changes_nothing "missing second profile" "$profile" "$profile/absent"
+}
+
+test_assets_path_normalised() {
+    new_case
+    local case_dir="$tmp_root/case$case_id"
+    local absolute="$DRACULA_ASSETS_DIR" variant output other_lines target ok=1
+    for variant in relative trailing; do
+        rm -rf "$profile"
+        mkdir -p "$profile"
+        if [[ "$variant" == "relative" ]]; then
+            export DRACULA_ASSETS_DIR="assets"
+        else
+            export DRACULA_ASSETS_DIR="$absolute/"
+        fi
+        (cd "$case_dir" && run_installer "$profile" >/dev/null)
+        output="$(cd "$case_dir" && run_installer "$profile")"
+        other_lines="$(printf '%s\n' "$output" | grep -vE '^(ok|profile) ' || true)"
+        target="$(readlink "$profile/chrome/dracula-assets" || true)"
+        if [[ "$target" != "$absolute" || -n "$other_lines" ]]; then
+            ok=0
+            failure "$variant DRACULA_ASSETS_DIR gives $target, second run: $other_lines"
+        fi
+    done
+    if [[ $ok -eq 1 ]]; then
+        pass "relative and trailing-slash DRACULA_ASSETS_DIR give one absolute link"
     fi
 }
 
@@ -228,6 +369,12 @@ main() {
     test_user_js_preserved
     test_real_file_backed_up
     test_check_writes_nothing
+    test_check_after_profile
+    test_unknown_flag_usage
+    test_relink
+    test_two_profiles
+    test_bad_profiles_change_nothing
+    test_assets_path_normalised
     test_missing_profile_fails
     test_missing_assets_fails
     test_no_arguments_usage

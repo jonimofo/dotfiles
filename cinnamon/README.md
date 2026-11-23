@@ -348,7 +348,8 @@ the menu:
   Microphone follow the handle live, like the stock sound applet. Brightness sets every
   external monitor that answers DDC/CI to the same value when the handle is released, or
   the laptop panel when no such monitor is connected. Warmth is the screen colour
-  temperature on every connected screen, set with `gammastep -m randr -O <kelvin>`,
+  temperature on every connected screen, set with `gammastep -m randr -P -O <kelvin>`
+  (`-P` replaces the previous tint; without it the runs stack and only darken),
   6500 K (no tint) on the left to 1000 K (deepest red) on the right in steps of 100 K,
   shown as `3400 K`. The switch at its right end turns it on and off (`gammastep -m randr
   -x` resets the gamma); while it is off the slider is dimmed. The handle sends one run per

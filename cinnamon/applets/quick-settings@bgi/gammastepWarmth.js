@@ -16,7 +16,9 @@ function acceptKelvin(kelvin) {
 
 // The gammastep command for a state: the temperature on every screen, or the gamma reset.
 function commandFor(enabled, kelvin) {
-    const flags = enabled ? [Constants.GAMMASTEP_SET_FLAG, `${kelvin}`] : [Constants.GAMMASTEP_RESET_FLAG];
+    const flags = enabled
+        ? [Constants.GAMMASTEP_REPLACE_FLAG, Constants.GAMMASTEP_SET_FLAG, `${kelvin}`]
+        : [Constants.GAMMASTEP_RESET_FLAG];
     return [Constants.GAMMASTEP, ...Constants.GAMMASTEP_METHOD_ARGS, ...flags];
 }
 

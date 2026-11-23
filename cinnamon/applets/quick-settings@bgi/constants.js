@@ -264,6 +264,9 @@ const POWER_SETTINGS_COMMAND = ['cinnamon-settings', 'power'];
 // device and only one of them is tinted.
 const GAMMASTEP = 'gammastep';
 const GAMMASTEP_METHOD_ARGS = ['-m', 'randr'];
+// Without -P a run tints the ramps the previous run left: the runs stack, every slider step
+// darkens the screens and no step can lighten them.
+const GAMMASTEP_REPLACE_FLAG = '-P';
 const GAMMASTEP_SET_FLAG = '-O';
 const GAMMASTEP_RESET_FLAG = '-x';
 // From 6500 K, no tint, to 1000 K, the deepest red. Warmer is fewer kelvin, so the slider

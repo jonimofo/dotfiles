@@ -32,6 +32,7 @@ const BooleanSetting = require('./booleanSetting');
 const GammastepWarmth = require('./gammastepWarmth');
 const WarmthModel = require('./warmthModel');
 const KeepAwake = require('./keepAwake');
+const AsyncHelpers = require('./asyncHelpers');
 const PowerProfiles = require('./powerProfiles');
 const PowerProfileModel = require('./powerProfileModel');
 const Settings = imports.ui.settings;
@@ -66,6 +67,8 @@ class QuickSettingsApplet extends Applet.Applet {
                     this._nordvpn.refresh();
                 if (this._isShown(Constants.LAYOUT_KEYS.tiles, 'charge-limit'))
                     this._chargeLimit.refresh();
+                if (this._isShown(Constants.LAYOUT_KEYS.sliders, 'warmth'))
+                    this._warmth.menuOpened();
                 if (this._media)
                     this._media.menuOpened();
             } else {
@@ -111,15 +114,16 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     on_applet_removed_from_panel() {
-        this.settings.finalize();
         Main.layoutManager.disconnect(this._monitorsChangedId);
+        this._monitorsSettle.cancel();
+        this._warmth.destroy();
+        this.settings.finalize();
         this._brightness.destroy();
         this._volume.destroy();
         this._bluetooth.destroy();
         this._vpn.destroy();
         this._nordvpn.destroy();
         this._powerProfiles.destroy();
-        this._warmth.destroy();
         this._doNotDisturb.destroy();
         this._keepAwake.destroy();
         this._battery.destroy();
@@ -315,8 +319,9 @@ class QuickSettingsApplet extends Applet.Applet {
     }
 
     // The Warmth row's switch turns the tint on and off on every screen; the temperature
-    // follows the handle live, one gammastep run per step. The state lives in the applet's
-    // settings (this.settings, from _setUpLayoutSettings) and is applied again at start.
+    // follows the handle live, one gammastep run per step, and is stored on release. The
+    // state lives in the applet's settings (this.settings, from _setUpLayoutSettings) and is
+    // applied again at start.
     _setUpWarmth() {
         const row = this._content.sliders.warmth;
         this._warmth = new GammastepWarmth.GammastepWarmth({
@@ -326,6 +331,7 @@ class QuickSettingsApplet extends Applet.Applet {
         });
         row.setOnSwitch(() => this._warmth.toggle());
         row.onLiveChange(value => this._warmth.setTemperature(WarmthModel.fractionToKelvin(value)));
+        row.onRelease(Constants.WARMTH_SCROLL_COMMIT_MS, () => this._warmth.commitTemperature());
         this._syncWarmth();
         this._warmth.applyStored();
     }
@@ -573,12 +579,14 @@ class QuickSettingsApplet extends Applet.Applet {
         });
         row.onRelease(Constants.BRIGHTNESS_SCROLL_COMMIT_MS, value => this._brightness.set(value));
         // The first detection comes from _applyLayout(), only when the row shows.
-        // A new screen has neutral gamma: the Warmth is applied again, shown or not.
-        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => {
+        // A dock sends several monitor changes in a row: one update once they stop. A new
+        // screen has neutral gamma: the Warmth is applied again, shown or not.
+        this._monitorsSettle = new AsyncHelpers.Debouncer(Constants.MONITORS_SETTLE_DELAY_MS, () => {
             if (this._isShown(Constants.LAYOUT_KEYS.sliders, 'monitors'))
-                this._brightness.detectSoon();
-            this._warmth.applySoon();
+                this._brightness.detect();
+            this._warmth.applyStored();
         });
+        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => this._monitorsSettle.schedule());
     }
 
     // Volumes follow the handle live, like the stock sound applet.

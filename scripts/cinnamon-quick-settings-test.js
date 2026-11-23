@@ -675,25 +675,25 @@ function testPowerProfileModel() {
 
 async function testBooleanSettings() {
     const BooleanSetting = load('./booleanSetting');
-    const color = new Gio.Settings({ schema_id: 'org.cinnamon.settings-daemon.plugins.color' });
-    const notifications = new Gio.Settings({ schema_id: 'org.cinnamon.desktop.notifications' });
-    color.set_boolean('night-light-enabled', true);
-    notifications.set_boolean('display-notifications', true);
+    const Constants = load('./constants');
+    const notifications = new Gio.Settings({ schema_id: Constants.NOTIFICATIONS_SCHEMA });
+    notifications.set_boolean(Constants.NOTIFICATIONS_KEY, true);
     let changes = 0;
-    // A key read as is (not inverted): no tile uses one now, any boolean key serves.
-    const night = new BooleanSetting.BooleanSetting('org.cinnamon.settings-daemon.plugins.color', 'night-light-enabled', false, () => changes++);
-    const dnd = new BooleanSetting.BooleanSetting('org.cinnamon.desktop.notifications', 'display-notifications', true, () => changes++);
-    check('boolean setting: on while the key is true', night.enabled);
-    night.toggle();
-    check('boolean setting: toggle writes false', !color.get_boolean('night-light-enabled') && !night.enabled);
+    // The Do Not Disturb key read as is (not inverted): no tile does that, the class allows it.
+    const plain = new BooleanSetting.BooleanSetting(Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, false, () => changes++);
+    check('boolean setting: on while the key is true', plain.enabled);
+    plain.toggle();
+    check('boolean setting: toggle writes false', !notifications.get_boolean(Constants.NOTIFICATIONS_KEY) && !plain.enabled);
+    plain.destroy();
+    notifications.set_boolean(Constants.NOTIFICATIONS_KEY, true);
+    const dnd = new BooleanSetting.BooleanSetting(Constants.NOTIFICATIONS_SCHEMA, Constants.NOTIFICATIONS_KEY, true, () => changes++);
     check('do not disturb: off while notifications are shown', !dnd.enabled);
     dnd.toggle();
-    check('do not disturb: toggle turns notifications off', !notifications.get_boolean('display-notifications') && dnd.enabled);
-    notifications.set_boolean('display-notifications', true);
+    check('do not disturb: toggle turns notifications off', !notifications.get_boolean(Constants.NOTIFICATIONS_KEY) && dnd.enabled);
+    notifications.set_boolean(Constants.NOTIFICATIONS_KEY, true);
     check('do not disturb: follows a change made elsewhere', !dnd.enabled);
     await wait(0);
     check(`settings tiles: every change notifies (${changes})`, changes >= 3);
-    night.destroy();
     dnd.destroy();
 }
 
@@ -734,44 +734,59 @@ async function testWarmthModel() {
 }
 
 // A gammastep stand-in: records every argv; with hold, each run waits in held until
-// answered by hand; with fail, each run rejects.
+// answered by hand; while fail is true, each run rejects, a held one when it is answered
+// (set it to false to recover).
 function fakeGammastep({ hold = false, fail = false } = {}) {
-    const runs = [];
-    const held = [];
-    const run = argv => {
-        runs.push(argv.join(' '));
-        if (fail)
-            return Promise.reject(new Error('gammastep exited with 1: Unable to connect to X server'));
+    const fake = { runs: [], held: [], fail };
+    const failure = () => new Error('gammastep exited with 1: Unable to connect to X server');
+    fake.run = argv => {
+        fake.runs.push(argv.join(' '));
+        if (fake.fail)
+            return Promise.reject(failure());
         if (hold)
-            return new Promise(resolve => held.push(() => resolve('')));
+            return new Promise((resolve, reject) => fake.held.push(() => (fake.fail ? reject(failure()) : resolve(''))));
         return Promise.resolve('');
     };
-    return { run, runs, held };
+    return fake;
 }
 
-// The applet settings' getValue/setValue on plain data, with the schema's defaults.
+// The applet settings' getValue/setValue on plain data, with the declared defaults.
 function fakeWarmthStore(values = {}) {
+    const Constants = load('./constants');
+    const defaults = Object.fromEntries(Object.values(Constants.WARMTH_SETTINGS).map(setting => [setting.key, setting.default]));
     return {
-        values: { 'warmth-enabled': false, 'warmth-kelvin': 2000, ...values },
+        values: { ...defaults, ...values },
+        writes: 0,
         getValue(key) {
             return this.values[key];
         },
         setValue(key, value) {
             this.values[key] = value;
+            this.writes++;
         },
     };
 }
 
-function makeWarmth({ gammastep = fakeGammastep(), store = fakeWarmthStore(), found = true } = {}) {
+// @found: whether gammastep is in PATH, or a function asked at each look.
+function makeWarmth({ gammastep = fakeGammastep(), store = fakeWarmthStore(), found = true, onChange = () => {} } = {}) {
     const Warmth = load('./gammastepWarmth');
+    const isFound = typeof found === 'function' ? found : () => found;
     let changes = 0;
     const warmth = new Warmth.GammastepWarmth({
         runCommand: gammastep.run,
-        findProgram: name => (found && name === 'gammastep' ? '/usr/bin/gammastep' : null),
+        findProgram: name => (isFound() && name === 'gammastep' ? '/usr/bin/gammastep' : null),
         store,
-        onChange: () => changes++,
+        onChange: () => {
+            changes++;
+            onChange();
+        },
     });
     return { warmth, gammastep, store, changes: () => changes };
+}
+
+// What the row would show, as WarmthModel computes it from the Warmth's state.
+function warmthRow(warmth) {
+    return load('./warmthModel').rowState(warmth.available, warmth.enabled, warmth.kelvin);
 }
 
 async function testGammastepWarmth() {
@@ -789,32 +804,53 @@ async function testGammastepWarmth() {
         `${on.gammastep.runs}` === 'gammastep -m randr -O 3500' && on.store.values['warmth-enabled'] === true);
     on.warmth.setTemperature(2500);
     await wait(0);
-    check(`gammastep warmth: the slider sends the new kelvin and stores it (${on.gammastep.runs})`,
-        on.gammastep.runs[1] === 'gammastep -m randr -O 2500' && on.store.values['warmth-kelvin'] === 2500);
+    check(`gammastep warmth: the slider sends the new kelvin live, shows it, stores nothing yet (${on.gammastep.runs})`,
+        on.gammastep.runs[1] === 'gammastep -m randr -O 2500' && on.warmth.kelvin === 2500
+        && warmthRow(on.warmth).text === '2500 K' && on.store.values['warmth-kelvin'] === 3500);
     on.warmth.setTemperature(2500);
     await wait(0);
     check('gammastep warmth: a move within the same step runs nothing', on.gammastep.runs.length === 2);
+    on.warmth.setTemperature(2400);
+    await wait(0);
+    const writesBefore = on.store.writes;
+    on.warmth.commitTemperature();
+    check(`gammastep warmth: the release stores the last kelvin in one write (${on.store.values['warmth-kelvin']})`,
+        on.store.values['warmth-kelvin'] === 2400 && on.store.writes === writesBefore + 1 && on.warmth.kelvin === 2400);
+    on.warmth.commitTemperature();
+    check('gammastep warmth: a release without a move writes nothing', on.store.writes === writesBefore + 1);
     on.warmth.toggle();
     await wait(0);
     check(`gammastep warmth: off sends -x (${on.gammastep.runs})`,
-        on.gammastep.runs[2] === 'gammastep -m randr -x' && on.store.values['warmth-enabled'] === false);
+        on.gammastep.runs[3] === 'gammastep -m randr -x' && on.store.values['warmth-enabled'] === false);
     on.warmth.setTemperature(3000);
+    on.warmth.commitTemperature();
     await wait(0);
-    check('gammastep warmth: the slider while off stores the kelvin, runs nothing',
-        on.gammastep.runs.length === 3 && on.store.values['warmth-kelvin'] === 3000);
-    check(`gammastep warmth: every change notifies (${on.changes()})`, on.changes() === 4);
+    check('gammastep warmth: the slider while off stores the kelvin on release, runs nothing',
+        on.gammastep.runs.length === 4 && on.store.values['warmth-kelvin'] === 3000);
+    check(`gammastep warmth: every change notifies (${on.changes()})`, on.changes() === 5);
 
-    const invalid = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true, 'warmth-kelvin': 9000 }) });
-    invalid.warmth.applyStored();
-    for (const kelvin of [500, 2500.5, Number.NaN])
+    const invalid = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    for (const kelvin of [500, 2500.5, Number.NaN, '3000; rm -rf ~'])
         invalid.warmth.setTemperature(kelvin);
+    invalid.warmth.commitTemperature();
     await wait(0);
-    // The first run (9000 K) and the newest waiting one (NaN): the values in between are replaced.
-    check(`gammastep warmth: out-of-range or non-integer kelvin never reaches argv (${invalid.gammastep.runs})`,
-        invalid.gammastep.runs.length === 0 && errors.length === 2 && errors.every(e => e.includes('refused')));
+    check(`gammastep warmth: out-of-range or non-integer kelvin never reaches argv nor the settings (${invalid.gammastep.runs})`,
+        invalid.gammastep.runs.length === 0 && errors.length === 4 && errors.every(e => e.includes('refused'))
+        && invalid.store.writes === 0 && invalid.warmth.kelvin === 2000);
     errors = [];
-    const text = makeWarmth({ store: fakeWarmthStore({ 'warmth-kelvin': '3000; rm -rf ~' }) });
-    check('gammastep warmth: a stored non-number reads as the default 2000 K', text.warmth.kelvin === 2000);
+
+    // L2: a stored value gammastep would refuse is never shown, and start-up applies the default.
+    const defaultFraction = load('./warmthModel').kelvinToFraction(2000);
+    for (const stored of [Number.NaN, 2500.5, '3000; rm -rf ~', 1e12, 9000, 500]) {
+        const bad = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true, 'warmth-kelvin': stored }) });
+        const row = warmthRow(bad.warmth);
+        bad.warmth.applyStored();
+        await wait(0);
+        check(`gammastep warmth: a stored ${stored} reads as 2000 K on the row and at start-up (${row.text}, ${bad.gammastep.runs})`,
+            bad.warmth.kelvin === 2000 && row.text === '2000 K' && row.fraction === defaultFraction
+            && `${bad.gammastep.runs}` === 'gammastep -m randr -O 2000');
+    }
+    check(`gammastep warmth: an invalid stored kelvin logs nothing (${errors})`, errors.length === 0);
 
     const held = fakeGammastep({ hold: true });
     const race = makeWarmth({ gammastep: held, store: fakeWarmthStore({ 'warmth-enabled': true }) });
@@ -829,29 +865,48 @@ async function testGammastepWarmth() {
     await wait(0);
     check('gammastep warmth: nothing left to run', held.runs.length === 2 && held.held.length === 0);
 
+    // M8: a run waiting behind a held one is dropped by destroy().
+    const heldAtDestroy = fakeGammastep({ hold: true });
+    const destroyed = makeWarmth({ gammastep: heldAtDestroy, store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    destroyed.warmth.setTemperature(3000);
+    destroyed.warmth.setTemperature(3100);
+    destroyed.warmth.setTemperature(3200);
+    destroyed.warmth.destroy();
+    heldAtDestroy.held.shift()();
+    await wait(0);
+    check(`gammastep warmth: a run queued before destroy does not run after it (${heldAtDestroy.runs})`,
+        `${heldAtDestroy.runs}` === 'gammastep -m randr -O 3000' && heldAtDestroy.held.length === 0);
+    destroyed.warmth.commitTemperature();
+    check('gammastep warmth: a release after destroy writes nothing', destroyed.store.writes === 0);
+
     const stored = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true, 'warmth-kelvin': 1800 }) });
     stored.warmth.applyStored();
     await wait(0);
     check(`gammastep warmth: start-up with stored on re-applies (${stored.gammastep.runs})`,
         `${stored.gammastep.runs}` === 'gammastep -m randr -O 1800');
-    stored.warmth.applySoon();
-    stored.warmth.applySoon();
-    await wait(1100);
-    check(`gammastep warmth: monitor changes in a row re-apply once when on (${stored.gammastep.runs})`,
-        stored.gammastep.runs.length === 2 && stored.gammastep.runs[1] === 'gammastep -m randr -O 1800');
-    stored.warmth.applySoon();
-    stored.warmth.destroy();
-    await wait(1100);
-    check('gammastep warmth: no re-apply after destroy', stored.gammastep.runs.length === 2);
 
-    const missing = makeWarmth({ found: false, store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    // M1: gammastep missing is logged once, however often it is looked for.
+    let installed = false;
+    const missing = makeWarmth({ found: () => installed, store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    missing.warmth.applyStored();
     missing.warmth.applyStored();
     missing.warmth.toggle();
     missing.warmth.setTemperature(3000);
+    missing.warmth.commitTemperature();
     await wait(0);
-    check(`gammastep warmth: missing gammastep makes the row unavailable and inert, logged (${errors[0]})`,
+    check(`gammastep warmth: missing gammastep makes the row unavailable and inert, logged once (${errors})`,
         !missing.warmth.available && missing.gammastep.runs.length === 0 && missing.store.values['warmth-enabled'] === true
-        && errors.length === 2 && errors[0].includes('gammastep not found'));
+        && missing.store.writes === 0 && errors.length === 1 && errors[0].includes('gammastep not found'));
+    errors = [];
+    // M7: installed later, picked up on the next look.
+    installed = true;
+    missing.warmth.applyStored();
+    await wait(0);
+    check(`gammastep warmth: gammastep installed later is picked up and applied (${missing.gammastep.runs})`,
+        missing.warmth.available && `${missing.gammastep.runs}` === 'gammastep -m randr -O 2000' && errors.length === 0);
+    installed = false;
+    missing.warmth.applyStored();
+    check(`gammastep warmth: removed again, logged again once (${errors})`, !missing.warmth.available && errors.length === 1);
     errors = [];
 
     const failing = makeWarmth({ gammastep: fakeGammastep({ fail: true }) });
@@ -860,7 +915,108 @@ async function testGammastepWarmth() {
     check(`gammastep warmth: a failing run makes the row unavailable, logged with command and value (${errors})`,
         !failing.warmth.available && errors.length === 1 && errors[0].includes("'gammastep -m randr -O 2000' failed")
         && errors[0].includes('Unable to connect'));
+    check('gammastep warmth: a failing run dims the slider and the switch', !warmthRow(failing.warmth).switchAvailable);
     errors = [];
+    // L11: inert while unavailable after the failure.
+    failing.warmth.toggle();
+    failing.warmth.setTemperature(3000);
+    failing.warmth.commitTemperature();
+    await wait(0);
+    check(`gammastep warmth: toggle and slider after a failed run run nothing, store nothing (${failing.gammastep.runs})`,
+        failing.gammastep.runs.length === 1 && failing.store.values['warmth-enabled'] === true
+        && failing.store.values['warmth-kelvin'] === 2000);
+    // M7: recovery through applyStored (a monitor change) once gammastep works again.
+    failing.gammastep.fail = false;
+    failing.warmth.applyStored();
+    await wait(0);
+    check(`gammastep warmth: a monitor change after a failed run recovers and re-applies (${failing.gammastep.runs})`,
+        failing.warmth.available && failing.gammastep.runs.length === 2 && failing.gammastep.runs[1] === 'gammastep -m randr -O 2000');
+
+    // M2: the waiting run is dropped on failure; M7: recovery through the menu-open path.
+    const flaky = fakeGammastep({ hold: true });
+    const menu = makeWarmth({ gammastep: flaky, store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    menu.warmth.setTemperature(3000);
+    menu.warmth.setTemperature(3100);
+    menu.warmth.setTemperature(3200);
+    flaky.fail = true;
+    flaky.held.shift()();
+    await wait(0);
+    check(`gammastep warmth: after a failed run the waiting run is dropped, one log line (${flaky.runs})`,
+        flaky.runs.length === 1 && !menu.warmth.available && errors.length === 1);
+    errors = [];
+    menu.warmth.menuOpened();
+    await wait(0);
+    check(`gammastep warmth: menu open while it still fails tries once (${flaky.runs})`,
+        flaky.runs.length === 2 && !menu.warmth.available && errors.length === 1);
+    errors = [];
+    flaky.fail = false;
+    menu.warmth.menuOpened();
+    flaky.held.shift()();
+    await wait(0);
+    check(`gammastep warmth: menu open recovers the row and re-applies the newest kelvin (${flaky.runs})`,
+        menu.warmth.available && flaky.runs.length === 3 && flaky.runs[2] === 'gammastep -m randr -O 3200');
+    menu.warmth.menuOpened();
+    await wait(0);
+    check('gammastep warmth: menu open while available runs nothing', flaky.runs.length === 3);
+
+    // L3: a throwing UI update does not leave the queue stuck.
+    let throwOnce = true;
+    const throwing = makeWarmth({
+        gammastep: fakeGammastep({ fail: true }),
+        store: fakeWarmthStore({ 'warmth-enabled': true }),
+        onChange: () => {
+            if (throwOnce) {
+                throwOnce = false;
+                throw new Error('UI sync failed');
+            }
+        },
+    });
+    throwing.warmth.applyStored();
+    await wait(0);
+    check(`gammastep warmth: a throwing onChange is logged (${errors[1]})`,
+        errors.length === 2 && errors[1].includes('applying the Warmth failed') && errors[1].includes('UI sync failed'));
+    throwing.gammastep.fail = false;
+    throwing.warmth.applyStored();
+    await wait(0);
+    check(`gammastep warmth: a throwing onChange does not block the next run (${throwing.gammastep.runs})`,
+        throwing.gammastep.runs.length === 2);
+    errors = [];
+}
+
+// One timer for a burst of monitor changes (applet.js), and the applet's Warmth wiring.
+async function testMonitorsSettle() {
+    const AsyncHelpers = load('./asyncHelpers');
+    const Constants = load('./constants');
+    const settleWait = Constants.MONITORS_SETTLE_DELAY_MS + 100;
+    let runs = 0;
+    const settle = new AsyncHelpers.Debouncer(Constants.MONITORS_SETTLE_DELAY_MS, () => runs++);
+    settle.schedule();
+    settle.schedule();
+    await wait(settleWait);
+    check(`monitors settle: changes in a row give one update (${runs})`, runs === 1);
+    settle.schedule();
+    settle.cancel();
+    await wait(settleWait);
+    check('monitors settle: nothing after cancel', runs === 1);
+
+    const appletSource = readText(`${appletDir}/applet.js`);
+    const settleBody = appletSource.slice(appletSource.indexOf('this._monitorsSettle = new AsyncHelpers.Debouncer('),
+        appletSource.indexOf("this._monitorsChangedId = Main.layoutManager.connect('monitors-changed'"));
+    check('warmth wiring: applet.js re-applies the Warmth once the monitors settle',
+        settleBody.includes('this._warmth.applyStored();') && settleBody.includes('this._brightness.detect();'));
+    check('warmth wiring: applet.js schedules the settle timer on every monitor change',
+        appletSource.includes("Main.layoutManager.connect('monitors-changed', () => this._monitorsSettle.schedule());"));
+    const setUp = appletSource.slice(appletSource.indexOf('    _setUpWarmth() {'), appletSource.indexOf('    _syncWarmth() {'));
+    check('warmth wiring: _setUpWarmth applies the stored state at start',
+        setUp.includes('this._warmth.applyStored();'));
+    check('warmth wiring: _setUpWarmth stores the kelvin on release',
+        setUp.includes('row.onRelease(Constants.WARMTH_SCROLL_COMMIT_MS, () => this._warmth.commitTemperature());'));
+    check('warmth wiring: applet.js retries the Warmth when the menu opens',
+        appletSource.includes('this._warmth.menuOpened();'));
+    const removed = appletSource.slice(appletSource.indexOf('    on_applet_removed_from_panel() {'));
+    check('warmth wiring: the Warmth is destroyed before the settings are finalized',
+        removed.indexOf('this._warmth.destroy();') !== -1
+        && removed.indexOf('this._warmth.destroy();') < removed.indexOf('this.settings.finalize();'));
 }
 
 // UPower's KbdBacklight on a fake system bus: calls are answered at once, or fail when the
@@ -2893,6 +3049,11 @@ async function testSubprocess() {
         failed !== null && failed.includes('exited with 3') && failed.includes('boom'));
     const missing = await Subprocess.runCommand(['/nonexistent/quick-settings-test']).then(() => null, e => e.message);
     check(`subprocess: a missing command rejects and names it (${missing})`, missing !== null && missing.includes('/nonexistent/quick-settings-test'));
+    const started = GLib.get_monotonic_time();
+    const hung = await Subprocess.runCommand(['/bin/sleep', '30'], 100).then(() => null, e => e.message);
+    const elapsedMs = Math.round((GLib.get_monotonic_time() - started) / 1000);
+    check(`subprocess: a hung command is killed and rejected as timed out (${hung}, ${elapsedMs} ms)`,
+        hung !== null && hung.includes('/bin/sleep 30 timed out after 100 ms') && elapsedMs < 5000);
 }
 
 const FakeObjectManager = GObject.registerClass({
@@ -2985,6 +3146,7 @@ async function main() {
     testSettingsWrite();
     await testWarmthModel();
     await testGammastepWarmth();
+    await testMonitorsSettle();
     testKeyboardLight();
     testAirplaneMode();
     testMediaModel();

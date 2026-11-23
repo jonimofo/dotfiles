@@ -58,6 +58,8 @@ Owner's answers:
   `3400 K`. The switch at the right end writes `night-light-enabled`; while off the slider is
   dimmed and takes no input. It follows the keys live. Listed in the Sliders tab as Warmth.
   The Night Light tile was removed afterwards (see below).
+  2026-11-23: the Warmth row uses gammastep on every screen, no longer Night Light; see
+  [`2026-11-23-quick-settings-warmth-gammastep.md`](2026-11-23-quick-settings-warmth-gammastep.md).
 - Battery on the panel: a `Battery` entry at the end of the Panel tab, shown by default, text
   like `87%` after the icons, hidden without a battery. It reuses the header's battery read.
 - Keyboard: UPower `KbdBacklight` on the system bus. A click goes to the next level, back to

@@ -352,14 +352,17 @@ the menu:
   6500 K (no tint) on the left to 1000 K (deepest red) on the right in steps of 100 K,
   shown as `3400 K`. The switch at its right end turns it on and off (`gammastep -m randr
   -x` resets the gamma); while it is off the slider is dimmed. The handle sends one run per
-  step while dragging; runs go one at a time and the newest value is the one left on the
-  screens. On and the temperature are kept in the applet's own settings (hidden keys
-  `warmth-enabled`, `warmth-kelvin`; defaults off, 2000 K) and applied again at login and
-  after each monitor change, since a newly plugged screen starts with neutral gamma.
-  Cinnamon's Night Light is not used: its colour plugin keeps one colour device per
-  vendor-model-serial, so two identical monitors reporting the same serial get one device
-  and only one of them is tinted. Leave Night Light off in Cinnamon Settings, or it
-  competes with gammastep for the gamma ramps.
+  step while dragging, and the value next to it follows; runs go one at a time and the
+  newest value is the one left on the screens. On and the temperature are kept in the
+  applet's own settings (hidden keys `warmth-enabled`, `warmth-kelvin`; defaults off,
+  2000 K), the temperature once the handle is released. Both are applied again when the
+  applet starts (login, Cinnamon restart) and one second after the last monitor change,
+  since a newly plugged screen starts with neutral gamma. With gammastep missing or after
+  a failed run, the row and its switch are dimmed; the next menu open or monitor change
+  looks for gammastep again and re-applies the state. Cinnamon's Night Light is not used:
+  its colour plugin keeps one colour device per vendor-model-serial, so two identical
+  monitors reporting the same serial get one device and only one of them is tinted. Night
+  Light also sets the gamma ramps; leave it off so the two do not overwrite each other.
 - Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
   - Wi-Fi: wireless on or off. Shows the network in use.
   - Bluetooth: adapter on or off. Shows the connected device's name, with `+N` when several
@@ -488,7 +491,7 @@ part is dimmed or does nothing, and the reason goes to the journal once:
 
 | Tool | Used for | When absent |
 |---|---|---|
-| `gammastep` | Warmth row, on every screen (one-shot mode, `randr` method) | Warmth row and its switch dimmed and inert; the missing command or a failed run is logged with the command and value |
+| `gammastep` | Warmth row, on every screen (one-shot mode, `randr` method) | Warmth row and its switch dimmed and inert until the next menu open or monitor change finds it working; a missing command is logged once, a failed run with the command and value |
 | `ddcutil` | external monitor brightness | the laptop panel is used, through cinnamon-settings-daemon; with no laptop panel either, the Brightness row is dimmed |
 | `power-profiles-daemon` | Power profile tile and list | tile dimmed until the daemon starts |
 | `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed and shown off, no VPN panel icon from NordVPN |
@@ -554,9 +557,13 @@ signals, the ones Cinnamon's own overview and window menu use.
   own app) triggers one `nordvpn status` read, so the VPN name on the panel follows. With
   NordVPN's OpenVPN technology no such link exists in NetworkManager: the panel then
   follows only when the menu opens.
-- The Warmth is reset by anything else that sets the gamma ramps (Cinnamon's Night Light,
-  `xrandr --gamma`, a colour profile loaded later). It comes back at the next monitor
-  change or login, or by moving the slider.
+- The Warmth is reset by anything else that sets the gamma ramps: Night Light also sets
+  them, leave it off so the two do not overwrite each other; also `xrandr --gamma`, a
+  colour profile loaded later. It comes back at the next monitor change or applet start,
+  or by moving the slider.
+- A command the applet runs (gammastep, ddcutil, nordvpn, the charge helper) that has not
+  ended after 60 seconds is killed and logged as timed out; the row or tile that ran it
+  behaves as after a failed run.
 
 ## Quick Settings: tests
 

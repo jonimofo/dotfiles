@@ -26,20 +26,27 @@ tints both outputs and `gammastep -m randr -x` resets both.
 
 - Switch on: `gammastep -m randr -O <kelvin>`. Switch off: `gammastep -m randr -x`.
   Command, method and flags are constants in `constants.js`.
-- The slider sends the value while dragging, one run per 100 K step. Runs go one at a time;
-  a change made while one runs replaces any other waiting one, so the newest value is the
-  one left on the screens.
+- The slider sends the value while dragging, one run per 100 K step, and the value text
+  follows the handle. Runs go one at a time; a change made while one runs replaces any
+  other waiting one, so the newest value is the one left on the screens. The kelvin is
+  written to the settings once, on release (or after a scroll stops), not on every step.
 - Kelvin is checked as an integer from `WARMTH_MIN_KELVIN` to `WARMTH_MAX_KELVIN` before it
   reaches argv; anything else is logged and not run.
 - State in the applet's own settings: hidden `generic` keys `warmth-enabled` (default off)
   and `warmth-kelvin` (default 2000), generated into `settings-schema.json` from
   `WARMTH_SETTINGS`, outside every dialog section.
-- Applied again at start when on (nothing runs when off), and after each monitor change,
-  debounced with the same delay as the Brightness detection (`MONITORS_SETTLE_DELAY_MS`):
-  a newly plugged screen has neutral gamma.
+- Applied again at start when on (nothing runs when off), and after each monitor change:
+  one timer in `applet.js` (`AsyncHelpers.Debouncer`, `MONITORS_SETTLE_DELAY_MS`) runs the
+  Brightness detection and the Warmth re-apply once the changes stop. A newly plugged
+  screen has neutral gamma.
 - gammastep missing from PATH, or a failed run: the row, slider and switch, is dimmed and
-  inert, and the failure is logged with the command and the value. The next monitor change
-  looks for gammastep again.
+  inert. A missing gammastep is logged once, when it goes missing; a failed run is logged
+  with the command and the value, and the runs waiting behind it are dropped. The next menu
+  open or monitor change looks for gammastep again and re-applies the stored state.
+- A stored kelvin gammastep would refuse reads as the default 2000 K.
+- Every command run through `subprocess.js` is killed after `COMMAND_TIMEOUT_MS` (60 s,
+  above the slowest legitimate caller, nordvpn connect and ddcutil detect) and rejected as
+  timed out.
 - Night Light is neither read nor written: `nightLight.js` and the `NIGHT_LIGHT_*`
   constants are removed. The switch's screen reader name becomes `Warmth`.
 
@@ -51,8 +58,9 @@ tints both outputs and `gammastep -m randr -x` resets both.
 
 ## Files
 
-- `gammastepWarmth.js` (new): state, gammastep runs, serialization, debounce.
-- `applet.js`, `warmthModel.js`, `sliderRow.js`, `constants.js`, `brightness.js`,
+- `gammastepWarmth.js` (new): state, gammastep runs, serialization, recovery.
+- `applet.js`, `asyncHelpers.js`, `subprocess.js`, `warmthModel.js`, `sliderRow.js`,
+  `constants.js`, `brightness.js`,
   `booleanSetting.js`, `settings-schema.json`; `nightLight.js` removed.
 - `scripts/cinnamon-quick-settings-schema.js`, `scripts/cinnamon-quick-settings-test.js`,
   `scripts/cinnamon-quick-settings-test.sh`, `cinnamon/README.md`.

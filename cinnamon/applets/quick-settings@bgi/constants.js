@@ -99,6 +99,10 @@ const CHARGE_LABELS = {
     limit: `${CHARGE_LABEL_PREFIX} ${CHARGE_LIMIT_END}${PERCENT_SUFFIX}`,
     full: `${CHARGE_LABEL_PREFIX} ${CHARGE_FULL_PERCENT}${PERCENT_SUFFIX}`,
 };
+// A command run through subprocess.js that has not ended within this long is killed. Above
+// the slowest legitimate caller: nordvpn connect waits on the VPN server, ddcutil detect
+// probes every I2C bus for seconds.
+const COMMAND_TIMEOUT_MS = 60000;
 // A helper run that does not end within this long is given up on (logged, the tile usable).
 const CHARGE_HELPER_TIMEOUT_MS = 10000;
 // The helper's or sudo's error text in the log is cut to this many characters.
@@ -139,7 +143,7 @@ const DDC_BRIGHTNESS_FEATURE = '10';
 // A scroll on the slider has no release: the value is sent once the wheel stops this long.
 const BRIGHTNESS_SCROLL_COMMIT_MS = 400;
 // Monitor changes closer than this are one dock event: one ddcutil detection, one Warmth
-// re-apply.
+// re-apply, from one timer in applet.js.
 const MONITORS_SETTLE_DELAY_MS = 1000;
 
 // Laptop panel brightness, through cinnamon-settings-daemon like the stock power applet.
@@ -268,6 +272,8 @@ const WARMTH_MIN_KELVIN = 1000;
 const WARMTH_MAX_KELVIN = 6500;
 const WARMTH_STEP_KELVIN = 100;
 const WARMTH_UNIT_SUFFIX = ' K';
+// The kelvin is stored once per change, after a scroll stops like the Brightness value.
+const WARMTH_SCROLL_COMMIT_MS = BRIGHTNESS_SCROLL_COMMIT_MS;
 // The Warmth state in the applet's own settings: hidden keys, not in the settings dialog.
 const WARMTH_SETTINGS = {
     enabled: { key: 'warmth-enabled', default: false },

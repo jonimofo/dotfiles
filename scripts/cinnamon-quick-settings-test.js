@@ -2632,6 +2632,23 @@ function testLayoutModel() {
         header(['battery', 'lock'], true) === '{"battery":true,"line":true}' && header(['lock'], true) === '{"battery":false,"line":true}');
     check('header: everything hidden removes the line', header([], true) === '{"battery":false,"line":false}');
     check('header: battery alone on a machine without battery removes the line', header(['battery'], false) === '{"battery":false,"line":false}');
+
+    const change = new Model.LayoutChange();
+    check('layout change: the first call applies', change.changed({ tiles: ['a', 'b'], sliders: ['c'] }));
+    check('layout change: the same ids in new arrays do not', !change.changed({ tiles: ['a', 'b'], sliders: ['c'] }));
+    check('layout change: reordered ids apply', change.changed({ tiles: ['b', 'a'], sliders: ['c'] }));
+    check('layout change: a hidden id applies', change.changed({ tiles: ['b'], sliders: ['c'] }));
+    check('layout change: back to an earlier value applies', change.changed({ tiles: ['a', 'b'], sliders: ['c'] }));
+
+    const appletSource = readText(`${appletDir}/applet.js`);
+    const onChanged = appletSource.slice(appletSource.indexOf('    _onLayoutSettingChanged() {'), appletSource.indexOf('    _writeBackLayouts() {'));
+    check('layout change: a settings reload re-applies the layout only when the visible ids changed',
+        onChanged.includes('if (this._layoutChange.changed(visibleByKey))\n            this._applyLayout();')
+        && onChanged.split('this._applyLayout()').length === 2);
+    const setUp = appletSource.slice(appletSource.indexOf('    _setUpLayoutSettings('), appletSource.indexOf('    _onLayoutSettingChanged() {'));
+    check('layout change: the guard exists before the first layout pass',
+        setUp.includes('this._layoutChange = new LayoutModel.LayoutChange();')
+        && setUp.indexOf('this._layoutChange = new LayoutModel.LayoutChange();') < setUp.indexOf('        this._onLayoutSettingChanged();'));
 }
 
 // The session manager on a fake bus: calls wait until answer() runs them, in order. As on

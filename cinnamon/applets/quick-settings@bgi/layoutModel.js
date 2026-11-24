@@ -60,6 +60,19 @@ function visibleIds(stored, declared) {
     return normalize(stored, declared).filter(row => row.show).map(row => row.id);
 }
 
+// Whether the visible ids differ from the previous call; the first call always differs.
+// Compared by content: each settings reload hands over new array objects.
+// @visibleByKey: { layoutKey: [id] }.
+class LayoutChange {
+    changed(visibleByKey) {
+        const current = JSON.stringify(visibleByKey);
+        if (current === this._last)
+            return false;
+        this._last = current;
+        return true;
+    }
+}
+
 // The Tiles list split into the tile ids to lay out and whether the media controls show:
 // they sit under the tiles whatever their place in the list. @mediaId: their id.
 function splitTileLayout(ids, mediaId) {

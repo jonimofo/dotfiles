@@ -1,4 +1,4 @@
-Status: VALIDATED
+Status: DONE
 
 # Quick Settings: Warmth through gammastep on every screen
 
@@ -79,3 +79,7 @@ tints both outputs and `gammastep -m randr -x` resets both.
 - `scripts/check-all.sh` green, with the fake gammastep tests.
 - On screen, by the owner after Alt+F2 then `r`: switch on tints both monitors, the slider
   follows on both, switch off resets both, unplugging and plugging a monitor keeps the tint.
+- Checked by the owner: the tint on both monitors on 2026-11-23; the switch clicked several
+  times in a row and the slider in both directions on 2026-11-24, on one screen.
+- Not checked on screen: the slider with two monitors connected, the tint after a monitor is
+  unplugged and plugged, the tint after suspend and resume.

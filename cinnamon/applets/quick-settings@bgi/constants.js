@@ -103,7 +103,7 @@ const CHARGE_LABELS = {
 // the slowest legitimate caller: nordvpn connect waits on the VPN server, ddcutil detect
 // probes every I2C bus for seconds.
 const COMMAND_TIMEOUT_MS = 60000;
-// A helper run that does not end within this long is given up on (logged, the tile usable).
+// A helper run that does not end within this long is killed (logged, the tile usable).
 const CHARGE_HELPER_TIMEOUT_MS = 10000;
 // The helper's or sudo's error text in the log is cut to this many characters.
 const CHARGE_ERROR_TEXT_MAX = 200;
@@ -282,6 +282,8 @@ const WARMTH_SETTINGS = {
     enabled: { key: 'warmth-enabled', default: false },
     kelvin: { key: 'warmth-kelvin', default: 2000 },
 };
+// gammastep's error text in the log is cut to this many characters.
+const WARMTH_ERROR_TEXT_MAX = 200;
 
 // Keyboard light, through UPower on the system bus. The tile shows "Keyboard" and the level's
 // word: Off at 0, On for a light with one level, High at the maximum, Low up to half of it,

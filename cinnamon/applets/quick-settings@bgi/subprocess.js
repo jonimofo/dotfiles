@@ -4,7 +4,8 @@ const Constants = require('./constants');
 
 // Runs @argv without blocking the main loop. Resolves with its standard output; rejects
 // with an error naming the command, its exit status and its standard error. A command
-// still running after @timeoutMs is killed and rejected as timed out.
+// still running after @timeoutMs is killed and rejected as timed out; one that exited on
+// its own is judged by its exit status, even if the timeout fired meanwhile.
 function runCommand(argv, timeoutMs = Constants.COMMAND_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
         let process;
@@ -26,7 +27,9 @@ function runCommand(argv, timeoutMs = Constants.COMMAND_TIMEOUT_MS) {
                 GLib.source_remove(timeoutId);
             try {
                 const [, stdout, stderr] = source.communicate_utf8_finish(result);
-                if (timedOut)
+                // The timeout can fire after the process has exited but before this callback
+                // runs; only a process the kill actually ended counts as timed out.
+                if (timedOut && source.get_if_signaled())
                     reject(new Error(`${argv.join(' ')} timed out after ${timeoutMs} ms, killed`));
                 else if (source.get_successful())
                     resolve(stdout);

@@ -1,5 +1,6 @@
 const GLib = imports.gi.GLib;
 const Constants = require('./constants');
+const AsyncHelpers = require('./asyncHelpers');
 
 // The kelvin gammastep may receive: an integer inside the Warmth range, nothing else.
 function isValidKelvin(kelvin) {
@@ -102,6 +103,25 @@ class GammastepWarmth {
             this.applyStored();
     }
 
+    // A value written from outside the applet, seen on a reload of the settings file. The
+    // applet's own setValue never comes back here: Cinnamon calls back only for a value
+    // that differs from the one it holds.
+    enabledChangedOutside() {
+        if (this._destroyed)
+            return;
+        this._onChange();
+        if (this._available)
+            this._apply();
+    }
+
+    kelvinChangedOutside() {
+        if (this._destroyed)
+            return;
+        this._onChange();
+        if (this._available && this.enabled)
+            this._apply();
+    }
+
     // Logs only when gammastep goes missing, not on every look.
     _programFound() {
         const found = this._findProgram(Constants.GAMMASTEP) !== null;
@@ -144,14 +164,23 @@ class GammastepWarmth {
         try {
             await this._run(argv);
         } catch (e) {
-            global.logError(`${Constants.LOG_PREFIX}: setting the Warmth with '${argv.join(' ')}' failed: ${e.message}`);
+            AsyncHelpers.logBounded(e, `setting the Warmth with '${argv.join(' ')}'`, Constants.WARMTH_ERROR_TEXT_MAX);
             // The waiting runs would fail the same way, each with its own log line.
             this._pending = null;
             this._setAvailable(false);
         }
     }
 
+    // gammastep -O ramps outlive the applet, so removing it would leave the tint until the
+    // next reboot. The reset bypasses the queue, which stops here; the stored state is kept,
+    // so the next start applies it again.
     destroy() {
+        const tinted = this._available && this.enabled;
         this._destroyed = true;
+        this._pending = null;
+        if (!tinted)
+            return;
+        const argv = commandFor(false);
+        this._run(argv).catch(e => AsyncHelpers.logBounded(e, `resetting the Warmth with '${argv.join(' ')}'`, Constants.WARMTH_ERROR_TEXT_MAX));
     }
 }

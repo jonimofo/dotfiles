@@ -321,7 +321,7 @@ class QuickSettingsApplet extends Applet.Applet {
     // The Warmth row's switch turns the tint on and off on every screen; the temperature
     // follows the handle live, one gammastep run per step, and is stored on release. The
     // state lives in the applet's settings (this.settings, from _setUpLayoutSettings) and is
-    // applied again at start.
+    // applied again at start, and again when a value is written from outside the applet.
     _setUpWarmth() {
         const row = this._content.sliders.warmth;
         this._warmth = new GammastepWarmth.GammastepWarmth({
@@ -332,6 +332,9 @@ class QuickSettingsApplet extends Applet.Applet {
         row.setOnSwitch(() => this._warmth.toggle());
         row.onLiveChange(value => this._warmth.setTemperature(WarmthModel.fractionToKelvin(value)));
         row.onRelease(Constants.WARMTH_SCROLL_COMMIT_MS, () => this._warmth.commitTemperature());
+        const { enabled, kelvin } = Constants.WARMTH_SETTINGS;
+        this.settings.bind(enabled.key, enabled.key, () => this._warmth.enabledChangedOutside());
+        this.settings.bind(kelvin.key, kelvin.key, () => this._warmth.kelvinChangedOutside());
         this._syncWarmth();
         this._warmth.applyStored();
     }

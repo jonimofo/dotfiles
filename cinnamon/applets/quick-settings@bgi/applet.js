@@ -461,12 +461,20 @@ class QuickSettingsApplet extends Applet.Applet {
         this.settings = new Settings.AppletSettings(this._layout, uuid, instanceId);
         for (const key of Object.values(Constants.LAYOUT_KEYS))
             this.settings.bind(key, key, () => this._onLayoutSettingChanged());
+        this._layoutChange = new LayoutModel.LayoutChange();
         this._onLayoutSettingChanged();
     }
 
+    // Cinnamon reports every list setting as changed on each reload of the settings file
+    // (a Warmth click writes it), and a re-applied layout detaches the row under the
+    // pointer, which then ignores clicks until the pointer leaves and comes back.
     _onLayoutSettingChanged() {
         this._writeBackLayouts();
-        this._applyLayout();
+        const visibleByKey = {};
+        for (const key of Object.values(Constants.LAYOUT_KEYS))
+            visibleByKey[key] = this._visible(key);
+        if (this._layoutChange.changed(visibleByKey))
+            this._applyLayout();
     }
 
     // A list saved by an older version lacks the new elements (or holds removed ones): it is

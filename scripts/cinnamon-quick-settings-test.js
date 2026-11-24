@@ -2643,12 +2643,12 @@ function testLayoutModel() {
     const appletSource = readText(`${appletDir}/applet.js`);
     const onChanged = appletSource.slice(appletSource.indexOf('    _onLayoutSettingChanged() {'), appletSource.indexOf('    _writeBackLayouts() {'));
     check('layout change: a settings reload re-applies the layout only when the visible ids changed',
-        onChanged.includes('if (this._layoutChange.changed(visibleByKey))\n            this._applyLayout();')
+        /this\._layoutChange\.changed\([^)]*\)\)\s*\{?\s*this\._applyLayout\(\);/.test(onChanged)
         && onChanged.split('this._applyLayout()').length === 2);
     const setUp = appletSource.slice(appletSource.indexOf('    _setUpLayoutSettings('), appletSource.indexOf('    _onLayoutSettingChanged() {'));
+    const guardAt = setUp.search(/this\._layoutChange\s*=\s*new LayoutModel\.LayoutChange\(\)/);
     check('layout change: the guard exists before the first layout pass',
-        setUp.includes('this._layoutChange = new LayoutModel.LayoutChange();')
-        && setUp.indexOf('this._layoutChange = new LayoutModel.LayoutChange();') < setUp.indexOf('        this._onLayoutSettingChanged();'));
+        guardAt !== -1 && guardAt < setUp.lastIndexOf('this._onLayoutSettingChanged();'));
 }
 
 // The session manager on a fake bus: calls wait until answer() runs them, in order. As on

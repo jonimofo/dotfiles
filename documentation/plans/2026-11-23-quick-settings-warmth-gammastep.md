@@ -53,7 +53,7 @@ tints both outputs and `gammastep -m randr -x` resets both.
   timed out.
 - Night Light is neither read nor written: `nightLight.js` and the `NIGHT_LIGHT_*`
   constants are removed. The switch's screen reader name becomes `Warmth`.
-- 2026-11-24: a Warmth click writes the applet settings file; about 0.3 s later Cinnamon
+- 2026-11-24: a Warmth click writes the applet settings file; shortly after, Cinnamon
   reloads it and reports the four layout lists as changed, since it compares arrays with
   `==`. The layout was re-applied, the switch detached under the pointer, and further
   clicks were ignored until the pointer moved. `LayoutModel.LayoutChange` now compares the

@@ -40,6 +40,7 @@ class GammastepWarmth {
         this._pending = null;
         this._liveKelvin = null;
         this._destroyed = false;
+        this._resetOwed = false;
         this._programMissing = false;
         this._available = this._programFound();
     }
@@ -114,8 +115,10 @@ class GammastepWarmth {
             this._apply();
     }
 
+    // While the slider moves, the slider wins: the outside value is neither applied nor
+    // shown, and the release stores the slider's value over it.
     kelvinChangedOutside() {
-        if (this._destroyed)
+        if (this._destroyed || this._liveKelvin !== null)
             return;
         this._onChange();
         if (this._available && this.enabled)
@@ -150,6 +153,8 @@ class GammastepWarmth {
                 this._pending = null;
                 await this._runOnce(enabled, kelvin);
             }
+            if (this._resetOwed)
+                await this._resetOnDestroy();
         } catch (e) {
             global.logError(`${Constants.LOG_PREFIX}: applying the Warmth failed: ${e.message}`);
         } finally {
@@ -172,15 +177,29 @@ class GammastepWarmth {
     }
 
     // gammastep -O ramps outlive the applet, so removing it would leave the tint until the
-    // next reboot. The reset bypasses the queue, which stops here; the stored state is kept,
-    // so the next start applies it again.
+    // next reboot. A run in flight may be a set that lands after a reset started beside it,
+    // so the reset waits for that run to end: the loop runs it once the run is done. The
+    // queue stops here and the stored state is kept, so the next start applies it again.
     destroy() {
-        const tinted = this._available && this.enabled;
+        if (this._destroyed)
+            return;
+        const owed = this._running || (this._available && this.enabled);
         this._destroyed = true;
         this._pending = null;
-        if (!tinted)
+        if (!owed)
             return;
+        this._resetOwed = true;
+        if (!this._running)
+            this._resetOnDestroy();
+    }
+
+    async _resetOnDestroy() {
+        this._resetOwed = false;
         const argv = commandFor(false);
-        this._run(argv).catch(e => AsyncHelpers.logBounded(e, `resetting the Warmth with '${argv.join(' ')}'`, Constants.WARMTH_ERROR_TEXT_MAX));
+        try {
+            await this._run(argv);
+        } catch (e) {
+            AsyncHelpers.logBounded(e, `resetting the Warmth with '${argv.join(' ')}'`, Constants.WARMTH_ERROR_TEXT_MAX);
+        }
     }
 }

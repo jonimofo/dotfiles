@@ -735,9 +735,14 @@ async function testWarmthModel() {
 
 // A gammastep stand-in: records every argv; with hold, each run waits in held until
 // answered by hand; while fail is true, each run rejects, a held one when it is answered
-// (set it to false to recover).
+// (set it to false to recover). answer() answers the oldest held run, if any.
 function fakeGammastep({ hold = false, fail = false } = {}) {
     const fake = { runs: [], held: [], fail };
+    fake.answer = () => {
+        const next = fake.held.shift();
+        if (next)
+            next();
+    };
     const failure = () => new Error('gammastep exited with 1: Unable to connect to X server');
     fake.run = argv => {
         fake.runs.push(argv.join(' '));
@@ -872,8 +877,9 @@ async function testGammastepWarmth() {
     destroyed.warmth.setTemperature(3100);
     destroyed.warmth.setTemperature(3200);
     destroyed.warmth.destroy();
-    while (heldAtDestroy.held.length > 0)
-        heldAtDestroy.held.shift()();
+    heldAtDestroy.answer();
+    await wait(0);
+    heldAtDestroy.answer();
     await wait(0);
     check(`gammastep warmth: a run queued before destroy does not run after it, only the reset does (${heldAtDestroy.runs})`,
         `${heldAtDestroy.runs}` === 'gammastep -m randr -P -O 3000,gammastep -m randr -x' && heldAtDestroy.held.length === 0);
@@ -910,6 +916,40 @@ async function testGammastepWarmth() {
         errors.length === 1 && errors[0].includes("resetting the Warmth with 'gammastep -m randr -x' failed"));
     errors = [];
 
+    // Diff audit M1: a set in flight at destroy could land after a reset started beside it.
+    const offHeld = makeWarmth({ gammastep: fakeGammastep({ hold: true }), store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    offHeld.warmth.setTemperature(3000);
+    offHeld.warmth.toggle();
+    offHeld.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: switched off with a set held, destroy waits for the run (${offHeld.gammastep.runs})`,
+        `${offHeld.gammastep.runs}` === 'gammastep -m randr -P -O 3000');
+    offHeld.gammastep.answer();
+    await wait(0);
+    offHeld.gammastep.answer();
+    await wait(0);
+    check(`gammastep warmth: switched off with a set held, destroy resets once after it (${offHeld.gammastep.runs})`,
+        `${offHeld.gammastep.runs}` === 'gammastep -m randr -P -O 3000,gammastep -m randr -x' && offHeld.gammastep.held.length === 0);
+    const onHeld = makeWarmth({ gammastep: fakeGammastep({ hold: true }), store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    onHeld.warmth.setTemperature(3000);
+    onHeld.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: on with a set held, the reset is not started beside it (${onHeld.gammastep.runs})`,
+        `${onHeld.gammastep.runs}` === 'gammastep -m randr -P -O 3000');
+    onHeld.gammastep.answer();
+    await wait(0);
+    onHeld.gammastep.answer();
+    await wait(0);
+    check(`gammastep warmth: on with a set held, the reset runs after it (${onHeld.gammastep.runs})`,
+        `${onHeld.gammastep.runs}` === 'gammastep -m randr -P -O 3000,gammastep -m randr -x' && onHeld.gammastep.held.length === 0);
+
+    // Diff audit LOW b: a second destroy does nothing.
+    const twice = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    twice.warmth.destroy();
+    twice.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: a second destroy runs nothing (${twice.gammastep.runs})`, `${twice.gammastep.runs}` === 'gammastep -m randr -x');
+
     // L5: a value written from outside the applet syncs the row and reaches the screens.
     const outside = makeWarmth({ store: fakeWarmthStore({ 'warmth-kelvin': 3000 }) });
     outside.store.values['warmth-kelvin'] = 2500;
@@ -932,12 +972,30 @@ async function testGammastepWarmth() {
     await wait(0);
     check(`gammastep warmth: an outside switch to off resets (${outside.gammastep.runs})`,
         outside.gammastep.runs[2] === 'gammastep -m randr -x' && outside.store.writes === 0);
+    // Diff audit LOW a: during a drag the slider wins over an outside kelvin write.
+    outside.store.values['warmth-enabled'] = true;
+    outside.warmth.enabledChangedOutside();
+    await wait(0);
+    outside.warmth.setTemperature(2200);
+    await wait(0);
+    const changesBefore = outside.changes();
+    outside.store.values['warmth-kelvin'] = 4000;
+    outside.warmth.kelvinChangedOutside();
+    await wait(0);
+    check(`gammastep warmth: an outside kelvin write during a drag is neither applied nor shown (${outside.gammastep.runs})`,
+        outside.gammastep.runs.length === 5 && outside.gammastep.runs[4] === 'gammastep -m randr -P -O 2200'
+        && outside.changes() === changesBefore && warmthRow(outside.warmth).text === '2200 K');
+    outside.warmth.commitTemperature();
+    check('gammastep warmth: the release after an outside write stores the slider value', outside.store.values['warmth-kelvin'] === 2200);
+    outside.store.values['warmth-enabled'] = false;
+    outside.warmth.enabledChangedOutside();
+    await wait(0);
     outside.warmth.destroy();
     outside.warmth.enabledChangedOutside();
     outside.warmth.kelvinChangedOutside();
     await wait(0);
-    check('gammastep warmth: outside changes after destroy run and notify nothing',
-        outside.gammastep.runs.length === 3 && outside.changes() === 4);
+    check(`gammastep warmth: outside changes after destroy run and notify nothing (${outside.gammastep.runs})`,
+        outside.gammastep.runs.length === 6 && outside.changes() === 7);
 
     const stored = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true, 'warmth-kelvin': 1800 }) });
     stored.warmth.applyStored();
@@ -3155,6 +3213,17 @@ async function testSubprocess() {
     const exited = await Subprocess.runCommand(['/bin/sh', '-c', '/bin/sleep 1 & exit 0'], 200).then(() => 'resolved', e => e.message);
     check(`subprocess: a command that exited before the timeout fired is a success, not timed out (${exited})`,
         exited === 'resolved');
+    // Diff audit M3: the kill reaches the shell, not its background sleep, which keeps the
+    // output pipes open; the rejection comes after the grace period, not when sleep ends.
+    // The odd duration lets the cleanup kill this sleep and no other.
+    const holder = '/bin/sleep 29.731';
+    const holderStarted = GLib.get_monotonic_time();
+    const held = await Subprocess.runCommand(['/bin/sh', '-c', `${holder} & wait`], 100, 300)
+        .then(() => null, e => e.message);
+    const heldMs = Math.round((GLib.get_monotonic_time() - holderStarted) / 1000);
+    GLib.spawn_sync(null, ['/usr/bin/pkill', '-f', `^${holder}$`], null, GLib.SpawnFlags.DEFAULT, null);
+    check(`subprocess: a killed command whose child holds the pipes is rejected after the grace period (${held}, ${heldMs} ms)`,
+        held !== null && held.includes('timed out after 100 ms') && heldMs >= 400 && heldMs < 3000);
 }
 
 const FakeObjectManager = GObject.registerClass({

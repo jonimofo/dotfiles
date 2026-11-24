@@ -361,7 +361,8 @@ the menu:
   since a newly plugged screen starts with neutral gamma; the tests cover that re-apply, but
   the tint after unplugging and replugging a monitor, and after suspend and resume, was not
   yet checked on screen. A value written to those keys from outside the applet is shown and
-  applied at once. Removing the applet while the Warmth is on resets the screens once and
+  applied when Cinnamon reloads the settings file, shortly after; during a slider drag the
+  slider wins over an outside temperature. Removing the applet while the Warmth is on resets the screens once and
   keeps the stored state, so the next start applies it again. With gammastep missing or after
   a failed run, the row and its switch are dimmed; the next menu open or monitor change
   looks for gammastep again and re-applies the state. Cinnamon's Night Light is not used.

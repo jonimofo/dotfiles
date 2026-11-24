@@ -358,12 +358,18 @@ the menu:
   applet's own settings (hidden keys `warmth-enabled`, `warmth-kelvin`; defaults off,
   2000 K), the temperature once the handle is released. Both are applied again when the
   applet starts (login, Cinnamon restart) and one second after the last monitor change,
-  since a newly plugged screen starts with neutral gamma. With gammastep missing or after
+  since a newly plugged screen starts with neutral gamma; the tests cover that re-apply, but
+  the tint after unplugging and replugging a monitor, and after suspend and resume, was not
+  yet checked on screen. A value written to those keys from outside the applet is shown and
+  applied at once. Removing the applet while the Warmth is on resets the screens once and
+  keeps the stored state, so the next start applies it again. With gammastep missing or after
   a failed run, the row and its switch are dimmed; the next menu open or monitor change
-  looks for gammastep again and re-applies the state. Cinnamon's Night Light is not used:
-  its colour plugin keeps one colour device per vendor-model-serial, so two identical
-  monitors reporting the same serial get one device and only one of them is tinted. Night
-  Light also sets the gamma ramps; leave it off so the two do not overwrite each other.
+  looks for gammastep again and re-applies the state. Cinnamon's Night Light is not used.
+  Observed on 2026-11-23: with Night Light, only one of the two identical monitors was
+  tinted, and both report the same serial. The shared colour device is the explanation
+  inferred from that: Cinnamon's colour plugin keys its colour devices on
+  vendor-model-serial. Night Light also sets the gamma ramps; leave it off so the two do
+  not overwrite each other.
 - Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
   - Wi-Fi: wireless on or off. Shows the network in use.
   - Bluetooth: adapter on or off. Shows the connected device's name, with `+N` when several
@@ -466,6 +472,15 @@ gjs scripts/cinnamon-quick-settings-schema.js cinnamon/applets/quick-settings@bg
    The applet calls the helper through `sudo -n` from the desktop session, with no
    terminal, so the tile works only once that rule is in place.
 
+3. For the Warmth row, install gammastep and make sure Night Light is off, then restart
+   Cinnamon (Alt+F2, then `r`). The earlier Warmth row could have turned Night Light on,
+   and both write the screens' colour ramps.
+
+   ```bash
+   sudo apt install gammastep
+   gsettings set org.cinnamon.settings-daemon.plugins.color night-light-enabled false
+   ```
+
 `applet.sh enable` adds the applet at the right end of panel1's right zone and prints
 "unchanged" when it is already there. A changed size in `stylesheet.css` shows after the
 next login (see [Reload after an edit](#reload-after-an-edit)).
@@ -519,8 +534,8 @@ signals, the ones Cinnamon's own overview and window menu use.
   battery change (sysfs sends no change signal): a mode changed by another tool shows at the
   next one. The return to 80 % needs the applet running when the charger is unplugged, and
   is forgotten across a reload until the battery is seen full on AC again. A helper run that
-  does not answer within 10 s is given up on: the tile is usable again and shows the real
-  mode.
+  does not answer within 10 s is killed and logged: the tile is usable again and shows the
+  real mode.
 
 - A click on a media block brings a window forward, never a browser tab: no browser lets
   another program switch its tabs. Among a browser's windows, the one whose title holds the

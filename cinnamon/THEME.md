@@ -84,12 +84,15 @@ cinnamon/theme/install.sh ~/.thunderbird/yft1awhq.default-default ~/.mozilla/fir
 For each profile, the script links `chrome/userChrome.css` to the repo file and
 `chrome/dracula-assets` to `~/.themes/Dracula/assets`, and adds
 `toolkit.legacyUserProfileCustomizations.stylesheets` to `user.js` if missing. A real
-`userChrome.css` already there is kept as `userChrome.css.<timestamp>.bak`. `--check` shows
-what would change, without writing. Safe to run twice. Restart the app afterwards.
-A `userChrome.css` already present in a profile is replaced by the link and kept as `.bak`.
+`userChrome.css` file or `dracula-assets` folder already there is replaced by the link and
+kept next to it as `<name>.<timestamp>.bak`; the script stops with an error if that backup
+name is already taken. `--check` shows what would change, without writing. Safe to run
+twice. After a run that changed something it prints `Restart Firefox and Thunderbird to see
+the change.`
 
-Check: `cinnamon/theme/install.sh --check <profile>...` prints only `ok` lines and exits 0, and
-exits 1 when something would change. After a restart, the title bar shows the Dracula dots.
+Check: `cinnamon/theme/install.sh --check <profile>...` prints only `ok` lines and exits 0
+when nothing would change, and exits 3 when something would change; 1 is an error, 2 a
+usage error. After a restart, the title bar shows the Dracula dots.
 
 Limits: restore uses the maximize dot. Only the profiles given are changed. The selectors were
 checked on Thunderbird 153 and Firefox 160; re-check them after a major Mozilla update.

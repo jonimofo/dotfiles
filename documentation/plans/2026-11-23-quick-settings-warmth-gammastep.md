@@ -16,11 +16,13 @@ Night Light settings page, new dependencies (gammastep 2.0.9 is already installe
 
 ## Cause
 
-The row wrote Night Light's keys (`org.cinnamon.settings-daemon.plugins.color`). Cinnamon's
-colour daemon registers one colour device per monitor, keyed on vendor-model-serial. The
-two Acer CB241HY monitors report the same serial, so they share one device and the second
-monitor (DP-2-3) never gets the tint. Checked on the machine: `gammastep -m randr -O 3500`
-tints both outputs and `gammastep -m randr -x` resets both.
+The row wrote Night Light's keys (`org.cinnamon.settings-daemon.plugins.color`). Observed
+on 2026-11-23: with Night Light, only one of the two identical monitors was tinted, and both
+report the same serial. The shared colour device is the explanation inferred from that:
+Cinnamon's colour daemon keys its colour devices on vendor-model-serial, so the two Acer
+CB241HY monitors would share one device and the second monitor (DP-2-3) never gets the
+tint. Checked on the machine: `gammastep -m randr -O 3500` tints both outputs and
+`gammastep -m randr -x` resets both.
 
 ## Design
 
@@ -69,7 +71,7 @@ tints both outputs and `gammastep -m randr -x` resets both.
 
 - `gammastepWarmth.js` (new): state, gammastep runs, serialization, recovery.
 - `applet.js`, `asyncHelpers.js`, `subprocess.js`, `warmthModel.js`, `sliderRow.js`,
-  `constants.js`, `brightness.js`,
+  `constants.js`, `brightness.js`, `layoutModel.js`,
   `booleanSetting.js`, `settings-schema.json`; `nightLight.js` removed.
 - `scripts/cinnamon-quick-settings-schema.js`, `scripts/cinnamon-quick-settings-test.js`,
   `scripts/cinnamon-quick-settings-test.sh`, `cinnamon/README.md`.

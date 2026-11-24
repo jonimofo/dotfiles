@@ -2,7 +2,7 @@
 # Give Thunderbird and Firefox profiles the Dracula window buttons: link the versioned
 # userChrome.css and the theme assets into <profile>/chrome/ and enable userChrome.css.
 # Usage: cinnamon/theme/install.sh [--check|-n] <profile-dir>...
-# Exit codes: 0 done or nothing to do, 1 error or (--check) changes pending, 2 usage.
+# Exit codes: 0 done or nothing to do, 1 error, 2 usage, 3 (--check) changes pending.
 set -euo pipefail
 
 src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,6 +13,10 @@ readonly ASSETS_DIR_SETTING="${DRACULA_ASSETS_DIR:-$DEFAULT_ASSETS_DIR}"
 readonly ASSETS_LINK_NAME="dracula-assets"
 readonly PREF_LINE='user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);'
 readonly PREF_COMMENT='// Load chrome/userChrome.css (Dracula window buttons, dotfiles cinnamon/theme).'
+readonly RESTART_HINT='Restart Firefox and Thunderbird to see the change.'
+readonly EXIT_ERROR=1
+readonly EXIT_USAGE=2
+readonly EXIT_PENDING=3
 stamp="$(date +%Y%m%d-%H%M%S)"
 readonly STAMP="$stamp"
 check=0
@@ -26,18 +30,22 @@ say() {
 
 usage() {
     say "usage: $0 [--check|-n] <profile-dir>..." >&2
-    exit 2
+    exit "$EXIT_USAGE"
 }
 
 fail() {
     say "error: $*" >&2
-    exit 1
+    exit "$EXIT_ERROR"
 }
 
 backup_path() {
     # Keep a real file next to where it was, under a timestamped name.
     local path="$1"
     local backup="$path.$STAMP.bak"
+    # mv onto an existing backup would overwrite it, or move into it when it is a folder.
+    if [[ -e "$backup" || -L "$backup" ]]; then
+        fail "backup path already exists: $backup (run again in a second)"
+    fi
     if ! mv -- "$path" "$backup"; then
         fail "could not back up: $path"
     fi
@@ -217,11 +225,13 @@ main() {
     for profile in "${profiles[@]}"; do
         install_profile "$profile"
     done
-    if [[ $check -eq 1 ]]; then
-        if [[ $changes -eq 1 ]]; then
-            exit 1
-        fi
+    if [[ $changes -eq 0 ]]; then
+        return 0
     fi
+    if [[ $check -eq 1 ]]; then
+        exit "$EXIT_PENDING"
+    fi
+    say "$RESTART_HINT"
 }
 
 main "$@"

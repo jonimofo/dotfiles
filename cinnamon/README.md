@@ -362,8 +362,9 @@ the menu:
   the tint after unplugging and replugging a monitor, and after suspend and resume, was not
   yet checked on screen. A value written to those keys from outside the applet is shown and
   applied when Cinnamon reloads the settings file, shortly after; during a slider drag the
-  slider wins over an outside temperature. Removing the applet while the Warmth is on resets the screens once and
-  keeps the stored state, so the next start applies it again. With gammastep missing or after
+  slider wins over an outside temperature. Removing or reloading the applet while the Warmth
+  is on resets the screens once and keeps the stored state, so the next start applies it
+  again. With gammastep missing or after
   a failed run, the row and its switch are dimmed; the next menu open or monitor change
   looks for gammastep again and re-applies the state. Cinnamon's Night Light is not used.
   Observed on 2026-11-23: with Night Light, only one of the two identical monitors was
@@ -578,6 +579,10 @@ signals, the ones Cinnamon's own overview and window menu use.
   them, leave it off so the two do not overwrite each other; also `xrandr --gamma`, a
   colour profile loaded later. It comes back at the next monitor change or applet start,
   or by moving the slider.
+- Cinnamon gives an applet the same signal for a reload and for a removal, so a reload
+  also resets the Warmth before the new instance applies it again. The two gammastep runs
+  are not ordered: if the reset ends last, the switch shows on while the screens are
+  neutral. Switching the Warmth off and on puts it back.
 - A command the applet runs (gammastep, ddcutil, nordvpn, the charge helper) that has not
   ended after 60 seconds is killed and logged as timed out; the row or tile that ran it
   behaves as after a failed run.

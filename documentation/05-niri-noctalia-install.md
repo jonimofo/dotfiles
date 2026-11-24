@@ -2,6 +2,10 @@
 
 Audience: an AI assistant (Claude Code) working on this machine in a future session. Written 2026-09-15.
 
+> **Status: REMOVED on 2026-11-23.** niri and Noctalia are no longer installed. Sections 0 to 4
+> describe the install as it was and are kept as the record for a reinstall. Do not assume any
+> file, package or key binding below exists. See [Removal](#5-removal-2026-11-23).
+
 ## 0. What was installed and where (GNOME untouched, GDM stays the display manager)
 
 | Component | Source | Location | Undo |
@@ -37,3 +41,36 @@ Build deps (cargo/rustc 1.85.1, clang, lib*-dev) were installed by an earlier se
 ## 4. Known noise
 
 - `apt update` prints a pre-existing signature error for the Dropbox repo (`linux.dropbox.com`, SHA1 key rejected by sqv). Unrelated to this install.
+
+## 5. Removal (2026-11-23)
+
+The daily session is Cinnamon on X11 under GDM, and niri was never adopted. Everything from
+section 0 was removed, plus what the install pulled in afterwards.
+
+| What | How it was removed |
+|---|---|
+| Noctalia and helpers | `apt-get purge noctalia noctalia-data nickh-archive-keyring fuzzel swaybg swaylock brightnessctl` |
+| Libraries only Noctalia needed | `apt-get purge fonts-noctalia-tabler libfcft4t64 libqalculate23 libqalculate-data libsdbus-c++2 libtomlplusplus3t64 libutf8proc3 brightness-udev` |
+| Noctalia apt source | deleted `/etc/apt/sources.list.d/noctalia-trixie.sources`, then `apt update` |
+| niri and xwayland-satellite | deleted the 7 files listed in section 0, and the then-empty `/usr/local/share/wayland-sessions` and `/usr/local/share/xdg-desktop-portal` |
+| User config and state | deleted `~/.config/niri`, `~/.config/noctalia`, `~/.cache/noctalia`, `~/.local/state/noctalia` |
+| NiriMod (GUI settings app, `github.com/srinivasr/nirimod`, installed by its `install.sh` on 2026-09-15, missing from section 0) | deleted `~/.local/share/nirimod`, `~/.local/bin/nirimod`, `~/.config/nirimod`, `~/.local/share/applications/io.github.nirimod.desktop`, `~/.local/share/icons/hicolor/scalable/apps/nirimod.svg` |
+
+Kept on purpose:
+
+- GNOME, as the fallback session. `gdm3` depends on `gnome-shell`, so removing GNOME means
+  replacing the display manager first.
+- `xwayland`, `xdg-desktop-portal-gnome`, `xdg-desktop-portal-gtk`: GNOME and GDM use them.
+- The Rust build dependencies (cargo, clang, `lib*-dev`).
+- `ddcutil`. It arrived as a Noctalia dependency, but the Quick Settings applet
+  (`cinnamon/applets/quick-settings@bgi`, Brightness row) needs it for the external monitors.
+  It was purged by mistake during the removal and reinstalled the same day. After a reinstall,
+  monitors plugged in while the package was absent have no access rule: run
+  `sudo udevadm trigger --subsystem-match=i2c-dev --action=change`, then check with
+  `ddcutil detect --terse`.
+
+Lesson: apt's "automatically installed and no longer required" list is not proof that a package
+is unused. Search each name in this repo before purging; the applets call command line tools.
+
+The source checkouts `~/Repos/Sandbox/niri` and `~/Repos/Sandbox/xwayland-satellite` were already
+gone before this removal. A reinstall starts from a fresh clone.

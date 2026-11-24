@@ -68,10 +68,10 @@ const SLIDERS = [
     { id: 'output', label: 'Sound', name: 'Sound', icon: 'audio-volume-high-symbolic', hasMenu: true },
     { id: 'input', label: 'Microphone', name: 'Microphone', icon: 'audio-input-microphone-symbolic', hasMenu: true },
     { id: 'monitors', label: 'Brightness', name: 'Brightness', icon: 'display-brightness-symbolic', hasMenu: false },
-    // The Night Light temperature, its value as text, and on the right a switch for Night
-    // Light (switchLabel: what it toggles, for screen readers).
+    // The screen colour temperature, its value as text, and on the right a switch that turns
+    // the tint on and off (switchLabel: what it toggles, for screen readers).
     { id: 'warmth', label: 'Warmth', name: 'Warmth', icon: 'night-light-symbolic', hasMenu: false, hasSwitch: true,
-        switchLabel: 'Night Light' },
+        switchLabel: 'Warmth' },
 ];
 
 // After a percentage: the battery level, the Charge tile's labels.
@@ -99,7 +99,14 @@ const CHARGE_LABELS = {
     limit: `${CHARGE_LABEL_PREFIX} ${CHARGE_LIMIT_END}${PERCENT_SUFFIX}`,
     full: `${CHARGE_LABEL_PREFIX} ${CHARGE_FULL_PERCENT}${PERCENT_SUFFIX}`,
 };
-// A helper run that does not end within this long is given up on (logged, the tile usable).
+// A command run through subprocess.js that has not ended within this long is killed. Above
+// the slowest legitimate caller: nordvpn connect waits on the VPN server, ddcutil detect
+// probes every I2C bus for seconds.
+const COMMAND_TIMEOUT_MS = 60000;
+// After the kill, a command whose output pipes are still held open (a child of sudo that
+// SIGKILL on sudo does not reach) is rejected as timed out once this long has passed.
+const COMMAND_KILL_GRACE_MS = 1000;
+// A helper run that does not end within this long is killed (logged, the tile usable).
 const CHARGE_HELPER_TIMEOUT_MS = 10000;
 // The helper's or sudo's error text in the log is cut to this many characters.
 const CHARGE_ERROR_TEXT_MAX = 200;
@@ -138,8 +145,9 @@ const DDCUTIL = 'ddcutil';
 const DDC_BRIGHTNESS_FEATURE = '10';
 // A scroll on the slider has no release: the value is sent once the wheel stops this long.
 const BRIGHTNESS_SCROLL_COMMIT_MS = 400;
-// Monitor changes closer than this are one dock event: one ddcutil detection.
-const BRIGHTNESS_DETECT_DELAY_MS = 1000;
+// Monitor changes closer than this are one dock event: one ddcutil detection, one Warmth
+// re-apply, from one timer in applet.js.
+const MONITORS_SETTLE_DELAY_MS = 1000;
 
 // Laptop panel brightness, through cinnamon-settings-daemon like the stock power applet.
 const SCREEN_BRIGHTNESS_PROXY = 'org.cinnamon.SettingsDaemon.Power.Screen';
@@ -253,17 +261,32 @@ const POWER_PROFILE_FIRST_OTHER = 'power-saver';
 const POWER_PROFILE_ICON_PREFIX = 'power-profile-';
 const POWER_SETTINGS_COMMAND = ['cinnamon-settings', 'power'];
 
-// Night Light: the keys of Cinnamon Settings > Night Light.
-const NIGHT_LIGHT_SCHEMA = 'org.cinnamon.settings-daemon.plugins.color';
-const NIGHT_LIGHT_KEY = 'night-light-enabled';
-const NIGHT_LIGHT_TEMPERATURE_KEY = 'night-light-temperature';
-// The Warmth row, wider than Cinnamon's Night Light page (1700 K to 4700 K): from 6500 K, no
-// tint, to 1000 K, the deepest red. Warmer is fewer kelvin, so the slider runs from
-// WARMTH_MAX_KELVIN on the left to WARMTH_MIN_KELVIN on the right.
+// The Warmth row, through gammastep one-shot mode on every screen of the X server (randr):
+// -O sets the temperature, -x resets the gamma. Not Cinnamon's colour plugin: it keeps one
+// colour device per vendor-model-serial, so identical monitors sharing a serial get one
+// device and only one of them is tinted.
+const GAMMASTEP = 'gammastep';
+const GAMMASTEP_METHOD_ARGS = ['-m', 'randr'];
+// Without -P a run tints the ramps the previous run left: the runs stack, every slider step
+// darkens the screens and no step can lighten them.
+const GAMMASTEP_REPLACE_FLAG = '-P';
+const GAMMASTEP_SET_FLAG = '-O';
+const GAMMASTEP_RESET_FLAG = '-x';
+// From 6500 K, no tint, to 1000 K, the deepest red. Warmer is fewer kelvin, so the slider
+// runs from WARMTH_MAX_KELVIN on the left to WARMTH_MIN_KELVIN on the right.
 const WARMTH_MIN_KELVIN = 1000;
 const WARMTH_MAX_KELVIN = 6500;
 const WARMTH_STEP_KELVIN = 100;
 const WARMTH_UNIT_SUFFIX = ' K';
+// The kelvin is stored once per change, after a scroll stops like the Brightness value.
+const WARMTH_SCROLL_COMMIT_MS = BRIGHTNESS_SCROLL_COMMIT_MS;
+// The Warmth state in the applet's own settings: hidden keys, not in the settings dialog.
+const WARMTH_SETTINGS = {
+    enabled: { key: 'warmth-enabled', default: false },
+    kelvin: { key: 'warmth-kelvin', default: 2000 },
+};
+// gammastep's error text in the log is cut to this many characters.
+const WARMTH_ERROR_TEXT_MAX = 200;
 
 // Keyboard light, through UPower on the system bus. The tile shows "Keyboard" and the level's
 // word: Off at 0, On for a light with one level, High at the maximum, Low up to half of it,

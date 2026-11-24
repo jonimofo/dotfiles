@@ -48,6 +48,9 @@ function buildSchema(constants, layoutModel) {
     const schema = { layout };
     for (const tab of tabs)
         schema[tab.key] = listSetting(tab.declared, tab.column, layoutModel);
+    // State kept by the applet itself: generic keys, in no section, so the dialog hides them.
+    for (const setting of Object.values(constants.WARMTH_SETTINGS))
+        schema[setting.key] = { type: 'generic', default: setting.default };
     return schema;
 }
 

@@ -26,7 +26,10 @@ Every path assumes the repo is checked out at `~/Repos/dotfiles`.
   Tested on Cinnamon 6.4 (X11). See [Calendar](#calendar-what-it-does) below.
 - `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
   Enable adds it at the right end of panel1's right zone.
-- `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override), install and undo.
+- `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override, Thunderbird
+  and Firefox window buttons), install and undo.
+- `theme/`: `userChrome.css` and `install.sh` for the Thunderbird and Firefox window buttons,
+  see `THEME.md`.
 - `cinnamon_keybindings.dconf`: my keyboard shortcuts, custom and changed built-in ones (see below).
 
 ## Custom shortcuts
@@ -344,12 +347,31 @@ the menu:
 - Sliders: Sound (default output), Microphone (default input), Brightness, Warmth. Sound and
   Microphone follow the handle live, like the stock sound applet. Brightness sets every
   external monitor that answers DDC/CI to the same value when the handle is released, or
-  the laptop panel when no such monitor is connected. Warmth is the Night Light
-  temperature, 6500 K (no tint) on the left to 1000 K (deepest red) on the right in steps
-  of 100 K, wider than Cinnamon's Night Light page (1700 K to 4700 K), shown as `3400 K`;
-  a value set elsewhere outside that range is shown as is, the handle at the nearest end.
-  The switch at its right end turns Night Light on and off; while it is off the slider is
-  dimmed.
+  the laptop panel when no such monitor is connected. Warmth is the screen colour
+  temperature on every connected screen, set with `gammastep -m randr -P -O <kelvin>`
+  (`-P` replaces the previous tint; without it the runs stack and only darken),
+  6500 K (no tint) on the left to 1000 K (deepest red) on the right in steps of 100 K,
+  shown as `3400 K`. The switch at its right end turns it on and off (`gammastep -m randr
+  -x` resets the gamma); while it is off the slider is dimmed. The handle sends one run per
+  step while dragging, and the value next to it follows; runs go one at a time and the
+  newest value is the one left on the screens. On and the temperature are kept in the
+  applet's own settings (hidden keys `warmth-enabled`, `warmth-kelvin`; defaults off,
+  2000 K), the temperature once the handle is released. Both are applied again when the
+  applet starts (login, Cinnamon restart) and one second after the last monitor change,
+  since a newly plugged screen starts with neutral gamma; the tests cover that re-apply, but
+  the tint after unplugging and replugging a monitor, and after suspend and resume, was not
+  yet checked on screen. A value written to those keys from outside the applet is shown and
+  applied when Cinnamon reloads the settings file, shortly after; during a slider drag the
+  slider wins over an outside temperature. Removing or reloading the applet while the Warmth
+  is on resets the screens once and keeps the stored state, so the next start applies it
+  again. With gammastep missing or after
+  a failed run, the row and its switch are dimmed; the next menu open or monitor change
+  looks for gammastep again and re-applies the state. Cinnamon's Night Light is not used.
+  Observed on 2026-11-23: with Night Light, only one of the two identical monitors was
+  tinted, and both report the same serial. The shared colour device is the explanation
+  inferred from that: Cinnamon's colour plugin keys its colour devices on
+  vendor-model-serial. Night Light also sets the gamma ramps; leave it off so the two do
+  not overwrite each other.
 - Tiles, two per row. A click on the tile toggles it; a highlighted tile is on.
   - Wi-Fi: wireless on or off. Shows the network in use.
   - Bluetooth: adapter on or off. Shows the connected device's name, with `+N` when several
@@ -379,7 +401,7 @@ the menu:
     once), the first change to battery power applies the limit, once. A dock unplugged or a
     short power cut counts as that change.
   - Dark style, Do Not Disturb (notifications off), Keep awake (no screen blanking or
-    dimming), Mic mute. Night Light has no tile: the Warmth switch turns it on and off.
+    dimming), Mic mute. Warmth has no tile: the switch on its row turns it on and off.
 - Media controls, under the tiles: one block per media player on the session bus (any
   MPRIS player: VLC, GNOME Videos, a browser playing a video...), at most three, shown by
   player name. With more than three, the ones kept are the playing players first, then the
@@ -452,6 +474,15 @@ gjs scripts/cinnamon-quick-settings-schema.js cinnamon/applets/quick-settings@bg
    The applet calls the helper through `sudo -n` from the desktop session, with no
    terminal, so the tile works only once that rule is in place.
 
+3. For the Warmth row, install gammastep and make sure Night Light is off, then restart
+   Cinnamon (Alt+F2, then `r`). The earlier Warmth row could have turned Night Light on,
+   and both write the screens' colour ramps.
+
+   ```bash
+   sudo apt install gammastep
+   gsettings set org.cinnamon.settings-daemon.plugins.color night-light-enabled false
+   ```
+
 `applet.sh enable` adds the applet at the right end of panel1's right zone and prints
 "unchanged" when it is already there. A changed size in `stylesheet.css` shows after the
 next login (see [Reload after an edit](#reload-after-an-edit)).
@@ -478,6 +509,7 @@ part is dimmed or does nothing, and the reason goes to the journal once:
 
 | Tool | Used for | When absent |
 |---|---|---|
+| `gammastep` | Warmth row, on every screen (one-shot mode, `randr` method) | Warmth row and its switch dimmed and inert until the next menu open or monitor change finds it working; a missing command is logged once, a failed run with the command and value |
 | `ddcutil` | external monitor brightness | the laptop panel is used, through cinnamon-settings-daemon; with no laptop panel either, the Brightness row is dimmed |
 | `power-profiles-daemon` | Power profile tile and list | tile dimmed until the daemon starts |
 | `nordvpn` (daemon running, user in the `nordvpn` group) | NordVPN tile and list | tile dimmed and shown off, no VPN panel icon from NordVPN |
@@ -504,8 +536,8 @@ signals, the ones Cinnamon's own overview and window menu use.
   battery change (sysfs sends no change signal): a mode changed by another tool shows at the
   next one. The return to 80 % needs the applet running when the charger is unplugged, and
   is forgotten across a reload until the battery is seen full on AC again. A helper run that
-  does not answer within 10 s is given up on: the tile is usable again and shows the real
-  mode.
+  does not answer within 10 s is killed and logged: the tile is usable again and shows the
+  real mode.
 
 - A click on a media block brings a window forward, never a browser tab: no browser lets
   another program switch its tabs. Among a browser's windows, the one whose title holds the
@@ -543,11 +575,17 @@ signals, the ones Cinnamon's own overview and window menu use.
   own app) triggers one `nordvpn status` read, so the VPN name on the panel follows. With
   NordVPN's OpenVPN technology no such link exists in NetworkManager: the panel then
   follows only when the menu opens.
-- A Warmth above 4700 K may be set back to 4700 K when Cinnamon Settings > Night Light is
-  opened. Verified by reading the page's code only (`cs_nightlight.py` and the xapp `Range`
-  widget: a 1700 K to 4700 K scale bound to the key, whose clamped value is written back
-  300 ms after it changes); not tried on screen, since that would change the setting. A
-  value below 1700 K is not affected by that path.
+- The Warmth is reset by anything else that sets the gamma ramps: Night Light also sets
+  them, leave it off so the two do not overwrite each other; also `xrandr --gamma`, a
+  colour profile loaded later. It comes back at the next monitor change or applet start,
+  or by moving the slider.
+- Cinnamon gives an applet the same signal for a reload and for a removal, so a reload
+  also resets the Warmth before the new instance applies it again. The two gammastep runs
+  are not ordered: if the reset ends last, the switch shows on while the screens are
+  neutral. Switching the Warmth off and on puts it back.
+- A command the applet runs (gammastep, ddcutil, nordvpn, the charge helper) that has not
+  ended after 60 seconds is killed and logged as timed out; the row or tile that ran it
+  behaves as after a failed run.
 
 ## Quick Settings: tests
 
@@ -570,7 +608,7 @@ logic tests.
 `cinnamon-quick-settings-test.sh` runs on the memory GSettings backend and on fakes: fake
 NetworkManager objects (Wi-Fi, VPN), a fake system bus (BlueZ, power profiles, UPower's
 keyboard backlight), fake session buses (Keep awake, MPRIS media players), fake Cvc
-streams, fake radios (Airplane mode), and fake ddcutil and nordvpn commands fed with output
+streams, fake radios (Airplane mode), a fake gammastep (Warmth), and fake ddcutil and nordvpn commands fed with output
 captured on this machine (`scripts/fixtures/`). It never talks to the real
 NetworkManager, BlueZ, UPower, session manager or media players.
 
@@ -578,7 +616,8 @@ Design records:
 [`documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md`](../documentation/plans/2026-11-12-cinnamon-quick-settings-applet.md),
 [`documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md`](../documentation/plans/2026-11-16-cinnamon-quick-settings-extras.md),
 [`documentation/plans/2026-11-17-cinnamon-quick-settings-media.md`](../documentation/plans/2026-11-17-cinnamon-quick-settings-media.md),
-[`documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md`](../documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md).
+[`documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md`](../documentation/plans/2026-11-18-cinnamon-quick-settings-media-playing.md),
+[`documentation/plans/2026-11-23-quick-settings-warmth-gammastep.md`](../documentation/plans/2026-11-23-quick-settings-warmth-gammastep.md).
 
 ## Calendar: what it does
 

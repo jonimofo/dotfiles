@@ -11,17 +11,24 @@ function kelvinToFraction(kelvin) {
     return (Constants.WARMTH_MAX_KELVIN - clampKelvin(kelvin)) / RANGE;
 }
 
-// The temperature for slider position @fraction, on the step of Cinnamon's Night Light page.
+// The temperature for slider position @fraction, on WARMTH_STEP_KELVIN.
 function fractionToKelvin(fraction) {
     const kelvin = Constants.WARMTH_MAX_KELVIN - fraction * RANGE;
     const steps = Math.round((kelvin - Constants.WARMTH_MIN_KELVIN) / Constants.WARMTH_STEP_KELVIN);
     return clampKelvin(Constants.WARMTH_MIN_KELVIN + steps * Constants.WARMTH_STEP_KELVIN);
 }
 
-// What the Warmth row shows: Night Light off dims and freezes the slider, the switch
-// follows it; the handle is clamped to the range, the text is the stored value.
-function rowState(enabled, kelvin) {
-    return { available: enabled, switchOn: enabled, fraction: kelvinToFraction(kelvin), text: label(kelvin) };
+// What the Warmth row shows: Warmth off dims and freezes the slider, the switch follows it;
+// gammastep unavailable dims and freezes both. The handle is clamped to the range, the text
+// is the stored value.
+function rowState(available, enabled, kelvin) {
+    return {
+        available: available && enabled,
+        switchAvailable: available,
+        switchOn: enabled,
+        fraction: kelvinToFraction(kelvin),
+        text: label(kelvin),
+    };
 }
 
 function label(kelvin) {

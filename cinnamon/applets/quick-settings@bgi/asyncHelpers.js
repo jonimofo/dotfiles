@@ -79,3 +79,29 @@ class IdleCoalescer {
         this._sourceId = 0;
     }
 }
+
+// Runs @callback once, @delayMs after the last of one or more schedule() calls: a burst of
+// events that only settles later (a dock's monitor changes) gives one update. cancel()
+// drops a pending run (on destroy).
+class Debouncer {
+    constructor(delayMs, callback) {
+        this._delayMs = delayMs;
+        this._callback = callback;
+        this._sourceId = 0;
+    }
+
+    schedule() {
+        this.cancel();
+        this._sourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._delayMs, () => {
+            this._sourceId = 0;
+            this._callback();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    cancel() {
+        if (this._sourceId)
+            GLib.source_remove(this._sourceId);
+        this._sourceId = 0;
+    }
+}

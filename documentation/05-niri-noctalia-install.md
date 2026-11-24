@@ -50,7 +50,7 @@ section 0 was removed, plus what the install pulled in afterwards.
 | What | How it was removed |
 |---|---|
 | Noctalia and helpers | `apt-get purge noctalia noctalia-data nickh-archive-keyring fuzzel swaybg swaylock brightnessctl` |
-| Libraries only Noctalia needed | `apt-get purge fonts-noctalia-tabler libfcft4t64 libqalculate23 libqalculate-data libsdbus-c++2 libtomlplusplus3t64 libutf8proc3 ddcutil brightness-udev` |
+| Libraries only Noctalia needed | `apt-get purge fonts-noctalia-tabler libfcft4t64 libqalculate23 libqalculate-data libsdbus-c++2 libtomlplusplus3t64 libutf8proc3 brightness-udev` |
 | Noctalia apt source | deleted `/etc/apt/sources.list.d/noctalia-trixie.sources`, then `apt update` |
 | niri and xwayland-satellite | deleted the 7 files listed in section 0, and the then-empty `/usr/local/share/wayland-sessions` and `/usr/local/share/xdg-desktop-portal` |
 | User config and state | deleted `~/.config/niri`, `~/.config/noctalia`, `~/.cache/noctalia`, `~/.local/state/noctalia` |
@@ -62,6 +62,15 @@ Kept on purpose:
   replacing the display manager first.
 - `xwayland`, `xdg-desktop-portal-gnome`, `xdg-desktop-portal-gtk`: GNOME and GDM use them.
 - The Rust build dependencies (cargo, clang, `lib*-dev`).
+- `ddcutil`. It arrived as a Noctalia dependency, but the Quick Settings applet
+  (`cinnamon/applets/quick-settings@bgi`, Brightness row) needs it for the external monitors.
+  It was purged by mistake during the removal and reinstalled the same day. After a reinstall,
+  monitors plugged in while the package was absent have no access rule: run
+  `sudo udevadm trigger --subsystem-match=i2c-dev --action=change`, then check with
+  `ddcutil detect --terse`.
+
+Lesson: apt's "automatically installed and no longer required" list is not proof that a package
+is unused. Search each name in this repo before purging; the applets call command line tools.
 
 The source checkouts `~/Repos/Sandbox/niri` and `~/Repos/Sandbox/xwayland-satellite` were already
 gone before this removal. A reinstall starts from a fresh clone.

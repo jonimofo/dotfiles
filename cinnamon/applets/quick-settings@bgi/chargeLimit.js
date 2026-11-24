@@ -1,5 +1,4 @@
 const Gio = imports.gi.Gio;
-const GLib = imports.gi.GLib;
 const ByteArray = imports.byteArray;
 const Constants = require('./constants');
 const ChargeModel = require('./chargeModel');
@@ -30,11 +29,11 @@ function exists(path) {
 // menu opens, after each change and on each battery change), switched with the root helper
 // through sudo -n. A click asks for the other state; while a write runs, clicks and battery
 // changes are ignored, and a run that does not end within Constants.CHARGE_HELPER_TIMEOUT_MS
-// is given up on. In the full state, the battery seen full on AC and then on battery power
+// is killed by runCommand. In the full state, the battery seen full on AC and then on battery power
 // brings back the limit once (ChargeModel.autoReturn); the last battery reading is applied
 // again right after each write, so a battery already full on AC when full is chosen counts
 // as seen full at once. @onChange runs after every read; nothing runs after destroy().
-// @runCommand(argv): Subprocess.runCommand, or a fake in the tests. @files: the existence
+// @runCommand(argv, timeoutMs): Subprocess.runCommand, or a fake in the tests. @files: the existence
 // check and the reader, replaced by fakes in the tests. @timeoutMs: shorter in the tests.
 class ChargeLimit {
     constructor(runCommand, onChange, files = { exists, readText }, timeoutMs = Constants.CHARGE_HELPER_TIMEOUT_MS) {
@@ -47,7 +46,6 @@ class ChargeLimit {
         this._busy = false;
         this._seenFull = false;
         this._battery = null;
-        this._timeoutId = 0;
         this.available = false;
         this.state = null;
     }
@@ -84,7 +82,6 @@ class ChargeLimit {
     destroy() {
         this._destroyed = true;
         this._cancellable.cancel();
-        this._clearTimeout();
     }
 
     async _decide() {
@@ -100,30 +97,13 @@ class ChargeLimit {
     async _apply(state) {
         this._busy = true;
         try {
-            await Promise.race([this._run(ChargeModel.helperArgv(state)), this._timeout()]);
+            await this._run(ChargeModel.helperArgv(state), this._timeoutMs);
         } catch (e) {
             AsyncHelpers.logBounded(e, `setting the battery charge to ${state}`, Constants.CHARGE_ERROR_TEXT_MAX);
         }
-        this._clearTimeout();
         if (!this._destroyed)
             await this.refresh();
         this._busy = false;
         await this._decide();
-    }
-
-    _timeout() {
-        return new Promise((resolve, reject) => {
-            this._timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._timeoutMs, () => {
-                this._timeoutId = 0;
-                reject(new Error(`no answer within ${this._timeoutMs} ms, given up`));
-                return GLib.SOURCE_REMOVE;
-            });
-        });
-    }
-
-    _clearTimeout() {
-        if (this._timeoutId)
-            GLib.source_remove(this._timeoutId);
-        this._timeoutId = 0;
     }
 }

@@ -735,9 +735,14 @@ async function testWarmthModel() {
 
 // A gammastep stand-in: records every argv; with hold, each run waits in held until
 // answered by hand; while fail is true, each run rejects, a held one when it is answered
-// (set it to false to recover).
+// (set it to false to recover). answer() answers the oldest held run, if any.
 function fakeGammastep({ hold = false, fail = false } = {}) {
     const fake = { runs: [], held: [], fail };
+    fake.answer = () => {
+        const next = fake.held.shift();
+        if (next)
+            next();
+    };
     const failure = () => new Error('gammastep exited with 1: Unable to connect to X server');
     fake.run = argv => {
         fake.runs.push(argv.join(' '));
@@ -872,12 +877,125 @@ async function testGammastepWarmth() {
     destroyed.warmth.setTemperature(3100);
     destroyed.warmth.setTemperature(3200);
     destroyed.warmth.destroy();
-    heldAtDestroy.held.shift()();
+    heldAtDestroy.answer();
     await wait(0);
-    check(`gammastep warmth: a run queued before destroy does not run after it (${heldAtDestroy.runs})`,
-        `${heldAtDestroy.runs}` === 'gammastep -m randr -P -O 3000' && heldAtDestroy.held.length === 0);
+    heldAtDestroy.answer();
+    await wait(0);
+    check(`gammastep warmth: a run queued before destroy does not run after it, only the reset does (${heldAtDestroy.runs})`,
+        `${heldAtDestroy.runs}` === 'gammastep -m randr -P -O 3000,gammastep -m randr -x' && heldAtDestroy.held.length === 0);
     destroyed.warmth.commitTemperature();
     check('gammastep warmth: a release after destroy writes nothing', destroyed.store.writes === 0);
+
+    // M1: removing the applet resets the screens once when the Warmth is on, keeps the stored state.
+    const removedOn = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true, 'warmth-kelvin': 1800 }) });
+    removedOn.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: destroy while on runs the reset exactly once (${removedOn.gammastep.runs})`,
+        `${removedOn.gammastep.runs}` === 'gammastep -m randr -x');
+    check('gammastep warmth: destroy keeps the stored state for the next start',
+        removedOn.store.values['warmth-enabled'] === true && removedOn.store.values['warmth-kelvin'] === 1800 && removedOn.store.writes === 0);
+    removedOn.warmth.applyStored();
+    removedOn.warmth.toggle();
+    await wait(0);
+    check(`gammastep warmth: nothing runs after the reset on destroy (${removedOn.gammastep.runs})`, removedOn.gammastep.runs.length === 1);
+    const removedOff = makeWarmth();
+    removedOff.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: destroy while off runs nothing (${removedOff.gammastep.runs})`, removedOff.gammastep.runs.length === 0);
+    const removedMissing = makeWarmth({ found: false, store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    removedMissing.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: destroy with gammastep unavailable runs nothing (${removedMissing.gammastep.runs})`,
+        removedMissing.gammastep.runs.length === 0);
+    errors = [];
+    const removedFailing = makeWarmth({ gammastep: fakeGammastep(), store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    removedFailing.gammastep.fail = true;
+    removedFailing.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: a failing reset on destroy is logged (${errors})`,
+        errors.length === 1 && errors[0].includes("resetting the Warmth with 'gammastep -m randr -x' failed"));
+    errors = [];
+
+    // Diff audit M1: a set in flight at destroy could land after a reset started beside it.
+    const offHeld = makeWarmth({ gammastep: fakeGammastep({ hold: true }), store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    offHeld.warmth.setTemperature(3000);
+    offHeld.warmth.toggle();
+    offHeld.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: switched off with a set held, destroy waits for the run (${offHeld.gammastep.runs})`,
+        `${offHeld.gammastep.runs}` === 'gammastep -m randr -P -O 3000');
+    offHeld.gammastep.answer();
+    await wait(0);
+    offHeld.gammastep.answer();
+    await wait(0);
+    check(`gammastep warmth: switched off with a set held, destroy resets once after it (${offHeld.gammastep.runs})`,
+        `${offHeld.gammastep.runs}` === 'gammastep -m randr -P -O 3000,gammastep -m randr -x' && offHeld.gammastep.held.length === 0);
+    const onHeld = makeWarmth({ gammastep: fakeGammastep({ hold: true }), store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    onHeld.warmth.setTemperature(3000);
+    onHeld.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: on with a set held, the reset is not started beside it (${onHeld.gammastep.runs})`,
+        `${onHeld.gammastep.runs}` === 'gammastep -m randr -P -O 3000');
+    onHeld.gammastep.answer();
+    await wait(0);
+    onHeld.gammastep.answer();
+    await wait(0);
+    check(`gammastep warmth: on with a set held, the reset runs after it (${onHeld.gammastep.runs})`,
+        `${onHeld.gammastep.runs}` === 'gammastep -m randr -P -O 3000,gammastep -m randr -x' && onHeld.gammastep.held.length === 0);
+
+    // Diff audit LOW b: a second destroy does nothing.
+    const twice = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true }) });
+    twice.warmth.destroy();
+    twice.warmth.destroy();
+    await wait(0);
+    check(`gammastep warmth: a second destroy runs nothing (${twice.gammastep.runs})`, `${twice.gammastep.runs}` === 'gammastep -m randr -x');
+
+    // L5: a value written from outside the applet syncs the row and reaches the screens.
+    const outside = makeWarmth({ store: fakeWarmthStore({ 'warmth-kelvin': 3000 }) });
+    outside.store.values['warmth-kelvin'] = 2500;
+    outside.warmth.kelvinChangedOutside();
+    await wait(0);
+    check(`gammastep warmth: an outside kelvin change while off notifies, runs nothing (${outside.gammastep.runs})`,
+        outside.changes() === 1 && outside.gammastep.runs.length === 0);
+    outside.store.values['warmth-enabled'] = true;
+    outside.warmth.enabledChangedOutside();
+    await wait(0);
+    check(`gammastep warmth: an outside switch to on applies the stored kelvin (${outside.gammastep.runs})`,
+        outside.changes() === 2 && `${outside.gammastep.runs}` === 'gammastep -m randr -P -O 2500' && warmthRow(outside.warmth).switchOn);
+    outside.store.values['warmth-kelvin'] = 1900;
+    outside.warmth.kelvinChangedOutside();
+    await wait(0);
+    check(`gammastep warmth: an outside kelvin change while on applies it (${outside.gammastep.runs})`,
+        outside.gammastep.runs[1] === 'gammastep -m randr -P -O 1900' && warmthRow(outside.warmth).text === '1900 K');
+    outside.store.values['warmth-enabled'] = false;
+    outside.warmth.enabledChangedOutside();
+    await wait(0);
+    check(`gammastep warmth: an outside switch to off resets (${outside.gammastep.runs})`,
+        outside.gammastep.runs[2] === 'gammastep -m randr -x' && outside.store.writes === 0);
+    // Diff audit LOW a: during a drag the slider wins over an outside kelvin write.
+    outside.store.values['warmth-enabled'] = true;
+    outside.warmth.enabledChangedOutside();
+    await wait(0);
+    outside.warmth.setTemperature(2200);
+    await wait(0);
+    const changesBefore = outside.changes();
+    outside.store.values['warmth-kelvin'] = 4000;
+    outside.warmth.kelvinChangedOutside();
+    await wait(0);
+    check(`gammastep warmth: an outside kelvin write during a drag is neither applied nor shown (${outside.gammastep.runs})`,
+        outside.gammastep.runs.length === 5 && outside.gammastep.runs[4] === 'gammastep -m randr -P -O 2200'
+        && outside.changes() === changesBefore && warmthRow(outside.warmth).text === '2200 K');
+    outside.warmth.commitTemperature();
+    check('gammastep warmth: the release after an outside write stores the slider value', outside.store.values['warmth-kelvin'] === 2200);
+    outside.store.values['warmth-enabled'] = false;
+    outside.warmth.enabledChangedOutside();
+    await wait(0);
+    outside.warmth.destroy();
+    outside.warmth.enabledChangedOutside();
+    outside.warmth.kelvinChangedOutside();
+    await wait(0);
+    check(`gammastep warmth: outside changes after destroy run and notify nothing (${outside.gammastep.runs})`,
+        outside.gammastep.runs.length === 6 && outside.changes() === 7);
 
     const stored = makeWarmth({ store: fakeWarmthStore({ 'warmth-enabled': true, 'warmth-kelvin': 1800 }) });
     stored.warmth.applyStored();
@@ -1011,6 +1129,9 @@ async function testMonitorsSettle() {
         setUp.includes('this._warmth.applyStored();'));
     check('warmth wiring: _setUpWarmth stores the kelvin on release',
         setUp.includes('row.onRelease(Constants.WARMTH_SCROLL_COMMIT_MS, () => this._warmth.commitTemperature());'));
+    check('warmth wiring: _setUpWarmth binds both Warmth keys to the outside-change handlers',
+        setUp.includes('this.settings.bind(enabled.key, enabled.key, () => this._warmth.enabledChangedOutside());')
+        && setUp.includes('this.settings.bind(kelvin.key, kelvin.key, () => this._warmth.kelvinChangedOutside());'));
     check('warmth wiring: applet.js retries the Warmth when the menu opens',
         appletSource.includes('this._warmth.menuOpened();'));
     const removed = appletSource.slice(appletSource.indexOf('    on_applet_removed_from_panel() {'));
@@ -2377,9 +2498,14 @@ async function testChargeLimit() {
     // A click while a write runs is ignored; a run that never ends is given up on.
     files.set(Constants.CHARGE_TYPES_FILE, 'Trickle Fast Standard Adaptive [Custom]');
     const hanging = [];
-    const never = argv => {
+    const timeouts = [];
+    // Stands in for runCommand's own kill: rejects as it does once the given timeout passes.
+    const never = (argv, timeoutMs) => {
         hanging.push(argv.join(' '));
-        return new Promise(() => {});
+        timeouts.push(timeoutMs);
+        return wait(timeoutMs).then(() => {
+            throw new Error(`${argv.join(' ')} timed out after ${timeoutMs} ms, killed`);
+        });
     };
     const stuck = new ChargeLimit.ChargeLimit(never, () => {}, fakeFiles, 50);
     await stuck.refresh();
@@ -2388,8 +2514,9 @@ async function testChargeLimit() {
     await stuck.toggle();
     check(`charge tile: a click during a running write is ignored (${hanging.length} run)`, hanging.length === 1);
     await first;
-    check(`charge tile: a run that never ends is given up on and logged (${errors})`,
-        errors.length === 1 && errors[0].includes('setting the battery charge to full failed: no answer within 50 ms, given up'));
+    check(`charge tile: the helper runs with the charge timeout, a run that never ends is logged (${timeouts}, ${errors})`,
+        `${timeouts}` === '50' && errors.length === 1
+        && errors[0].includes('setting the battery charge to full failed:') && errors[0].includes('timed out after 50 ms, killed'));
     await stuck.toggle();
     check('charge tile: usable again after the timeout', hanging.length === 2);
     errors = [];
@@ -2399,6 +2526,16 @@ async function testChargeLimit() {
     check(`charge tile: the error text is cut in the log (${errors[0] && errors[0].length} characters)`,
         errors.length === 1 && errors[0].length < 300);
     errors = [];
+    const defaultTimeouts = [];
+    const byDefault = new ChargeLimit.ChargeLimit((argv, timeoutMs) => {
+        defaultTimeouts.push(timeoutMs);
+        return Promise.resolve('');
+    }, () => {}, fakeFiles);
+    await byDefault.refresh();
+    await byDefault.toggle();
+    check(`charge tile: the helper's timeout defaults to CHARGE_HELPER_TIMEOUT_MS (${defaultTimeouts})`,
+        defaultTimeouts.length === 1 && defaultTimeouts[0] === Constants.CHARGE_HELPER_TIMEOUT_MS);
+    byDefault.destroy();
     stuck.destroy();
     longError.destroy();
 }
@@ -3071,6 +3208,22 @@ async function testSubprocess() {
     const elapsedMs = Math.round((GLib.get_monotonic_time() - started) / 1000);
     check(`subprocess: a hung command is killed and rejected as timed out (${hung}, ${elapsedMs} ms)`,
         hung !== null && hung.includes('/bin/sleep 30 timed out after 100 ms') && elapsedMs < 5000);
+    // L1: the shell exits at once, its background sleep keeps the output pipes open past the
+    // timeout, so the timeout fires on a process that has already exited successfully.
+    const exited = await Subprocess.runCommand(['/bin/sh', '-c', '/bin/sleep 1 & exit 0'], 200).then(() => 'resolved', e => e.message);
+    check(`subprocess: a command that exited before the timeout fired is a success, not timed out (${exited})`,
+        exited === 'resolved');
+    // Diff audit M3: the kill reaches the shell, not its background sleep, which keeps the
+    // output pipes open; the rejection comes after the grace period, not when sleep ends.
+    // The odd duration lets the cleanup kill this sleep and no other.
+    const holder = '/bin/sleep 29.731';
+    const holderStarted = GLib.get_monotonic_time();
+    const held = await Subprocess.runCommand(['/bin/sh', '-c', `${holder} & wait`], 100, 300)
+        .then(() => null, e => e.message);
+    const heldMs = Math.round((GLib.get_monotonic_time() - holderStarted) / 1000);
+    GLib.spawn_sync(null, ['/usr/bin/pkill', '-f', `^${holder}$`], null, GLib.SpawnFlags.DEFAULT, null);
+    check(`subprocess: a killed command whose child holds the pipes is rejected after the grace period (${held}, ${heldMs} ms)`,
+        held !== null && held.includes('timed out after 100 ms') && heldMs >= 400 && heldMs < 3000);
 }
 
 const FakeObjectManager = GObject.registerClass({

@@ -1,5 +1,6 @@
 const GLib = imports.gi.GLib;
 const Constants = require('./constants');
+const AsyncHelpers = require('./asyncHelpers');
 
 // The kelvin gammastep may receive: an integer inside the Warmth range, nothing else.
 function isValidKelvin(kelvin) {
@@ -39,6 +40,7 @@ class GammastepWarmth {
         this._pending = null;
         this._liveKelvin = null;
         this._destroyed = false;
+        this._resetOwed = false;
         this._programMissing = false;
         this._available = this._programFound();
     }
@@ -102,6 +104,27 @@ class GammastepWarmth {
             this.applyStored();
     }
 
+    // A value written from outside the applet, seen on a reload of the settings file. The
+    // applet's own setValue never comes back here: Cinnamon calls back only for a value
+    // that differs from the one it holds.
+    enabledChangedOutside() {
+        if (this._destroyed)
+            return;
+        this._onChange();
+        if (this._available)
+            this._apply();
+    }
+
+    // While the slider moves, the slider wins: the outside value is neither applied nor
+    // shown, and the release stores the slider's value over it.
+    kelvinChangedOutside() {
+        if (this._destroyed || this._liveKelvin !== null)
+            return;
+        this._onChange();
+        if (this._available && this.enabled)
+            this._apply();
+    }
+
     // Logs only when gammastep goes missing, not on every look.
     _programFound() {
         const found = this._findProgram(Constants.GAMMASTEP) !== null;
@@ -130,6 +153,8 @@ class GammastepWarmth {
                 this._pending = null;
                 await this._runOnce(enabled, kelvin);
             }
+            if (this._resetOwed)
+                await this._resetOnDestroy();
         } catch (e) {
             global.logError(`${Constants.LOG_PREFIX}: applying the Warmth failed: ${e.message}`);
         } finally {
@@ -144,14 +169,37 @@ class GammastepWarmth {
         try {
             await this._run(argv);
         } catch (e) {
-            global.logError(`${Constants.LOG_PREFIX}: setting the Warmth with '${argv.join(' ')}' failed: ${e.message}`);
+            AsyncHelpers.logBounded(e, `setting the Warmth with '${argv.join(' ')}'`, Constants.WARMTH_ERROR_TEXT_MAX);
             // The waiting runs would fail the same way, each with its own log line.
             this._pending = null;
             this._setAvailable(false);
         }
     }
 
+    // gammastep -O ramps outlive the applet, so removing it would leave the tint until the
+    // next reboot. A run in flight may be a set that lands after a reset started beside it,
+    // so the reset waits for that run to end: the loop runs it once the run is done. The
+    // queue stops here and the stored state is kept, so the next start applies it again.
     destroy() {
+        if (this._destroyed)
+            return;
+        const owed = this._running || (this._available && this.enabled);
         this._destroyed = true;
+        this._pending = null;
+        if (!owed)
+            return;
+        this._resetOwed = true;
+        if (!this._running)
+            this._resetOnDestroy();
+    }
+
+    async _resetOnDestroy() {
+        this._resetOwed = false;
+        const argv = commandFor(false);
+        try {
+            await this._run(argv);
+        } catch (e) {
+            AsyncHelpers.logBounded(e, `resetting the Warmth with '${argv.join(' ')}'`, Constants.WARMTH_ERROR_TEXT_MAX);
+        }
     }
 }

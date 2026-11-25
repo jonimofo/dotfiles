@@ -35,6 +35,11 @@
 
 ## Safety
 
-- Never delete a branch, local or remote, without explicit approval in the current session.
+- A branch merged into its PR base (`develop`, or `main` where no `develop` exists) is deleted
+  right after the merge, local and remote, with any worktree attached to it. This rule is the
+  standing approval: no separate one is asked. Check first that the PR is merged and that nothing on the branch is missing from the base;
+  otherwise stop and report. A worktree with uncommitted changes is reported, never forced.
+- Any other branch is never deleted, local or remote, without explicit approval in the current
+  session. `main`, `develop` and generated branches are never deleted.
 - Deploys (ansible, make deploy, ssh to a server) are run by the user. Give the command, wait.
 - File locations and what is versioned: `35-files.md`.

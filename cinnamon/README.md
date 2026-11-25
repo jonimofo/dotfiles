@@ -521,6 +521,12 @@ journalctl --user -b --since "-2 min" --no-pager | grep -E 'quick-settings|JS ER
 rm ~/.local/share/cinnamon/applets/quick-settings@bgi
 ```
 
+Step 3 of the install left Night Light off, which is also its default. To use it again:
+
+```bash
+gsettings set org.cinnamon.settings-daemon.plugins.color night-light-enabled true
+```
+
 To get Blueman's own panel icon back (step 4 of the install), reset its plugin list and
 restart its applet. The reset alone shows nothing until that restart.
 

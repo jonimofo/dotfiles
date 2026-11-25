@@ -47,6 +47,10 @@ guake --restore-preferences=guake.config # restore
 ### Espanso Text Expansion
 Text expansion configs in `espanso/` are organized by context: `base.yml` (general), `hugo.yml` (blog), `laravel.yml`, `sap.yml`.
 
+### Install and Uninstall Docs
+- Every install step that changes a GSettings or dconf key (`gsettings set`, `dconf write`) has its undo in the matching uninstall or undo section. Restoring a personal backup with `dconf load` is exempt: it has no safe undo.
+- A documented command that starts or restarts a desktop daemon uses `setsid -f <daemon> >/dev/null 2>&1`, never a bare `&`: a bare `&` ties the daemon to the terminal, and closing that terminal stops it.
+
 ## Git Commits
 
 Follow `CONTRIBUTING.md` (branch model, PRs, merge strategy, hooks). In short:

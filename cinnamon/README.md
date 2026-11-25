@@ -484,17 +484,21 @@ gjs scripts/cinnamon-quick-settings-schema.js cinnamon/applets/quick-settings@bg
    ```
 
 4. Hide Blueman's own Bluetooth icon in the panel: it duplicates the applet's Bluetooth
-   tile. Blueman keeps running, so pairing prompts and reconnects still work, and
-   `blueman-manager` still opens from the Bluetooth list. The command replaces Blueman's
-   whole `plugin-list`, which is empty by default. Keep the single quotes outside: in
-   double quotes bash reads the `!` as a history expansion.
+   tile. Blueman keeps running, so pairing prompts and reconnects still work. The command
+   replaces Blueman's whole `plugin-list`, empty by default; keep its quoting, since bash
+   expands a `!` inside double quotes.
 
    ```bash
    gsettings set org.blueman.general plugin-list '["!StatusIcon"]'
    ```
 
-   If the icon stays, restart the applet: `pkill -f blueman-applet`, then
-   `blueman-applet &`. Undo with `gsettings reset org.blueman.general plugin-list`.
+   The icon leaves at once. If it stays, restart Blueman's applet. The undo is in the
+   [uninstall](#quick-settings-uninstall).
+
+   ```bash
+   pkill -f blueman-applet
+   setsid -f blueman-applet >/dev/null 2>&1
+   ```
 
 `applet.sh enable` adds the applet at the right end of panel1's right zone and prints
 "unchanged" when it is already there. A changed size in `stylesheet.css` shows after the
@@ -512,6 +516,15 @@ journalctl --user -b --since "-2 min" --no-pager | grep -E 'quick-settings|JS ER
 ```bash
 ~/Repos/dotfiles/cinnamon/applet.sh disable quick-settings@bgi
 rm ~/.local/share/cinnamon/applets/quick-settings@bgi
+```
+
+To get Blueman's own panel icon back (step 4 of the install), reset its plugin list and
+restart its applet. The reset alone shows nothing until that restart.
+
+```bash
+gsettings reset org.blueman.general plugin-list
+pkill -f blueman-applet
+setsid -f blueman-applet >/dev/null 2>&1
 ```
 
 ## Quick Settings: dependencies

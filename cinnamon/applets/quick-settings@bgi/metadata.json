@@ -1,6 +1,6 @@
 {
     "uuid": "quick-settings@bgi",
-    "name": "Quick Settings",
+    "name": "bgi: Quick Settings",
     "description": "GNOME-style Quick Settings: status icons on the panel, sliders and toggle tiles in one menu.",
     "icon": "preferences-system-symbolic",
     "max-instances": 1,

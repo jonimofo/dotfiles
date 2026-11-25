@@ -14,6 +14,9 @@ Every path assumes the repo is checked out at `~/Repos/dotfiles`.
 4. Calendar: [link it and replace the stock applet](#calendar-install).
 5. Keyboard shortcuts: [load them](#custom-shortcuts) with `dconf load`.
 
+In System Settings, the applets and the extension are listed as `bgi: <name>`: type `bgi`
+in the search box of Applets or Extensions to find them.
+
 ## What lives here
 
 - `extensions/scale-wheel-switch@bgi/`: turns Scale into a GNOME-style overview.

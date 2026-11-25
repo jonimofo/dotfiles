@@ -1,6 +1,6 @@
 {
  "uuid": "calendar@bgi",
- "name": "Calendar (bgi)",
+ "name": "bgi: Calendar",
  "description": "The Cinnamon calendar applet, with a second time zone and larger text",
  "icon": "gnome-calendar",
  "max-instances": -1,

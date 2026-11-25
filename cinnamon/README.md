@@ -483,6 +483,19 @@ gjs scripts/cinnamon-quick-settings-schema.js cinnamon/applets/quick-settings@bg
    gsettings set org.cinnamon.settings-daemon.plugins.color night-light-enabled false
    ```
 
+4. Hide Blueman's own Bluetooth icon in the panel: it duplicates the applet's Bluetooth
+   tile. Blueman keeps running, so pairing prompts and reconnects still work, and
+   `blueman-manager` still opens from the Bluetooth list. The command replaces Blueman's
+   whole `plugin-list`, which is empty by default. Keep the single quotes outside: in
+   double quotes bash reads the `!` as a history expansion.
+
+   ```bash
+   gsettings set org.blueman.general plugin-list '["!StatusIcon"]'
+   ```
+
+   If the icon stays, restart the applet: `pkill -f blueman-applet`, then
+   `blueman-applet &`. Undo with `gsettings reset org.blueman.general plugin-list`.
+
 `applet.sh enable` adds the applet at the right end of panel1's right zone and prints
 "unchanged" when it is already there. A changed size in `stylesheet.css` shows after the
 next login (see [Reload after an edit](#reload-after-an-edit)).

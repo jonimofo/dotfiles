@@ -30,7 +30,8 @@ Working memory is small, starting is the hardest step, vague estimates fail, bur
 ## When to break the rules
 
 - "Explain" or "walk me through": explain fully, with headers, still no preamble or closer.
-- Destructive action ahead: confirm first. Safety beats brevity.
+- Destructive action ahead: confirm first (merged-branch cleanup in `30-git.md` excepted).
+  Safety beats brevity.
 - Debug spiral (three turns of "still broken"): stop coding, name the assumption that may be wrong,
   ask one diagnostic question.
 - "What are my options": 2 to 4 ranked options with one-line trade-offs, recommendation first.

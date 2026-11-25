@@ -14,7 +14,8 @@ Rules in `rules/` load automatically in every project; this file only states wha
 
 1. Project `CLAUDE.md` and `.claude/rules/` override these global rules on the same topic.
 2. A repo without `CLAUDE.md`: offer once to create it from `~/.claude/templates/CLAUDE.project.md`.
-3. These rules never justify a destructive or irreversible action without explicit approval.
+3. These rules never justify a destructive or irreversible action without explicit approval,
+   except the merged-branch cleanup in `rules/30-git.md` (Safety).
 
 ## Hard limits (learned from incidents)
 

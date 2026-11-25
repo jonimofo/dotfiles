@@ -35,6 +35,16 @@
 
 ## Safety
 
-- Never delete a branch, local or remote, without explicit approval in the current session.
+- A branch merged into its PR base (`develop`, or `main` where no `develop` exists) is deleted
+  right after the merge, by the session that merges: locally and on the PR's head remote only,
+  with any worktree attached to it. This rule is the standing approval: no separate one is asked.
+- Before deleting: the PR state is merged, and the local and remote branch tips equal the PR's
+  merged head commit (`gh pr view <n> --json state,headRefOid`). Only then is `git branch -D`
+  allowed. A commit after that head is unmerged work: stop and report. Open PRs that use the
+  branch as their base: retarget them first, or stop and report.
+- A worktree with uncommitted or untracked files is reported, never forced (no `--force`, no
+  `rm`). Switch to the base branch and leave the worktree before deleting.
+- Any other branch is never deleted, local or remote, without explicit approval in the current
+  session. `main`, `develop` and generated branches (for example `server`) are never deleted.
 - Deploys (ansible, make deploy, ssh to a server) are run by the user. Give the command, wait.
 - File locations and what is versioned: `35-files.md`.

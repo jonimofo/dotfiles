@@ -46,3 +46,26 @@
 :is(.titlebar-max, .titlebar-restore):-moz-window-inactive > .toolbarbutton-icon {
   background-image: url("dracula-assets/maximize_unfocused.svg") !important;
 }
+
+/* Firefox address bar: neutral dark grey. Scoped to the Firefox browser window, so the same
+   file linked into a Thunderbird profile changes nothing there. The values go through
+   Firefox's own variables, so the focus ring and the open results panel keep their borders.
+   Cropped popup windows are left out: their address bar is read-only and Firefox keeps it
+   transparent. */
+@-moz-document url("chrome://browser/content/browser.xhtml") {
+  :root {
+    --bgi-urlbar-background: #363636;
+    --bgi-urlbar-background-active: #3e3e3e;
+    --bgi-urlbar-border-color: #6e6e6e;
+  }
+
+  :root:not([cropped-mini-window]) #urlbar {
+    --urlbar-background-color: var(--bgi-urlbar-background) !important;
+    --urlbar-background-color-focus: var(--bgi-urlbar-background-active) !important;
+    --urlbar-background-border: var(--urlbar-input-container-border-width) solid var(--bgi-urlbar-border-color) !important;
+  }
+
+  :root:not([cropped-mini-window]) #urlbar:hover {
+    --urlbar-background-color: var(--bgi-urlbar-background-active) !important;
+  }
+}

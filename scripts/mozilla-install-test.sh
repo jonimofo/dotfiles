@@ -8,6 +8,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 readonly INSTALLER="$repo_root/cinnamon/theme/install.sh"
 readonly STYLESHEET="$repo_root/cinnamon/theme/userChrome.css"
+# The @-moz-document scope of the Firefox address bar block: a window address, not an asset.
+readonly FIREFOX_WINDOW_URL='url("chrome://browser/content/browser.xhtml")'
 readonly EXIT_PENDING=3
 readonly RESTART_HINT='Restart Firefox and Thunderbird to see the change.'
 readonly PREF_LINE='user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);'
@@ -423,7 +425,16 @@ test_stylesheet_static() {
         failure "stylesheet has no absolute paths"
         return 0
     fi
+    # Without this scope the address bar rules would also apply in Thunderbird.
+    local scope_lines
+    scope_lines="$(grep -cF -- "@-moz-document $FIREFOX_WINDOW_URL {" "$STYLESHEET" || true)"
+    if [[ "$scope_lines" -eq 1 ]]; then
+        pass "address bar block is scoped to the Firefox window, once"
+    else
+        failure "address bar block is scoped to the Firefox window, once (found $scope_lines)"
+    fi
     refs="$(grep -oE 'url\("[^"]*"\)' "$STYLESHEET" || true)"
+    refs="$(printf '%s\n' "$refs" | grep -vxF -- "$FIREFOX_WINDOW_URL" || true)"
     if [[ "$(printf '%s\n' "$refs" | grep -c .)" -ne ${#EXPECTED_ASSETS[@]} ]]; then
         failure "stylesheet references ${#EXPECTED_ASSETS[@]} assets"
         return 0

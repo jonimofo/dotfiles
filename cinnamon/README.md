@@ -29,10 +29,10 @@ in the search box of Applets or Extensions to find them.
   Tested on Cinnamon 6.4 (X11). See [Calendar](#calendar-what-it-does) below.
 - `applet.sh`: enable, disable or reload one applet, keeping the other panel entries.
   Enable adds it at the right end of panel1's right zone.
-- `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override, Thunderbird
-  and Firefox window buttons), install and undo.
-- `theme/`: `userChrome.css` and `install.sh` for the Thunderbird and Firefox window buttons,
-  see `THEME.md`.
+- `THEME.md`: the Dracula desktop theme (GTK, panel, icons, cursors, GTK4 override, system
+  title bar rule, Firefox address bar colours), install and undo.
+- `theme/`: `userChrome.css` and `install.sh` for the Firefox address bar colours and the
+  Thunderbird and Firefox window buttons, see `THEME.md`.
 - `cinnamon_keybindings.dconf`: my keyboard shortcuts, custom and changed built-in ones (see below).
 
 ## Custom shortcuts
